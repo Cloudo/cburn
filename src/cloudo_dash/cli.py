@@ -1,7 +1,7 @@
 """CLI `cdash` (TZ §10).
 
-Реализовано: `paths`, `initdb`, `reindex`, `sessions`, `session`. Фильтры по
-проекту и периоду и команда `stats` — задача B7, `serve` — M2.
+Реализовано: `paths`, `initdb`, `reindex`, `sessions`, `session`, `serve`.
+Фильтры по проекту и периоду и команда `stats` — задача B7.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ from .metrics import recent_sessions, session_models, session_summary, session_t
 
 NOT_IMPLEMENTED_MILESTONE = {
     "stats": "M1",
-    "serve": "M2",
 }
 
 
@@ -33,7 +32,10 @@ def build_parser() -> argparse.ArgumentParser:
     session = sub.add_parser("session", help="детали одной сессии")
     session.add_argument("session_id", help="полный id или его начало")
     sub.add_parser("reindex", help="дочитать транскрипты в БД")
-    sub.add_parser("serve", help="запустить API-сервер и дашборд")
+    serve = sub.add_parser("serve", help="запустить API-сервер и дашборд")
+    serve.add_argument("--port", type=int, help="порт (по умолчанию из конфига)")
+    serve.add_argument("--host", default="127.0.0.1", help="только localhost, TZ §7")
+    serve.add_argument("--reload", action="store_true", help="перезапуск при правках кода")
     return parser
 
 
@@ -68,9 +70,32 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "session":
         return _session(args.session_id)
 
+    if args.command == "serve":
+        return _serve(args.host, args.port, args.reload)
+
     milestone = NOT_IMPLEMENTED_MILESTONE.get(args.command, "?")
     print(f"команда `{args.command}` ещё не реализована (этап {milestone})", file=sys.stderr)
     return 2
+
+
+def _serve(host: str, port: int | None, reload: bool) -> int:
+    """Поднять API вместе с watcher в одном процессе."""
+    import uvicorn
+
+    from .api.server import create_app
+
+    cfg = config.load()
+    bind_port = port or int(cfg["server"]["port"])
+    print(f"cloudo-dash: http://{host}:{bind_port}  (Ctrl+C — остановить)")
+    uvicorn.run(
+        "cloudo_dash.api.server:create_app" if reload else create_app(),
+        host=host,
+        port=bind_port,
+        factory=reload,
+        reload=reload,
+        log_level="warning",
+    )
+    return 0
 
 
 def _thousands(value: int) -> str:

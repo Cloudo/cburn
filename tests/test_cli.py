@@ -165,5 +165,16 @@ def test_paths_and_initdb(project: Path, capsys: pytest.CaptureFixture[str]) -> 
 def test_unimplemented_command_reports_milestone(
     project: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    assert cli.main(["serve"]) == 2
-    assert "M2" in capsys.readouterr().err
+    assert cli.main(["stats"]) == 2
+    assert "M1" in capsys.readouterr().err
+
+
+def test_serve_arguments_are_parsed() -> None:
+    """Сервер здесь не поднимается — проверяется только разбор аргументов."""
+    args = cli.build_parser().parse_args(["serve", "--port", "9999"])
+    assert (args.command, args.port, args.host, args.reload) == ("serve", 9999, "127.0.0.1", False)
+
+
+def test_serve_binds_localhost_by_default() -> None:
+    """Инвариант ТЗ §7: наружу сервер не смотрит."""
+    assert cli.build_parser().parse_args(["serve"]).host == "127.0.0.1"
