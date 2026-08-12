@@ -35,22 +35,32 @@ CREATE TABLE IF NOT EXISTS sessions (
     cache_read        INTEGER NOT NULL DEFAULT 0,
     cache_write       INTEGER NOT NULL DEFAULT 0,
     cost_usd          REAL NOT NULL DEFAULT 0,
+    last_context      INTEGER NOT NULL DEFAULT 0,  -- context_estimate последнего хода
     is_live           INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id, last_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_parent  ON sessions(parent_session_id);
 
+-- Ход = один ответ модели. В транскрипте он разложен по нескольким записям
+-- (thinking, text, каждый tool_use), и в каждой лежит полный одинаковый usage,
+-- поэтому ключ — message_id, а не uuid записи. При resume прошлые ходы копируются
+-- в новый файл с новым sessionId, сохраняя message_id: UNIQUE гасит и это.
 CREATE TABLE IF NOT EXISTS turns (
     id               INTEGER PRIMARY KEY,
+    message_id       TEXT NOT NULL UNIQUE,
     session_id       TEXT NOT NULL REFERENCES sessions(id),
-    uuid             TEXT UNIQUE,        -- uuid записи транскрипта, защита от повторного импорта
+    request_id       TEXT,
+    uuid             TEXT,               -- uuid первой записи хода, для цепочек parentUuid
+    parent_uuid      TEXT,
     ts               TEXT NOT NULL,
     model            TEXT,
     role             TEXT,
+    is_sidechain     INTEGER NOT NULL DEFAULT 0,  -- ход сабагента (TZ §4)
     input_tokens     INTEGER NOT NULL DEFAULT 0,
     output_tokens    INTEGER NOT NULL DEFAULT 0,
     cache_read       INTEGER NOT NULL DEFAULT 0,
-    cache_write      INTEGER NOT NULL DEFAULT 0,
+    cache_write_5m   INTEGER NOT NULL DEFAULT 0,  -- тарифицируется иначе, чем 1h
+    cache_write_1h   INTEGER NOT NULL DEFAULT 0,
     context_estimate INTEGER NOT NULL DEFAULT 0,  -- input + cache_read + cache_write
     cost_usd         REAL NOT NULL DEFAULT 0,
     is_idle          INTEGER NOT NULL DEFAULT 0   -- холостой ход, эвристика TZ §6
@@ -58,11 +68,14 @@ CREATE TABLE IF NOT EXISTS turns (
 CREATE INDEX IF NOT EXISTS idx_turns_session ON turns(session_id, ts);
 CREATE INDEX IF NOT EXISTS idx_turns_ts      ON turns(ts);
 
+-- tool_use_id уникален по истории и делает повторный импорт хвоста идемпотентным
+-- даже когда ход уже записан, а его блоки дочитываются следующим проходом.
 CREATE TABLE IF NOT EXISTS tool_calls (
-    id      INTEGER PRIMARY KEY,
-    turn_id INTEGER NOT NULL REFERENCES turns(id),
-    tool    TEXT NOT NULL,  -- Bash, Edit, Read, Task, mcp__*...
-    detail  TEXT            -- для Bash: нормализованная команда (первое слово + подкоманда)
+    id          INTEGER PRIMARY KEY,
+    turn_id     INTEGER NOT NULL REFERENCES turns(id),
+    tool_use_id TEXT UNIQUE,
+    tool        TEXT NOT NULL,  -- Bash, Edit, Read, Task, mcp__*...
+    detail      TEXT            -- для Bash: нормализованная команда (первое слово + подкоманда)
 );
 CREATE INDEX IF NOT EXISTS idx_tool_calls_turn ON tool_calls(turn_id);
 CREATE INDEX IF NOT EXISTS idx_tool_calls_tool ON tool_calls(tool);
@@ -85,7 +98,8 @@ CREATE TABLE IF NOT EXISTS model_prices (
     model                TEXT PRIMARY KEY,
     in_per_mtok          REAL NOT NULL DEFAULT 0,
     out_per_mtok         REAL NOT NULL DEFAULT 0,
-    cache_write_per_mtok REAL NOT NULL DEFAULT 0,
+    cache_write_per_mtok REAL NOT NULL DEFAULT 0,  -- 5-минутный кэш
+    cache_write_1h_per_mtok REAL NOT NULL DEFAULT 0,
     cache_read_per_mtok  REAL NOT NULL DEFAULT 0
 );
 

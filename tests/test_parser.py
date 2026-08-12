@@ -404,3 +404,26 @@ def test_fixture_records_outnumber_turns(path: Path) -> None:
     assistants = [r for r in parse_fixture(path) if r.kind is RecordKind.ASSISTANT]
     turns = {record.message_id for record in assistants}
     assert len(assistants) > len(turns)
+
+
+# --- слияние usage внутри хода -----------------------------------------------
+
+
+def test_usage_merge_takes_elementwise_max() -> None:
+    """Записи одного хода несут расход неравномерно: часть из них нулевая."""
+    from cloudo_dash.collector.parser import Usage
+
+    empty = Usage()
+    full = Usage(
+        input_tokens=2, output_tokens=106, cache_read=5000, cache_write_5m=1, cache_write_1h=7
+    )
+    assert empty.merge(full) == full
+    assert full.merge(empty) == full  # порядок чтения не влияет
+    assert full.merge(full) == full  # повтор не суммируется
+
+
+def test_usage_merge_combines_partial_records() -> None:
+    from cloudo_dash.collector.parser import Usage
+
+    merged = Usage(output_tokens=10, cache_read=5).merge(Usage(input_tokens=3, cache_write_1h=7))
+    assert merged == Usage(input_tokens=3, output_tokens=10, cache_read=5, cache_write_1h=7)

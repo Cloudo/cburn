@@ -67,6 +67,23 @@ class Usage:
         """Оценка занятого окна контекста на момент хода (TZ §4)."""
         return self.input_tokens + self.cache_read + self.cache_write
 
+    def merge(self, other: Usage) -> Usage:
+        """Свести usage двух записей одного хода — поэлементным максимумом.
+
+        Записи одного ответа обычно несут одинаковый usage, но у 2 527 ходов из
+        15 197 в реальной истории часть записей нулевая: расход проставляется по
+        завершении ответа, а промежуточные блоки уже записаны. Максимум даёт
+        финальное значение независимо от порядка чтения; сумма завысила бы расход
+        в разы, первая запись — занизила бы на треть.
+        """
+        return Usage(
+            input_tokens=max(self.input_tokens, other.input_tokens),
+            output_tokens=max(self.output_tokens, other.output_tokens),
+            cache_read=max(self.cache_read, other.cache_read),
+            cache_write_5m=max(self.cache_write_5m, other.cache_write_5m),
+            cache_write_1h=max(self.cache_write_1h, other.cache_write_1h),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class ToolUse:
