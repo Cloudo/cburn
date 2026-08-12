@@ -1,7 +1,7 @@
 """CLI `cdash` (TZ §10).
 
-Реализовано: `paths`, `initdb`. Остальные команды объявлены каркасом — они
-наполняются по этапам: stats/sessions/session — M1, serve — M2, reindex — M1.
+Реализовано: `paths`, `initdb`, `reindex`, `sessions`, `session`. Фильтры по
+проекту и периоду и команда `stats` — задача B7, `serve` — M2.
 """
 
 from __future__ import annotations
@@ -10,13 +10,12 @@ import argparse
 import sys
 
 from . import __version__, config, paths
+from .collector.indexer import ingest_tree
 from .db import connect
+from .metrics import recent_sessions, session_models, session_summary, session_tools
 
 NOT_IMPLEMENTED_MILESTONE = {
     "stats": "M1",
-    "sessions": "M1",
-    "session": "M1",
-    "reindex": "M1",
     "serve": "M2",
 }
 
@@ -29,10 +28,11 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("paths", help="показать пути конфига, БД и транскриптов")
     sub.add_parser("initdb", help="создать БД и применить схему")
     sub.add_parser("stats", help="сводка расхода за период")
-    sub.add_parser("sessions", help="список сессий")
+    sessions = sub.add_parser("sessions", help="список сессий")
+    sessions.add_argument("-n", "--limit", type=int, default=20, help="сколько показать")
     session = sub.add_parser("session", help="детали одной сессии")
-    session.add_argument("session_id")
-    sub.add_parser("reindex", help="полная переиндексация истории с нуля")
+    session.add_argument("session_id", help="полный id или его начало")
+    sub.add_parser("reindex", help="дочитать транскрипты в БД")
     sub.add_parser("serve", help="запустить API-сервер и дашборд")
     return parser
 
@@ -59,9 +59,104 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{paths.DB_PATH}: {', '.join(tables)}")
         return 0
 
+    if args.command == "reindex":
+        return _reindex()
+
+    if args.command == "sessions":
+        return _sessions(args.limit)
+
+    if args.command == "session":
+        return _session(args.session_id)
+
     milestone = NOT_IMPLEMENTED_MILESTONE.get(args.command, "?")
     print(f"команда `{args.command}` ещё не реализована (этап {milestone})", file=sys.stderr)
     return 2
+
+
+def _thousands(value: int) -> str:
+    return f"{value:,}".replace(",", " ")
+
+
+def _reindex() -> int:
+    """Дочитать все транскрипты. Прогресс и батчи — задача B2."""
+    with connect() as conn:
+        results = ingest_tree(conn, paths.CLAUDE_PROJECTS_DIR)
+    lines = sum(result.lines for result in results)
+    turns = sum(result.turns_new for result in results)
+    known = sum(result.turns_known for result in results)
+    print(f"файлов: {len(results)}, прочитано строк: {_thousands(lines)}")
+    print(f"новых ходов: {_thousands(turns)}, уже известных: {_thousands(known)}")
+    return 0
+
+
+def _sessions(limit: int) -> int:
+    with connect() as conn:
+        rows = recent_sessions(conn, limit)
+    if not rows:
+        print("сессий нет — выполните `cdash reindex`", file=sys.stderr)
+        return 1
+    for row in rows:
+        prompt = (row["first_prompt"] or "—").replace("\n", " ")[:48]
+        last_at = (row["last_at"] or "")[:16].replace("T", " ")
+        print(
+            f"{row['id'][:8]}  {last_at}  ходов {row['turns']:>5}"
+            f"  выход {_thousands(row['tokens_out']):>10}"
+            f"  контекст {_thousands(row['last_context']):>9}"
+            f"  {row['project'] or '—'}  {prompt}"
+        )
+    return 0
+
+
+def _resolve_session_id(conn: object, prefix: str) -> str | None:
+    """Разрешить id по префиксу — вводить полный uuid руками неудобно."""
+    rows = list(
+        conn.execute(  # type: ignore[attr-defined]
+            "SELECT id FROM sessions WHERE id LIKE ? ORDER BY last_at DESC", (prefix + "%",)
+        )
+    )
+    if len(rows) == 1:
+        return str(rows[0]["id"])
+    if not rows:
+        return None
+    print(f"под «{prefix}» подходит {len(rows)} сессий, уточните:", file=sys.stderr)
+    for row in rows[:10]:
+        print(f"  {row['id']}", file=sys.stderr)
+    return None
+
+
+def _session(prefix: str) -> int:
+    with connect() as conn:
+        session_id = _resolve_session_id(conn, prefix)
+        if session_id is None:
+            print(f"сессия «{prefix}» не найдена", file=sys.stderr)
+            return 1
+        summary = session_summary(conn, session_id)
+        models = session_models(conn, session_id)
+        tools = session_tools(conn, session_id)
+    if summary is None:
+        return 1
+
+    period = f"{(summary.started_at or '')[:19]} → {(summary.last_at or '')[:19]}"
+    print(f"сессия       : {summary.session_id}")
+    print(f"проект       : {summary.project or '—'} ({summary.root_path or '—'})")
+    print(f"период       : {period.replace('T', ' ')}")
+    print(f"первый промпт: {(summary.first_prompt or '—')[:70]}")
+    sidechain = f" (сабагентов {summary.sidechain_turns})" if summary.sidechain_turns else ""
+    print(f"ходов        : {summary.turns}{sidechain}")
+    print(f"вход         : {_thousands(summary.input_tokens)}")
+    print(f"выход        : {_thousands(summary.output_tokens)}")
+    print(f"кэш чтение   : {_thousands(summary.cache_read)}")
+    print(
+        f"кэш запись   : {_thousands(summary.cache_write)}"
+        f" (5m {_thousands(summary.cache_write_5m)}, 1h {_thousands(summary.cache_write_1h)})"
+    )
+    print(f"контекст     : {_thousands(summary.last_context)} на последнем ходе")
+    if models:
+        parts = [f"{model} {turns} ходов / {_thousands(out)}" for model, turns, out in models]
+        print(f"модели       : {'; '.join(parts)}")
+    if tools:
+        print(f"инструменты  : {', '.join(f'{tool} {calls}' for tool, calls in tools)}")
+    return 0
 
 
 if __name__ == "__main__":
