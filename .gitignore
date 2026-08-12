@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Данные приложения (локальные, в репозиторий не попадают)
+*.db
+*.db-wal
+*.db-shm
+speedo.db*
+
+# Node / фронт
+node_modules/
+web/dist/
+
+# macOS / редакторы
+.DS_Store
+.idea/
+.vscode/
+
+# Локальные настройки Claude Code
+.claude/settings.local.json
