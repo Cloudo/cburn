@@ -1,4 +1,4 @@
-"""CLI `speedo` (TZ §10).
+"""CLI `cdash` (TZ §10).
 
 Реализовано: `paths`, `initdb`. Остальные команды объявлены каркасом — они
 наполняются по этапам: stats/sessions/session — M1, serve — M2, reindex — M1.
@@ -22,7 +22,7 @@ NOT_IMPLEMENTED_MILESTONE = {
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="speedo", description="Спидометр Claude")
+    parser = argparse.ArgumentParser(prog="cdash", description="Спидометр Claude")
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="command", required=True)
 

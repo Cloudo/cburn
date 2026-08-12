@@ -1,4 +1,4 @@
-# claude-speedo
+# cloudo-dash
 
 Локальный «спидометр» для Claude Code: следит за всеми сессиями на машине,
 показывает расход токенов в реальном времени и раз в час предлагает конкретные
@@ -9,7 +9,7 @@
 
 ## Статус
 
-Этап M1 (CLI-прототип: парсер JSONL, SQLite, `speedo stats/sessions/session`) — в работе.
+Этап M1 (CLI-прототип: парсер JSONL, SQLite, `cdash stats/sessions/session`) — в работе.
 Сейчас в репозитории каркас: схема БД, конфиг, CLI, дымовые тесты.
 
 ## Установка для разработки
@@ -22,11 +22,11 @@ python3 -m venv .venv
 ## Команды
 
 ```bash
-speedo paths      # где лежат конфиг, БД и транскрипты
-speedo initdb     # создать БД и применить схему
-speedo stats      # M1
-speedo sessions   # M1
-speedo serve      # M2, дашборд на http://localhost:8799
+cdash paths      # где лежат конфиг, БД и транскрипты
+cdash initdb     # создать БД и применить схему
+cdash stats      # M1
+cdash sessions   # M1
+cdash serve      # M2, дашборд на http://localhost:8799
 ```
 
 ## Проверки

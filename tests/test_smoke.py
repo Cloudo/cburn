@@ -1,11 +1,11 @@
 """Дымовые тесты каркаса: схема БД применяется, дефолты конфига читаются."""
 
-from speedo import config
-from speedo.db import connect
+from cloudo_dash import config
+from cloudo_dash.db import connect
 
 
 def test_schema_applies(tmp_path):
-    conn = connect(tmp_path / "speedo.db")
+    conn = connect(tmp_path / "cloudo-dash.db")
     tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert {"files", "projects", "sessions", "turns", "tool_calls", "advice"} <= tables
 

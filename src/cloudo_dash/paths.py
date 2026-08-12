@@ -9,9 +9,9 @@ from pathlib import Path
 _CLAUDE_DIR = Path(os.environ.get("CLAUDE_CONFIG_DIR", Path.home() / ".claude"))
 CLAUDE_PROJECTS_DIR = _CLAUDE_DIR / "projects"
 
-CONFIG_PATH = Path.home() / ".config" / "claude-speedo" / "config.toml"
-DATA_DIR = Path.home() / ".local" / "share" / "claude-speedo"
-DB_PATH = DATA_DIR / "speedo.db"
+CONFIG_PATH = Path.home() / ".config" / "cloudo-dash" / "config.toml"
+DATA_DIR = Path.home() / ".local" / "share" / "cloudo-dash"
+DB_PATH = DATA_DIR / "cloudo-dash.db"
 
 
 def ensure_dirs() -> None:

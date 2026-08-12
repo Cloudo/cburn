@@ -1,4 +1,4 @@
-# claude-speedo
+# cloudo-dash
 
 Локальный сервис-«спидометр» расхода токенов Claude Code: наблюдает за всеми
 сессиями на машине, показывает burn rate в реальном времени и раз в час
@@ -16,7 +16,7 @@ React + Vite (появится на M2, каталог `web/`). Пакетный
 .venv/bin/python -m pytest -q                                  # тесты
 .venv/bin/ruff check . && .venv/bin/ruff format --check .      # линт и формат
 .venv/bin/mypy                                                 # типы
-.venv/bin/speedo paths                                         # проверить пути
+.venv/bin/cdash paths                                         # проверить пути
 ```
 
 Перед коммитом должны проходить все три проверки.
@@ -24,10 +24,10 @@ React + Vite (появится на M2, каталог `web/`). Пакетный
 ## Структура
 
 ```
-src/speedo/
+src/cloudo_dash/
   paths.py          пути (транскрипты, конфиг, БД) — единственное место, где они задаются
-  config.py         ~/.config/claude-speedo/config.toml, дефолты по ТЗ §8
-  cli.py            команда `speedo`
+  config.py         ~/.config/cloudo-dash/config.toml, дефолты по ТЗ §8
+  cli.py            команда `cdash`
   db/schema.sql     схема SQLite, применяется идемпотентно при connect()
   collector/        watchdog + инкрементальный парсер JSONL (M1)
   api/              FastAPI: HTTP + WebSocket на 127.0.0.1 (M2)
@@ -39,7 +39,7 @@ tests/fixtures/transcripts/   обезличенные транскрипты д
 ## Инварианты (нарушать нельзя)
 
 - **`~/.claude` — только чтение.** Никаких записей, переименований, удалений
-  в каталоге Claude Code. Своё состояние — в `~/.local/share/claude-speedo/`.
+  в каталоге Claude Code. Своё состояние — в `~/.local/share/cloudo-dash/`.
 - **Парсер терпимый.** Формат транскриптов недокументирован и меняется между
   версиями: незнакомые поля игнорировать, незнакомые типы записей складывать
   в `raw_events`, битая строка пишется в лог и не останавливает обход — offset
@@ -99,7 +99,7 @@ tests/fixtures/transcripts/   обезличенные транскрипты д
 | Этап | Содержимое | Статус |
 | ---- | ---------- | ------ |
 | M1 | CLI: парсер JSONL, SQLite, `stats`/`sessions`/`session`, `reindex` | в работе |
-| M2 | FastAPI + веб-дашборд, live по WebSocket, `speedo serve`, launchd | — |
+| M2 | FastAPI + веб-дашборд, live по WebSocket, `cdash serve`, launchd | — |
 | M3 | Советчик (`claude -p`) и уведомления в telegram | — |
 | M4 | OTLP-приёмник, уточнение лимитов подписки, недельный разбор | — |
 | M5 | Tauri-обёртка и трей в меню-баре | — |

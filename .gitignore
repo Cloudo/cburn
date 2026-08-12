@@ -14,7 +14,7 @@ dist/
 *.db
 *.db-wal
 *.db-shm
-speedo.db*
+cloudo-dash.db*
 
 # Node / фронт
 node_modules/

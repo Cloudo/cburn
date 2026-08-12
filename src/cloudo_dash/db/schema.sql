@@ -1,4 +1,4 @@
--- Схема БД claude-speedo (см. TZ.md §3 «SQLite: модель данных»).
+-- Схема БД cloudo-dash (см. TZ.md §3 «SQLite: модель данных»).
 -- Применяется идемпотентно при старте; версия фиксируется в user_version.
 
 PRAGMA journal_mode = WAL;
