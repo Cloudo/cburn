@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -116,13 +117,21 @@ class StubLimits:
 
 
 def client(
-    db_path: Path, transcripts: Path, *, watch: bool = False, limits: object | None = None
+    db_path: Path,
+    transcripts: Path,
+    *,
+    watch: bool = False,
+    limits: object | None = None,
+    liveness: Callable[[], set[str] | None] = lambda: None,
 ) -> TestClient:
+    """Тестовое приложение. По умолчанию живость «неизвестна»: тесты не должны
+    запускать `claude agents --json`."""
     app = create_app(
         db_path=db_path,
         projects_dir=transcripts.parent,
         watch=watch,
         limits=limits or StubLimits(),  # type: ignore[arg-type]
+        liveness=liveness,
     )
     return TestClient(app)
 
@@ -538,6 +547,40 @@ def test_session_statuses(transcripts: Path, db_path: Path) -> None:
     assert data["pending_sessions"] == ["working"]
 
 
+def test_finished_session_leaves_idle(transcripts: Path, db_path: Path) -> None:
+    """Молчащая сессия без процесса — «закончилась», а не «простаивает» (B4)."""
+    now = datetime.now(UTC)
+    seed(
+        transcripts,
+        db_path,
+        [
+            assistant("msg_a", session="жива", ts=now - timedelta(minutes=20)),
+            assistant("msg_b", session="умерла", uuid="u2", ts=now - timedelta(minutes=20)),
+        ],
+    )
+
+    with client(db_path, transcripts, liveness=lambda: {"жива"}) as api:
+        data = api.get("/api/overview").json()
+
+    statuses = {row["id"]: row["status"] for row in data["live_sessions"]}
+    assert statuses == {"жива": "idle", "умерла": "done"}
+
+
+def test_unknown_liveness_keeps_idle(transcripts: Path, db_path: Path) -> None:
+    """Молчащий `claude` не повод объявить все сессии завершёнными (B4)."""
+    now = datetime.now(UTC)
+    seed(
+        transcripts,
+        db_path,
+        [assistant("msg_a", session="тихая", ts=now - timedelta(minutes=20))],
+    )
+
+    with client(db_path, transcripts, liveness=lambda: None) as api:
+        data = api.get("/api/overview").json()
+
+    assert [row["status"] for row in data["live_sessions"]] == ["idle"]
+
+
 # --- метрики ТЗ §4 (задача B3) -----------------------------------------------
 
 
@@ -676,6 +719,52 @@ def test_plan_limits_reach_the_dashboard(transcripts: Path, db_path: Path) -> No
     seed(transcripts, db_path, [assistant("msg_1")])
     with client(db_path, transcripts, limits=StubLimits(payload)) as api:
         assert api.get("/api/overview").json()["plan"] == payload
+
+
+def test_overview_stamps_point_at_last_events(transcripts: Path, db_path: Path) -> None:
+    """Метка виджета — время последнего события, а не момент пересчёта."""
+    now = datetime.now(UTC)
+    seed(
+        transcripts,
+        db_path,
+        [
+            # Холостой ход: короткий ответ при большом контексте.
+            assistant(
+                "msg_idle",
+                uuid="u1",
+                ts=now - timedelta(minutes=20),
+                output=3,
+                cache_read=200_000,
+                content=[{"type": "text", "text": "ок"}],
+            ),
+            assistant("msg_tool", uuid="u2", ts=now - timedelta(minutes=10)),
+            # Последний ход без инструментов: у ленты и профиля времена разойдутся.
+            assistant(
+                "msg_text",
+                uuid="u3",
+                ts=now - timedelta(minutes=1),
+                content=[{"type": "text", "text": "готово"}],
+            ),
+        ],
+    )
+    with client(db_path, transcripts) as api:
+        stamps = api.get("/api/overview").json()["stamps"]
+
+    assert stamps["last_turn"] == stamps["today_turn"]  # ходы сегодняшние
+    assert stamps["last_turn"] > stamps["tool_call"]  # последний ход без инструментов
+    assert stamps["idle_turn"] < stamps["tool_call"]  # холостой был раньше
+
+
+def test_overview_stamps_are_empty_without_turns(transcripts: Path, db_path: Path) -> None:
+    """Пустой срез — не время, а прочерк: виджету нечего датировать."""
+    seed(transcripts, db_path, [])
+    with client(db_path, transcripts) as api:
+        assert api.get("/api/overview").json()["stamps"] == {
+            "last_turn": None,
+            "today_turn": None,
+            "tool_call": None,
+            "idle_turn": None,
+        }
 
 
 def test_plan_refresh_asks_limits_now(transcripts: Path, db_path: Path) -> None:

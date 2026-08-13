@@ -1038,6 +1038,11 @@ main.empty {
   border-left-color: var(--line);
 }
 
+/* Сессия, которой уже нет: полоса и подпись гасятся сильнее простоя. */
+.session-done {
+  border-left-color: transparent;
+}
+
 .session-badge-working {
   color: var(--mint);
   background: rgb(94 171 134 / 12%);
@@ -1056,6 +1061,12 @@ main.empty {
 .session-badge-idle {
   color: var(--text-faint);
   background: rgb(255 255 255 / 5%);
+}
+
+.session-badge-done {
+  color: var(--text-faint);
+  background: transparent;
+  border: 1px solid var(--line);
 }
 
 /* --- профиль: на что уходят ходы --- */

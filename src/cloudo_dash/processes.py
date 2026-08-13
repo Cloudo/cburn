@@ -20,14 +20,21 @@ import logging
 import os
 import signal
 import subprocess
+import time
 from dataclasses import dataclass
 
 log = logging.getLogger(__name__)
 
-#: Запуск бинаря небыстрый, но вызывается он только при закрытии сессии.
+#: Запуск бинаря небыстрый (около 1,3 с), поэтому список кэшируется.
 TIMEOUT = 30.0
 
+#: Столько живёт кэш списка сессий: сессии не появляются чаще.
+CACHE_SECONDS = 15.0
+
 CLAUDE_BINARY = "claude"
+
+#: (момент запроса, ответ). None в ответе — спросить не удалось.
+_cache: tuple[float, list[ClaudeSession] | None] = (0.0, None)
 
 
 @dataclass(frozen=True)
@@ -41,8 +48,37 @@ class ClaudeSession:
     name: str | None = None
 
 
-def active_sessions() -> list[ClaudeSession]:
-    """Спросить у Claude Code список его сессий."""
+def active_sessions(*, use_cache: bool = False) -> list[ClaudeSession]:
+    """Спросить у Claude Code список его сессий.
+
+    Пустой список означает и «сессий нет», и «спросить не удалось». Там, где
+    разница важна, берите `active_session_ids`.
+    """
+    return _ask(use_cache=use_cache) or []
+
+
+def active_session_ids(*, use_cache: bool = True) -> set[str] | None:
+    """Идентификаторы живых сессий; None — спросить не удалось.
+
+    Отличать одно от другого обязательно: молчащий `claude` не повод объявить
+    все сессии завершёнными.
+    """
+    sessions = _ask(use_cache=use_cache)
+    return None if sessions is None else {session.session_id for session in sessions}
+
+
+def _ask(*, use_cache: bool) -> list[ClaudeSession] | None:
+    global _cache
+    asked_at, cached = _cache
+    if use_cache and cached is not None and time.monotonic() - asked_at < CACHE_SECONDS:
+        return cached
+    sessions = _run()
+    if sessions is not None:
+        _cache = (time.monotonic(), sessions)
+    return sessions
+
+
+def _run() -> list[ClaudeSession] | None:
     try:
         result = subprocess.run(
             [CLAUDE_BINARY, "agents", "--json"],
@@ -52,12 +88,12 @@ def active_sessions() -> list[ClaudeSession]:
         )
     except (OSError, subprocess.SubprocessError) as exc:
         log.warning("не удалось получить список сессий Claude Code: %s", exc)
-        return []
+        return None
     try:
         rows = json.loads(result.stdout or "[]")
     except json.JSONDecodeError as exc:
         log.warning("список сессий Claude Code не разобран: %s", exc)
-        return []
+        return None
     sessions = []
     for row in rows if isinstance(rows, list) else []:
         pid, session_id = row.get("pid"), row.get("sessionId")
@@ -75,7 +111,7 @@ def active_sessions() -> list[ClaudeSession]:
 
 
 def process_for_session(session_id: str) -> ClaudeSession | None:
-    """Процесс сессии по её идентификатору."""
+    """Процесс сессии по её идентификатору. Кэш не используется: закрываем по нему."""
     return next((s for s in active_sessions() if s.session_id == session_id), None)
 
 

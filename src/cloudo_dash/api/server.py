@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime
 from pathlib import Path
@@ -30,12 +30,13 @@ from ..limits import LimitsWatcher
 from ..metrics import (
     overview,
     recent_sessions,
+    refresh_liveness,
     session_models,
     session_summary,
     session_tools,
     set_hidden,
 )
-from ..processes import process_for_session, terminate
+from ..processes import active_session_ids, process_for_session, terminate
 
 log = logging.getLogger(__name__)
 
@@ -44,6 +45,10 @@ log = logging.getLogger(__name__)
 #: паузе расход должен падать сам. Пересчёт обзора стоит около 2 мс, так что
 #: секундный такт ничего не нагружает.
 TICK_SECONDS = 1.0
+
+#: Как часто сверять сессии со списком процессов Claude Code. Опрос стоит около
+#: 1,3 с, а сессии не появляются и не заканчиваются чаще (задача B4).
+LIVENESS_SECONDS = 15.0
 
 #: Собранный фронт (задача A6). Пока его нет, отдаётся заглушка.
 WEB_DIST = Path(__file__).resolve().parents[3] / "web" / "dist"
@@ -85,11 +90,13 @@ def create_app(
     projects_dir: Path | None = None,
     watch: bool = True,
     limits: LimitsWatcher | None = None,
+    liveness: Callable[[], set[str] | None] | None = None,
 ) -> FastAPI:
     """Собрать приложение.
 
-    `watch=False` — для тестов, где watcher не нужен; `limits` подменяется там же,
-    чтобы тесты не ходили ни в связку ключей, ни в сеть.
+    `watch=False` — для тестов, где watcher не нужен; `limits` и `liveness`
+    подменяются там же, чтобы тесты не ходили ни в связку ключей, ни в сеть,
+    ни в `claude agents --json`.
     """
     hub = Hub()
     events: asyncio.Queue[IngestStats] = asyncio.Queue()
@@ -119,12 +126,17 @@ def create_app(
             pump = asyncio.create_task(_pump(events, hub, collect_overview))
         # Тикер не зависит от watcher: окна burn rate скользят и без новых ходов.
         ticker = asyncio.create_task(_ticker(hub, collect_overview))
+        ask_live = liveness or _default_liveness
+        # Первый проход — до первого запроса: иначе живая сессия успеет
+        # мигнуть «закончилась».
+        await _refresh_liveness(open_db, ask_live)
+        probe = asyncio.create_task(_liveness(open_db, ask_live))
         try:
             yield
         finally:
             if watcher is not None:
                 watcher.stop()
-            for task in (pump, ticker):
+            for task in (pump, ticker, probe):
                 if task is not None:
                     task.cancel()
                     with suppress(asyncio.CancelledError):
@@ -234,6 +246,38 @@ def create_app(
 
     _mount_frontend(app)
     return app
+
+
+def _default_liveness() -> set[str] | None:
+    return active_session_ids(use_cache=False)
+
+
+async def _refresh_liveness(open_db: Any, probe: Callable[[], set[str] | None]) -> None:
+    """Один проход сверки `is_live` со списком процессов Claude Code (задача B4).
+
+    Опрос синхронный и не быстрый (около 1,3 с), поэтому уходит в поток: цикл
+    событий должен успевать раздавать обзор каждую секунду.
+    """
+    try:
+        ids = await asyncio.to_thread(probe)
+        conn = open_db()
+        try:
+            changed = refresh_liveness(conn, ids)
+        finally:
+            conn.close()
+        if changed:
+            log.info("живость сессий: обновлено %s", changed)
+    except asyncio.CancelledError:
+        raise
+    except Exception:  # фоновая задача не должна падать молча
+        log.exception("не удалось обновить живость сессий")
+
+
+async def _liveness(open_db: Any, probe: Callable[[], set[str] | None]) -> None:
+    """Периодическая сверка живости."""
+    while True:
+        await asyncio.sleep(LIVENESS_SECONDS)
+        await _refresh_liveness(open_db, probe)
 
 
 async def _ticker(hub: Hub, collect: Any) -> None:

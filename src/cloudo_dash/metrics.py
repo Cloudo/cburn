@@ -207,7 +207,8 @@ PERMISSION_AFTER_SECONDS = 25
 STATUS_WORKING = "working"  # ход не завершён: модель думает или гоняет инструменты
 STATUS_PERMISSION = "permission"  # инструмент запрошен, ответа нет — висит разрешение
 STATUS_ANSWERED = "answered"  # модель ответила и ждёт человека
-STATUS_IDLE = "idle"  # тишина дольше IDLE_AFTER_SECONDS
+STATUS_IDLE = "idle"  # тишина дольше IDLE_AFTER_SECONDS, но процесс жив
+STATUS_DONE = "done"  # процесса нет: в эту сессию больше не пишут
 
 
 def session_status(row: dict, now: datetime) -> str:
@@ -217,6 +218,12 @@ def session_status(row: dict, now: datetime) -> str:
     крутит инструменты. Завершённый ход означает обратное: ждут человека.
     Отдельный случай — инструмент запрошен, а результата нет: почти всегда это
     висящий запрос разрешения.
+
+    Тишина сама по себе не отличает паузу от конца работы: транскрипт не знает,
+    что сессия закрылась. Это знает `is_live` — флаг ставится по списку
+    процессов Claude Code (задача B4). Отсутствие процесса засчитывается только
+    после `IDLE_AFTER_SECONDS`: флаг обновляется не мгновенно, и живая сессия
+    не должна мигать «закончилась» между опросами.
     """
     quiet = _seconds_since(row.get("last_record_at") or row.get("last_at"), now)
     kind = row.get("last_record_kind")
@@ -226,7 +233,7 @@ def session_status(row: dict, now: datetime) -> str:
             return STATUS_PERMISSION
         return STATUS_WORKING
     if quiet >= IDLE_AFTER_SECONDS:
-        return STATUS_IDLE
+        return STATUS_DONE if row.get("is_live") == 0 else STATUS_IDLE
     if kind in {"prompt", "tool_result"}:
         return STATUS_WORKING
     return STATUS_ANSWERED
@@ -256,7 +263,7 @@ def live_sessions(
             SELECT s.id, p.slug AS project, p.root_path, s.last_at, s.started_at,
                    s.turns, s.tokens_out, s.last_context, s.first_prompt, s.last_prompt,
                    s.title, s.title_source, s.last_record_kind, s.last_record_at,
-                   s.last_stop_reason,
+                   s.last_stop_reason, s.is_live,
                    (SELECT COALESCE(SUM(t.output_tokens), 0) FROM turns AS t
                      WHERE t.session_id = s.id AND t.ts >= ?) AS output_recent
               FROM sessions AS s
@@ -272,6 +279,25 @@ def live_sessions(
     for row in rows:
         row["status"] = session_status(row, now)
     return rows
+
+
+def refresh_liveness(conn: sqlite3.Connection, active_ids: set[str] | None) -> int:
+    """Проставить `is_live` по списку живых сессий Claude Code (задача B4).
+
+    `active_ids=None` означает «спросить не удалось» — тогда флаги остаются
+    как были: лучше устаревшая живость, чем ложное «закончилась» на всех.
+    Возвращает число изменённых строк.
+    """
+    if active_ids is None:
+        return 0
+    ids = tuple(active_ids)
+    live = f"id IN ({','.join('?' * len(ids))})" if ids else "0"
+    with conn:
+        cursor = conn.execute(
+            f"UPDATE sessions SET is_live = ({live}) WHERE is_live IS NOT ({live})",  # noqa: S608
+            ids * 2,
+        )
+    return cursor.rowcount
 
 
 def top_sessions(conn: sqlite3.Connection, since: datetime, limit: int = 5) -> list[dict]:
@@ -328,10 +354,39 @@ def overview(conn: sqlite3.Connection, now: datetime | None = None) -> dict:
         "idle": idle_turns(conn, day_start),
         "limits": limit_window(conn, moment),
         "series": burn_series(conn, moment),
+        "stamps": data_stamps(conn, moment),
         "pending_sessions": pending_sessions(conn, moment),
         "series_bucket_seconds": SERIES_BUCKET_SECONDS,
         "totals": dict(totals),
     }
+
+
+def data_stamps(conn: sqlite3.Connection, now: datetime) -> dict[str, str | None]:
+    """Время самого свежего события в каждом срезе обзора.
+
+    Виджет показывает не момент пересчёта (он идёт раз в секунду и без новых
+    ходов), а время данных, на которых он стоит: в паузе метка честно замирает.
+    Срезы разные, поэтому и времена разные: у ленты — последний ход вообще,
+    у дневных виджетов — последний ход с местной полуночи.
+    """
+    row = conn.execute(
+        """
+        SELECT (SELECT MAX(ts) FROM turns)                       AS last_turn,
+               (SELECT MAX(ts) FROM turns WHERE ts >= :day)      AS today_turn,
+               (SELECT MAX(t.ts) FROM tool_calls AS c
+                  JOIN turns AS t ON t.id = c.turn_id
+                 WHERE t.ts >= :day)                             AS tool_call,
+               (SELECT MAX(ts) FROM turns
+                 WHERE ts >= :day AND output_tokens < :out
+                   AND context_estimate > :ctx)                  AS idle_turn
+        """,
+        {
+            "day": _utc_stamp(local_day_start(now)),
+            "out": IDLE_MAX_OUTPUT,
+            "ctx": IDLE_MIN_CONTEXT,
+        },
+    ).fetchone()
+    return dict(row)
 
 
 def recent_turns(conn: sqlite3.Connection, limit: int = 25) -> list[dict]:
