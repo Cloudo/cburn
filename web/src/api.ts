@@ -160,6 +160,14 @@ export type Otel = {
   };
   /** Неудавшиеся запросы к API: в транскрипт они не попадают вовсе. */
   api: { errors: number; by_status: Array<{ status: string; errors: number }> };
+  /** Что получилось за расход: строки кода и активное время без пауз. */
+  work: {
+    lines_added: number;
+    lines_removed: number;
+    active_seconds: number;
+    waiting_seconds: number;
+    commits: number;
+  };
 };
 
 export type Overview = {

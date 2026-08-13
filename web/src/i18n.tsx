@@ -95,6 +95,14 @@ const DICT: Record<string, [string, string]> = {
     "Приём данных от Claude Code. Сама телеметрия включается его переменными окружения — их печатает команда cdash otel --env.",
     "Receiving data from Claude Code. Telemetry itself is switched on by its environment variables — run cdash otel --env to print them.",
   ],
+  "otel.work.time": [
+    "Работа шла {time} без учёта пауз.",
+    "Work ran for {time}, idle time excluded.",
+  ],
+  "otel.work.lines": [
+    "Кода: +{added} / −{removed} строк.",
+    "Code: +{added} / −{removed} lines.",
+  ],
   "otel.errors": [
     "Запросов к API сорвалось: {count} (коды {statuses}). В файлах истории их нет — там виден только тот ответ, который в итоге пришёл.",
     "Failed API requests: {count} (codes {statuses}). The history files don't show them — only the reply that eventually arrived.",

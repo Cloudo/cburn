@@ -465,6 +465,31 @@ def test_permission_decisions_are_split_by_source(conn: Any) -> None:
     assert stats["by_tool"][0] == {"tool": "Bash", "decisions": 2}
 
 
+def test_permission_breakdown_has_a_tail_limit(conn: Any) -> None:
+    """MCP-инструментов на машине бывают десятки: хвост ест бюджет дайджеста."""
+    otlp.ingest(
+        conn,
+        "logs",
+        logs_payload(
+            *[
+                event(
+                    "tool_decision",
+                    index,
+                    tool_name=f"mcp__server__tool{index}",
+                    decision="accept",
+                    source="user_temporary",
+                )
+                for index in range(30)
+            ]
+        ),
+    )
+    stats = metrics.otel_permissions(conn, datetime(2026, 8, 14, tzinfo=UTC))
+    assert stats["decisions"] == 30
+    assert len(stats["by_tool"]) == metrics.PERMISSION_TOOLS
+    built = digest.build(conn, datetime(2026, 8, 14, tzinfo=UTC))
+    assert built["size"]["within_limit"]
+
+
 def test_digest_marks_missing_telemetry(conn: Any) -> None:
     """Без телеметрии секции помечены прочерком: ноль подтверждений — не факт."""
     built = digest.build(conn, datetime(2026, 8, 14, tzinfo=UTC))
@@ -608,6 +633,23 @@ def test_project_filter_narrows_telemetry(conn: Any) -> None:
     assert metrics.otel_usage(conn, since, project="второй")["tokens"] == 0
     assert metrics.otel_permissions(conn, since, project="первый")["manual"] == 1
     assert metrics.otel_permissions(conn, since, project="второй")["manual"] == 0
+
+
+def test_work_done_is_counted_from_metrics(conn: Any) -> None:
+    """Строки кода и активное время считает сам Claude Code — в истории их нет."""
+    lines = "claude_code.lines_of_code.count"
+    active = "claude_code.active_time.total"
+    otlp.ingest(conn, "metrics", metrics_payload(point(120, type="added"), name=lines))
+    otlp.ingest(conn, "metrics", metrics_payload(point(35, type="removed"), name=lines))
+    otlp.ingest(conn, "metrics", metrics_payload(point(90, type="user"), name=active))
+    otlp.ingest(conn, "metrics", metrics_payload(point(210, type="cli"), name=active))
+
+    work = metrics.otel_work(conn, datetime(2026, 8, 14, tzinfo=UTC))
+    assert work["lines_added"] == 120
+    assert work["lines_removed"] == 35
+    # Активное время — сумма обоих видов: и человек за клавиатурой, и работа CLI.
+    assert work["active_seconds"] == 300
+    assert work["waiting_seconds"] == 210
 
 
 def test_api_failures_are_visible_only_here(conn: Any) -> None:

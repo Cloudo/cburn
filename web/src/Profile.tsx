@@ -1,7 +1,7 @@
 // «На что уходят ходы»: метрики ТЗ §4 — профиль инструментов, доля моделей,
 // холостые ходы и оценка окна лимитов подписки.
 
-import { agoLabel, compact, grouped, modelLabel, share, toolLabel, usd } from "./format";
+import { agoLabel, compact, grouped, modelLabel, share, spent, toolLabel, usd } from "./format";
 import type { IdleTurns, Limits, ModelShare, Otel, Plan, ToolProfile } from "./api";
 import { translate, useLang, type Lang } from "./i18n";
 
@@ -124,6 +124,20 @@ export function Telemetry({ otel }: { otel?: Otel }) {
           </span>
         </div>
       </div>
+      {otel.work.active_seconds > 0 && (
+        <p className="telemetry-note">
+          {t("otel.work.time", { time: spent(otel.work.active_seconds) })}
+          {otel.work.lines_added + otel.work.lines_removed > 0 && (
+            <>
+              {" "}
+              {t("otel.work.lines", {
+                added: grouped(otel.work.lines_added),
+                removed: grouped(otel.work.lines_removed),
+              })}
+            </>
+          )}
+        </p>
+      )}
       {otel.api.errors > 0 && (
         <p className="hint">
           {t("otel.errors", {

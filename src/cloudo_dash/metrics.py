@@ -913,11 +913,18 @@ def otel_usage(
     }
 
 
+#: Сколько инструментов показывать в разбивке подтверждений. Дальше хвост
+#: ничего не решает, а в дайджесте советчика он ест бюджет: MCP-инструментов
+#: на машине бывают десятки.
+PERMISSION_TOOLS = 12
+
+
 def otel_permissions(
     conn: sqlite3.Connection,
     since: datetime,
     until: datetime | None = None,
     project: str | None = None,
+    limit: int = PERMISSION_TOOLS,
 ) -> dict:
     """Решения по запросам разрешений (веха E).
 
@@ -965,7 +972,7 @@ def otel_permissions(
         "rejected": rejected,
         "by_tool": [
             {"tool": tool, "decisions": count}
-            for tool, count in sorted(manual.items(), key=lambda item: -item[1])
+            for tool, count in sorted(manual.items(), key=lambda item: -item[1])[:limit]
         ],
     }
 
@@ -990,6 +997,37 @@ def otel_errors(conn: sqlite3.Connection, since: datetime) -> dict:
     return {"errors": sum(row["errors"] for row in rows), "by_status": rows}
 
 
+def otel_work(conn: sqlite3.Connection, since: datetime) -> dict:
+    """Что получилось за расход: строки кода и активное время (веха E).
+
+    Обе величины считает сам Claude Code, и в транскриптах их нет: строки —
+    результат правок, а активное время исключает паузы, поэтому оно короче
+    промежутка между первым и последним ходом.
+    """
+    rows = {
+        (row["name"], row["kind"]): row["value"]
+        for row in conn.execute(
+            "SELECT name, kind, COALESCE(SUM(value), 0) AS value FROM otel_metrics"
+            " WHERE ts >= ? AND name IN ('claude_code.lines_of_code.count',"
+            "                            'claude_code.active_time.total',"
+            "                            'claude_code.commit.count')"
+            " GROUP BY name, kind",
+            (_utc_stamp(since),),
+        )
+    }
+    lines = "claude_code.lines_of_code.count"
+    active = "claude_code.active_time.total"
+    return {
+        "lines_added": rows.get((lines, "added"), 0),
+        "lines_removed": rows.get((lines, "removed"), 0),
+        # `type` у активного времени: user — человек за клавиатурой,
+        # cli — работа инструментов и генерация ответа.
+        "active_seconds": sum(value for (name, _), value in rows.items() if name == active),
+        "waiting_seconds": rows.get((active, "cli"), 0),
+        "commits": rows.get(("claude_code.commit.count", None), 0),
+    }
+
+
 def otel_state(conn: sqlite3.Connection, since: datetime) -> dict:
     """Срез телеметрии для обзора: работает ли она и что видит (веха E)."""
     last_at = conn.execute(
@@ -1002,6 +1040,7 @@ def otel_state(conn: sqlite3.Connection, since: datetime) -> dict:
         "off_transcript": otel_usage(conn, since),
         "permissions": otel_permissions(conn, since),
         "api": otel_errors(conn, since),
+        "work": otel_work(conn, since),
     }
 
 
