@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from cloudo_dash import paths as indexer_paths
-from cloudo_dash.collector.indexer import ingest_file, ingest_tree
+from cloudo_dash.collector.indexer import RAW_SAMPLE_LIMIT, ingest_file, ingest_tree
 from cloudo_dash.db import connect
 from cloudo_dash.metrics import session_chain
 
@@ -413,8 +413,8 @@ def test_synthetic_records_are_skipped(conn: sqlite3.Connection, tmp_path: Path)
     assert rows(conn, "SELECT message_id FROM turns")[0]["message_id"] == "msg_1"
 
 
-def test_unknown_types_are_counted_not_stored(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Незнакомые записи пока только считаются: raw_events — задача B6."""
+def test_unknown_types_do_not_break_the_turn(conn: sqlite3.Connection, tmp_path: Path) -> None:
+    """Незнакомая запись считается, складывается в raw_events и не мешает ходу."""
     path = tmp_path / "proj" / "s1.jsonl"
     write_transcript(
         path,
@@ -422,7 +422,10 @@ def test_unknown_types_are_counted_not_stored(conn: sqlite3.Connection, tmp_path
     )
     stats = ingest_file(conn, path)
     assert stats.unknown == 1
-    assert conn.execute("SELECT COUNT(*) FROM raw_events").fetchone()[0] == 0
+    assert stats.turns_new == 1
+    stored = conn.execute("SELECT type, payload FROM raw_events").fetchone()
+    assert stored["type"] == "attachment"
+    assert "a1" in stored["payload"]
 
 
 # --- фикстуры ----------------------------------------------------------------
@@ -502,6 +505,45 @@ def test_ingest_tree_reports_progress(conn: sqlite3.Connection, tmp_path: Path) 
 
     assert [(done, total) for done, total, _ in seen] == [(1, 3), (2, 3), (3, 3)]
     assert [name for _, _, name in seen] == ["proj-a", "proj-b", "proj-c"]
+
+
+# --- незнакомые записи (задача B6) -------------------------------------------
+
+
+def test_unknown_records_counted_with_limited_samples(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """Счётчик растёт на каждую запись, payload хранится только у первых."""
+    unknown = [
+        json.dumps({"type": "attachment", "version": "2.1.228", "sessionId": "s1"})
+        for _ in range(RAW_SAMPLE_LIMIT + 4)
+    ]
+    write_transcript(tmp_path / "proj" / "s1.jsonl", [assistant("msg_1"), *unknown])
+
+    ingest_file(conn, tmp_path / "proj" / "s1.jsonl")
+
+    seen = conn.execute(
+        "SELECT seen FROM raw_event_counts WHERE type = 'attachment' AND version = '2.1.228'"
+    ).fetchone()[0]
+    assert seen == RAW_SAMPLE_LIMIT + 4
+    assert conn.execute("SELECT COUNT(*) FROM raw_events").fetchone()[0] == RAW_SAMPLE_LIMIT
+
+
+def test_unknown_records_split_by_version(conn: sqlite3.Connection, tmp_path: Path) -> None:
+    """Пара (тип, версия) считается отдельно: формат меняется между версиями."""
+    write_transcript(
+        tmp_path / "proj" / "s1.jsonl",
+        [
+            json.dumps({"type": "mode", "version": "2.1.220", "sessionId": "s1"}),
+            json.dumps({"type": "mode", "version": "2.1.231", "sessionId": "s1"}),
+            json.dumps({"type": "mode", "sessionId": "s1"}),  # версии нет вовсе
+        ],
+    )
+
+    ingest_file(conn, tmp_path / "proj" / "s1.jsonl")
+
+    rows = dict(conn.execute("SELECT version, seen FROM raw_event_counts WHERE type = 'mode'"))
+    assert rows == {"2.1.220": 1, "2.1.231": 1, "": 1}
 
 
 # --- resume-форки (задача B5) ------------------------------------------------

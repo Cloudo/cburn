@@ -116,8 +116,22 @@ CREATE TABLE IF NOT EXISTS model_prices (
 CREATE TABLE IF NOT EXISTS raw_events (
     id      INTEGER PRIMARY KEY,
     path    TEXT,
-    line_no INTEGER,
+    line_no INTEGER,  -- номер строки в прочитанной порции файла
     ts      TEXT,
     type    TEXT,
+    version TEXT,     -- версия Claude Code: формат меняется между ними
     payload TEXT
+);
+
+-- Полный payload хранится только у первых экземпляров каждой пары (тип, версия),
+-- дальше растёт счётчик: незнакомых записей в истории десятки тысяч (одних
+-- attachment — 33 тысячи на версию), и без ограничения таблица обгоняет полезные
+-- данные (TZ §2, задача B6).
+CREATE TABLE IF NOT EXISTS raw_event_counts (
+    type     TEXT NOT NULL,
+    version  TEXT NOT NULL DEFAULT '',
+    seen     INTEGER NOT NULL DEFAULT 0,
+    first_at TEXT,
+    last_at  TEXT,
+    PRIMARY KEY (type, version)
 );

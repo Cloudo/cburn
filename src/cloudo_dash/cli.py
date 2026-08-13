@@ -43,6 +43,8 @@ def build_parser() -> argparse.ArgumentParser:
     reindex.add_argument(
         "--full", action="store_true", help="перечитать файлы целиком, а не только хвосты"
     )
+    events = sub.add_parser("events", help="незнакомые типы записей транскрипта")
+    events.add_argument("--show", metavar="ТИП", help="показать сохранённые примеры записи")
     prices = sub.add_parser("prices", help="применить цены из конфига и пересчитать стоимость")
     prices.add_argument(
         "--init", action="store_true", help="записать в конфиг заготовку тарифов, если их нет"
@@ -78,6 +80,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "reindex":
         return _reindex(args.full)
+
+    if args.command == "events":
+        return _events(args.show)
 
     if args.command == "prices":
         return _prices(args.init)
@@ -136,8 +141,10 @@ def _reindex(full: bool = False) -> int:
     with connect() as conn:
         pricing.sync_prices(conn, config.load())
         if full:
-            with conn:  # связи resume выводятся из данных, значит собираются заново
+            with conn:  # выводимые из данных вещи собираются заново, иначе задвоятся
                 conn.execute("DELETE FROM files")
+                conn.execute("DELETE FROM raw_events")
+                conn.execute("DELETE FROM raw_event_counts")
                 conn.execute("UPDATE sessions SET parent_session_id = NULL")
         results = ingest_tree(conn, paths.CLAUDE_PROJECTS_DIR, on_file=_progress)
     if sys.stderr.isatty():
@@ -156,6 +163,37 @@ def _progress(done: int, total: int, path: Path) -> None:
     if not sys.stderr.isatty():
         return
     print(f"\r{done}/{total}  {path.name[:36]:<36}", end="", file=sys.stderr, flush=True)
+
+
+def _events(show: str | None) -> int:
+    """Незнакомые записи: что встречается и как выглядит (задача B6)."""
+    with connect() as conn:
+        if show:
+            rows = conn.execute(
+                "SELECT ts, version, payload FROM raw_events WHERE type = ? ORDER BY id",
+                (show,),
+            ).fetchall()
+            if not rows:
+                print(f"примеров записи «{show}» не сохранено", file=sys.stderr)
+                return 1
+            for row in rows:
+                print(f"--- {row['ts'] or '—'}  версия {row['version'] or '—'}")
+                print(row["payload"][:2000])
+            return 0
+        counts = conn.execute(
+            "SELECT type, version, seen, first_at, last_at FROM raw_event_counts ORDER BY seen DESC"
+        ).fetchall()
+    if not counts:
+        print("незнакомых записей нет — выполните `cdash reindex`", file=sys.stderr)
+        return 1
+    print("тип                       версия     сколько  впервые")
+    for row in counts:
+        first = (row["first_at"] or "—")[:16].replace("T", " ")
+        print(
+            f"{row['type']:<25} {row['version'] or '—':<10} {_thousands(row['seen']):>8}  {first}"
+        )
+    print("примеры: cdash events --show <тип>")
+    return 0
 
 
 def _prices(init: bool) -> int:

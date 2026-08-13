@@ -94,17 +94,21 @@ def ingest_file(conn: sqlite3.Connection, path: Path) -> IngestStats:
 
     turns: dict[str, _Turn] = {}
     sessions: dict[str, _Session] = {}
-    for raw in chunk:
+    unknown: list[tuple[int, ParsedRecord, str]] = []
+    for line_no, raw in enumerate(chunk, start=1):
         stats.lines += 1
         record = parse_line(raw)
         if record is None:
             continue
+        if record.kind is RecordKind.UNKNOWN:
+            unknown.append((line_no, record, raw))
         _collect(record, turns, sessions, stats)
 
     with conn:  # одна транзакция на файл: либо файл учтён, либо offset не сдвинут
         project_id = _upsert_project(conn, path, sessions)
         _upsert_sessions(conn, sessions, project_id)
         _insert_turns(conn, turns, stats)
+        _store_unknown(conn, path, unknown)
         _link_parents(conn, turns)
         apply_costs(conn, turns.keys())
         _refresh_session_totals(conn, sessions.keys())
@@ -423,6 +427,44 @@ def _insert_turns(conn: sqlite3.Connection, turns: dict[str, _Turn], stats: Inge
         rows,
     )
     stats.tools_new = _count(conn, "tool_calls") - tools_before
+
+
+#: Сколько полных экземпляров хранить на пару (тип, версия). Дальше — счётчик:
+#: незнакомых записей в истории десятки тысяч, и примеров хватает единиц.
+RAW_SAMPLE_LIMIT = 5
+
+
+def _store_unknown(
+    conn: sqlite3.Connection, path: Path, records: list[tuple[int, ParsedRecord, str]]
+) -> None:
+    """Сложить незнакомые записи: примеры и счётчик по паре (тип, версия).
+
+    Формат транскриптов недокументирован и меняется между версиями Claude Code.
+    Счётчик отвечает на вопрос «что появилось», примеры — «как оно выглядит»;
+    полный payload дальше первых `RAW_SAMPLE_LIMIT` не нужен (задача B6).
+    """
+    for line_no, record, raw in records:
+        version = record.version or ""
+        seen = conn.execute(
+            """
+            INSERT INTO raw_event_counts (type, version, seen, first_at, last_at)
+            VALUES (:type, :version, 1, :ts, :ts)
+            ON CONFLICT(type, version) DO UPDATE SET
+                seen     = seen + 1,
+                first_at = COALESCE(first_at, excluded.first_at),
+                last_at  = COALESCE(excluded.last_at, last_at)
+            RETURNING seen
+            """,
+            {"type": record.raw_type, "version": version, "ts": record.ts},
+        ).fetchone()[0]
+        if seen <= RAW_SAMPLE_LIMIT:
+            conn.execute(
+                """
+                INSERT INTO raw_events (path, line_no, ts, type, version, payload)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (str(path), line_no, record.ts, record.raw_type, version, raw.strip()),
+            )
 
 
 #: По сколько message_id спрашивать за раз: в файле их бывают тысячи, а число
