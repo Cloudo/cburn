@@ -21,6 +21,8 @@ from .db import connect
 from .metrics import (
     idle_turns,
     model_share,
+    otel_permissions,
+    otel_usage,
     period_start,
     recent_sessions,
     session_chain,
@@ -439,6 +441,10 @@ def _stats(project: str | None, period: str) -> int:
         models = model_share(conn, since, project=project)
         profile = tool_profile(conn, since, project=project)
         idle = idle_turns(conn, since, project=project)
+        # Служебные запросы Claude Code в транскрипт не попадают: без этой
+        # строки сводка молча занижала бы расход (веха E).
+        off_transcript = otel_usage(conn, since, project=project)
+        permissions = otel_permissions(conn, since, project=project)
     if not usage["turns"]:
         print("за период ходов нет", file=sys.stderr)
         return 1
@@ -468,6 +474,17 @@ def _stats(project: str | None, period: str) -> int:
         f"холостые     : {idle['turns']} ходов ({idle['share'] * 100:.0f}%),"
         f" прочитано из кэша {_thousands(idle['cache_read'])}"
     )
+    if off_transcript["tokens"]:
+        print(
+            f"мимо истории : {_thousands(int(off_transcript['tokens']))} токенов,"
+            f" {_usd(off_transcript['cost_usd'])}"
+            f" ({off_transcript['share'] * 100:.1f}% расхода) — служебные запросы"
+        )
+    if permissions["decisions"]:
+        print(
+            f"разрешения   : {permissions['manual']} подтверждено руками,"
+            f" {permissions['auto']} автоматически"
+        )
     return 0
 
 

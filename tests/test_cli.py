@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import re
 from collections import defaultdict
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -282,6 +283,63 @@ def test_otel_status_counts_what_arrived(project: Path, capsys: pytest.CaptureFi
     assert "logs" in out
     assert "событие api_request" in out
     assert "накоплено: 1 строк" in out  # объём и охват: видно, растёт ли база
+
+
+def test_stats_shows_spending_off_the_transcript(
+    project: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Без этой строки сводка молча занижала бы расход на служебные запросы."""
+    from cloudo_dash.collector import otlp
+
+    (project / FIXTURES[0].name).write_text(FIXTURES[0].read_text())
+    cli.main(["reindex"])
+    capsys.readouterr()
+    now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
+    with connect() as conn:
+        otlp.store_metrics(
+            conn,
+            [
+                otlp.MetricPoint(
+                    name="claude_code.token.usage",
+                    ts=now,
+                    start_ts=now,
+                    session_id=None,
+                    model="claude-haiku-4-5-20251001",
+                    kind="input",
+                    value=517,
+                    attrs={"query_source": "auxiliary"},
+                )
+            ],
+        )
+        otlp.store_events(
+            conn,
+            [
+                otlp.EventRecord(
+                    name="tool_decision",
+                    ts=now,
+                    session_id=None,
+                    attrs={"tool_name": "Bash", "decision": "accept", "source": "user_permanent"},
+                )
+            ],
+        )
+
+    assert cli.main(["stats", "--period", "all"]) == 0
+    out = capsys.readouterr().out
+    assert "мимо истории : 517 токенов" in out
+    assert "разрешения   : 1 подтверждено руками" in out
+
+
+def test_stats_stays_silent_without_telemetry(
+    project: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Нет телеметрии — нет и строк про неё: пустые нули только сбивают."""
+    (project / FIXTURES[0].name).write_text(FIXTURES[0].read_text())
+    cli.main(["reindex"])
+    capsys.readouterr()
+    assert cli.main(["stats", "--period", "all"]) == 0
+    out = capsys.readouterr().out
+    assert "мимо истории" not in out
+    assert "разрешения" not in out
 
 
 def test_otel_prune_removes_old_records(project: Path, capsys: pytest.CaptureFixture[str]) -> None:
