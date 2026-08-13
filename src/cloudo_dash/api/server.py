@@ -25,6 +25,7 @@ from starlette.responses import Response
 from starlette.types import Scope
 
 from .. import config, paths, pricing
+from ..analyzer import scheduler
 from ..collector.indexer import IngestStats
 from ..collector.watcher import TranscriptWatcher
 from ..db import connect
@@ -104,12 +105,13 @@ def create_app(
     watch: bool = True,
     limits: LimitsWatcher | None = None,
     liveness: LivenessProbe | None = None,
+    advisor_run: Any = None,
 ) -> FastAPI:
     """Собрать приложение.
 
-    `watch=False` — для тестов, где watcher не нужен; `limits` и `liveness`
-    подменяются там же, чтобы тесты не ходили ни в связку ключей, ни в сеть,
-    ни в `claude agents --json`.
+    `watch=False` — для тестов, где watcher не нужен; `limits`, `liveness` и
+    `advisor_run` подменяются там же, чтобы тесты не ходили ни в связку ключей,
+    ни в сеть, ни в `claude agents --json`, ни в `claude -p`.
     """
     hub = Hub()
     events: asyncio.Queue[IngestStats] = asyncio.Queue()
@@ -139,6 +141,9 @@ def create_app(
             pump = asyncio.create_task(_pump(events, hub, collect_overview))
         # Тикер не зависит от watcher: окна burn rate скользят и без новых ходов.
         ticker = asyncio.create_task(_ticker(hub, collect_overview))
+        # Советчик стоит денег на каждом такте, поэтому включается только
+        # конфигом и пропускает такты без активности (задача D3).
+        advice_loop = asyncio.create_task(scheduler.loop(open_db, config.load, runner=advisor_run))
         ask_live = liveness or _default_liveness
         # Первый проход — до первого запроса: иначе живая сессия успеет
         # мигнуть «закончилась».
@@ -149,7 +154,7 @@ def create_app(
         finally:
             if watcher is not None:
                 watcher.stop()
-            for task in (pump, ticker, probe):
+            for task in (pump, ticker, probe, advice_loop):
                 if task is not None:
                     task.cancel()
                     with suppress(asyncio.CancelledError):

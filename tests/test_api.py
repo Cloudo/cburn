@@ -125,14 +125,20 @@ def client(
     limits: object | None = None,
     liveness: Callable[[], dict[str, datetime | None] | None] = lambda: None,
 ) -> TestClient:
-    """Тестовое приложение. По умолчанию живость «неизвестна»: тесты не должны
-    запускать `claude agents --json`."""
+    """Тестовое приложение. По умолчанию живость «неизвестна», а советчик
+    падает при попытке его позвать: тесты не должны запускать ни
+    `claude agents --json`, ни `claude -p` — второй ещё и стоит денег."""
+
+    def no_advisor(*args: object, **kwargs: object) -> dict:
+        raise AssertionError("тест не должен звать настоящий claude -p")
+
     app = create_app(
         db_path=db_path,
         projects_dir=transcripts.parent,
         watch=watch,
         limits=limits or StubLimits(),  # type: ignore[arg-type]
         liveness=liveness,
+        advisor_run=no_advisor,
     )
     return TestClient(app)
 

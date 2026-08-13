@@ -95,6 +95,7 @@ CREATE INDEX IF NOT EXISTS idx_tool_calls_tool ON tool_calls(tool);
 CREATE TABLE IF NOT EXISTS advice (
     id           INTEGER PRIMARY KEY,
     ts           TEXT NOT NULL,
+    kind         TEXT NOT NULL DEFAULT 'hourly',  -- hourly | weekly (задача D3)
     machine_id   TEXT,
     period_start TEXT,
     period_end   TEXT,
