@@ -369,6 +369,71 @@ export async function saveConfig(config: Config): Promise<{ config: Config }> {
   return payload;
 }
 
+export type AdviceItem = {
+  id: number;
+  key: string;
+  title: string;
+  severity: "info" | "warn" | "crit";
+  detail: string | null;
+  action: string | null;
+  evidence: string;
+  status: "new" | "accepted" | "rejected";
+};
+
+export type AdviceRun = {
+  id: number;
+  ts: string;
+  kind: string;
+  period_start: string | null;
+  period_end: string | null;
+  model: string | null;
+  cost_usd: number;
+  max_severity: string | null;
+  items: AdviceItem[];
+};
+
+/** История разборов со статусами (экран «Советы», задача D6). */
+export function useAdvice(): {
+  data: { runs: AdviceRun[] } | null;
+  error: boolean;
+  reload: () => Promise<void>;
+} {
+  const [data, setData] = useState<{ runs: AdviceRun[] } | null>(null);
+  const [error, setError] = useState(false);
+
+  const reload = useCallback(async () => {
+    try {
+      const response = await fetch("api/advice");
+      if (!response.ok) throw new Error(String(response.status));
+      setData(await response.json());
+      setError(false);
+    } catch {
+      setError(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  return { data, error, reload };
+}
+
+export async function setAdviceStatus(id: number, status: AdviceItem["status"]): Promise<void> {
+  const response = await fetch(`api/advice/items/${id}?status=${status}`, { method: "POST" });
+  if (!response.ok) throw new Error(`не удалось сохранить статус: ${response.status}`);
+}
+
+/** Разобрать период сейчас. Стоит денег — зовётся только по кнопке. */
+export async function runAdvice(
+  period: string,
+): Promise<{ cost_usd: number; advice: AdviceItem[] }> {
+  const response = await fetch(`api/advice/run?period=${period}`, { method: "POST" });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(payload?.detail ?? `ошибка ${response.status}`);
+  return payload;
+}
+
 /** Обзор, который сам себя обновляет: первый кадр и пуши приходят по WebSocket. */
 export function useOverview(): OverviewFeed {
   const [data, setData] = useState<Overview | null>(null);

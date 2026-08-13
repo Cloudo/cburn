@@ -2350,3 +2350,137 @@ main.empty {
   color: var(--amber);
   font-size: 12px;
 }
+
+/* --- экран советов (задача D6) --- */
+
+.advice-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+  margin: 14px 0 18px;
+}
+
+.advice-run {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.advice-run-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 8px 14px;
+  background: var(--bg-sunken);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.advice-when {
+  font-family: var(--mono);
+}
+
+.advice-kind {
+  color: var(--text-faint);
+}
+
+.advice-cost {
+  margin-left: auto;
+  font-family: var(--mono);
+  color: var(--text-faint);
+}
+
+.advice-item {
+  padding: 12px 14px;
+  border-top: 1px solid var(--line);
+}
+
+/* Отклонённый совет не прячем: пусть видно, что уже решили. */
+.advice-item-rejected {
+  opacity: 0.5;
+}
+
+.advice-item-accepted {
+  border-left: 2px solid var(--mint);
+}
+
+.advice-item-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.advice-item h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.advice-badge {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  flex: none;
+}
+
+.advice-badge-crit {
+  color: var(--amber);
+  background: rgb(232 163 61 / 14%);
+}
+
+.advice-badge-warn {
+  color: var(--steel);
+  background: rgb(77 127 163 / 14%);
+}
+
+.advice-badge-info {
+  color: var(--text-faint);
+  background: rgb(128 128 128 / 12%);
+}
+
+.advice-detail,
+.advice-action,
+.advice-evidence {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-dim);
+  max-width: 90ch;
+}
+
+.advice-evidence {
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.advice-label {
+  color: var(--text-faint);
+}
+
+.advice-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.advice-buttons button {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+
+.advice-buttons button:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--steel);
+}

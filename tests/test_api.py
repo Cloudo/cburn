@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from cloudo_dash import metrics as metrics_module
 from cloudo_dash import paths
 from cloudo_dash.api.server import create_app
 from cloudo_dash.collector.indexer import ingest_tree
@@ -818,6 +819,69 @@ def test_config_rejects_broken_values(
     assert not config_path.exists()
 
 
+# --- экран «Советы» (задача D6) ----------------------------------------------
+
+
+def advice_run(conn, *, kind: str = "hourly", cost: float = 0.08) -> int:
+    """Разбор с двумя советами прямо в базе: сам такт здесь не нужен."""
+    with conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO advice (ts, kind, digest_json, model, cost_usd, max_severity)
+            VALUES (?, ?, '{}', 'claude-haiku-4-5', ?, 'warn')
+            """,
+            (datetime.now(UTC).isoformat(), kind, cost),
+        )
+        advice_id = cursor.lastrowid
+        conn.executemany(
+            """
+            INSERT INTO advice_items (advice_id, key, title, severity, detail, action, evidence)
+            VALUES (?, ?, ?, ?, '', '', ?)
+            """,
+            [
+                (advice_id, "k1", "Закрыть линию работы", "warn", "chains[0].sessions = 19"),
+                (advice_id, "k2", "Перевести чтение на haiku", "info", "mechanical_opus = 212"),
+            ],
+        )
+    return int(advice_id or 0)
+
+
+def test_advice_history_is_served(transcripts: Path, db_path: Path) -> None:
+    """Экран получает разборы со вложенными советами."""
+    conn = connect(db_path)
+    advice_run(conn)
+    conn.close()
+
+    with client(db_path, transcripts) as api:
+        runs = api.get("/api/advice").json()["runs"]
+
+    assert len(runs) == 1
+    assert runs[0]["cost_usd"] == pytest.approx(0.08)
+    assert [item["title"] for item in runs[0]["items"]] == [
+        "Закрыть линию работы",
+        "Перевести чтение на haiku",
+    ]
+    assert {item["status"] for item in runs[0]["items"]} == {"new"}
+
+
+def test_advice_status_is_saved(transcripts: Path, db_path: Path) -> None:
+    """Отклонённый совет остаётся отклонённым — на этом держится «не повторять»."""
+    conn = connect(db_path)
+    advice_run(conn)
+    item_id = conn.execute("SELECT id FROM advice_items ORDER BY id LIMIT 1").fetchone()["id"]
+    conn.close()
+
+    with client(db_path, transcripts) as api:
+        assert api.post(f"/api/advice/items/{item_id}?status=rejected").status_code == 200
+        runs = api.get("/api/advice").json()["runs"]
+        bad_status = api.post(f"/api/advice/items/{item_id}?status=пожалуй")
+        missing = api.post("/api/advice/items/99999?status=accepted")
+
+    assert runs[0]["items"][0]["status"] == "rejected"
+    assert bad_status.status_code == 400
+    assert missing.status_code == 404
+
+
 # --- метрики ТЗ §4 (задача B3) -----------------------------------------------
 
 
@@ -958,9 +1022,17 @@ def test_plan_limits_reach_the_dashboard(transcripts: Path, db_path: Path) -> No
         assert api.get("/api/overview").json()["plan"] == payload
 
 
-def test_overview_stamps_point_at_last_events(transcripts: Path, db_path: Path) -> None:
+def test_overview_stamps_point_at_last_events(
+    transcripts: Path, db_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Метка виджета — время последнего события, а не момент пересчёта."""
     now = datetime.now(UTC)
+    # Дневные метки считаются от местной полуночи, а тест сеет события «20 минут
+    # назад»: запущенный в 00:05 он ловил бы вчерашний день и падал. Границу дня
+    # отодвигаем, чтобы проверять метки, а не часы на стене.
+    monkeypatch.setattr(
+        metrics_module, "local_day_start", lambda moment: moment - timedelta(days=1)
+    )
     seed(
         transcripts,
         db_path,

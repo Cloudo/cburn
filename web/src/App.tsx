@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Gauge, OutputMeter, Recorder, type Slice } from "./Gauge";
 import { Idle, Models, PlanLimits, Tools } from "./Profile";
 import { Dashboard, type WidgetContent } from "./Dashboard";
+import { Advice } from "./Advice";
 import { Session } from "./Session";
 import { Sessions } from "./Sessions";
 import { Settings } from "./Settings";
@@ -76,7 +77,7 @@ function useScreen(): string {
   return screen;
 }
 
-const SCREENS = ["", "sessions", "settings"];
+const SCREENS = ["", "sessions", "advice", "settings"];
 
 export default function App() {
   const { lang, setLang, t } = useLang();
@@ -143,7 +144,9 @@ export default function App() {
         </div>
       </header>
 
-      {screen === "settings" ? (
+      {screen === "advice" ? (
+        <Advice />
+      ) : screen === "settings" ? (
         <Settings />
       ) : screen.startsWith("session/") ? (
         <Session id={screen.slice("session/".length)} />

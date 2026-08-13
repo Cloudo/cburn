@@ -235,6 +235,53 @@ def session_events(conn: sqlite3.Connection, session_id: str) -> list[dict]:
     return sorted(marks, key=lambda mark: mark["ts"] or "")
 
 
+#: Статусы совета: новый, принят к работе, отклонён (задача D6).
+ADVICE_STATUSES = ("new", "accepted", "rejected")
+
+
+def advice_history(conn: sqlite3.Connection, limit: int = 20) -> list[dict]:
+    """История разборов со вложенными советами (экран «Советы», задача D6)."""
+    runs = [
+        dict(row)
+        for row in conn.execute(
+            """
+            SELECT id, ts, kind, period_start, period_end, model, cost_usd, max_severity
+              FROM advice ORDER BY ts DESC LIMIT ?
+            """,
+            (limit,),
+        )
+    ]
+    if not runs:
+        return []
+    ids = tuple(run["id"] for run in runs)
+    items: dict[int, list[dict]] = {run["id"]: [] for run in runs}
+    for row in conn.execute(
+        f"""
+        SELECT id, advice_id, key, title, severity, detail, action, evidence, status
+          FROM advice_items WHERE advice_id IN ({",".join("?" * len(ids))})
+         ORDER BY id
+        """,  # noqa: S608
+        ids,
+    ):
+        items[row["advice_id"]].append(dict(row))
+    for run in runs:
+        run["items"] = items[run["id"]]
+    return runs
+
+
+def set_advice_status(conn: sqlite3.Connection, item_id: int, status: str) -> bool:
+    """Отметить совет принятым, отклонённым или вернуть в новые.
+
+    Отклонённый уезжает в промпт следующего такта пометкой «не повторять» —
+    этим и ценен статус (ТЗ §5).
+    """
+    if status not in ADVICE_STATUSES:
+        raise ValueError(f"неизвестный статус совета: {status}")
+    with conn:
+        cursor = conn.execute("UPDATE advice_items SET status = ? WHERE id = ?", (status, item_id))
+    return cursor.rowcount > 0
+
+
 #: Сколько точек в спарклайне расхода сессии: столбик шире пары пикселей на
 #: экране всё равно не разглядеть, а данных на каждую точку нужно тем меньше,
 #: чем их больше.

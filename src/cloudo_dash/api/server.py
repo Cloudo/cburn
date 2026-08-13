@@ -15,7 +15,7 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager, suppress
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +31,7 @@ from ..collector.watcher import TranscriptWatcher
 from ..db import connect
 from ..limits import LimitsWatcher
 from ..metrics import (
+    advice_history,
     known_projects,
     overview,
     period_start,
@@ -42,6 +43,7 @@ from ..metrics import (
     session_tools,
     session_turns,
     sessions_page,
+    set_advice_status,
     set_hidden,
 )
 from ..processes import live_state, process_for_session, terminate
@@ -175,6 +177,56 @@ def create_app(
     @app.get("/api/overview")
     async def api_overview() -> dict[str, Any]:
         return await collect_overview()
+
+    @app.get("/api/advice")
+    async def api_advice(limit: int = 20) -> dict[str, Any]:
+        """История разборов со вложенными советами (экран «Советы», задача D6)."""
+        conn = open_db()
+        try:
+            return {"runs": advice_history(conn, limit)}
+        finally:
+            conn.close()
+
+    @app.post("/api/advice/items/{item_id}")
+    async def api_advice_status(item_id: int, status: str) -> dict[str, Any]:
+        """Принять или отклонить совет. Отклонённый не придёт снова."""
+        conn = connect(db_path, apply_schema=False)
+        try:
+            try:
+                changed = set_advice_status(conn, item_id, status)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            if not changed:
+                raise HTTPException(status_code=404, detail="совет не найден")
+            return {"item_id": item_id, "status": status}
+        finally:
+            conn.close()
+
+    @app.post("/api/advice/run")
+    async def api_advice_run(period: str = "24h") -> dict[str, Any]:
+        """Разобрать период сейчас, не дожидаясь такта.
+
+        Стоит денег, поэтому отдельной кнопкой с подтверждением.
+        """
+        settings = config.load()
+
+        def tick() -> dict[str, Any]:
+            conn = connect(db_path, apply_schema=False)
+            try:
+                since = period_start(period) or datetime.now(UTC) - timedelta(days=1)
+                return scheduler.run_tick(
+                    conn,
+                    settings,
+                    scheduler.Tick(scheduler.HOURLY, since, settings["analyzer"]["model"]),
+                    runner=advisor_run,
+                )
+            finally:
+                conn.close()
+
+        try:
+            return await asyncio.to_thread(tick)
+        except (RuntimeError, OSError) as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     @app.get("/api/config")
     async def api_config() -> dict[str, Any]:
