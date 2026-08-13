@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import gzip
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -434,3 +434,101 @@ def test_stale_telemetry_is_not_trusted() -> None:
     stale = datetime(2026, 8, 14, 6, 0, tzinfo=UTC).strftime(metrics.TS_FORMAT)
     row = waiting_row(otel_seen_at=stale, busy_since=moment(1))
     assert metrics.session_status(row, NOW) == metrics.STATUS_WORKING
+
+
+def test_decision_before_the_request_does_not_count() -> None:
+    """Решение по прошлому инструменту не разрешает следующий."""
+    past = datetime(2026, 8, 14, 6, 59, tzinfo=UTC).strftime(metrics.TS_FORMAT)
+    row = waiting_row(otel_seen_at=moment(1), tool_decided_at=past)
+    assert metrics.session_status(row, NOW) == metrics.STATUS_PERMISSION
+
+
+def test_fresh_request_is_never_a_permission_prompt() -> None:
+    """Первые секунды инструмент просто работает: события едут пачкой раз в
+    несколько секунд, и решение по разрешению может быть ещё в пути."""
+    just_now = datetime(2026, 8, 14, 7, 0, 5, tzinfo=UTC)
+    row = waiting_row(otel_seen_at=moment(1))
+    assert metrics.session_status(row, just_now) == metrics.STATUS_WORKING
+
+
+# --- срез телеметрии в обзоре и фильтры -------------------------------------
+
+
+def test_overview_carries_telemetry(client: TestClient) -> None:
+    client.post("/otlp/v1/metrics", json=metrics_payload(point(517, query_source="auxiliary")))
+    client.post(
+        "/otlp/v1/logs",
+        json=logs_payload(
+            event("tool_decision", 1, tool_name="Bash", decision="accept", source="user_permanent")
+        ),
+    )
+    otel = client.get("/api/overview").json()["otel"]
+    assert otel["active"] is True
+    assert otel["permissions"]["manual"] == 1
+
+
+def test_overview_without_telemetry_says_so(client: TestClient) -> None:
+    otel = client.get("/api/overview").json()["otel"]
+    assert otel == {
+        "active": False,
+        "last_at": None,
+        "off_transcript": otel["off_transcript"],
+        "permissions": otel["permissions"],
+    }
+    assert otel["off_transcript"]["tokens"] == 0
+    assert otel["permissions"]["decisions"] == 0
+
+
+def test_period_bounds_are_respected(conn: Any) -> None:
+    """Точка старше периода в счёт не идёт: обзор считает с местной полуночи."""
+    otlp.ingest(conn, "metrics", metrics_payload(point(517, query_source="auxiliary")))
+    later = datetime(2026, 8, 14, 8, tzinfo=UTC)
+    assert metrics.otel_usage(conn, later)["tokens"] == 0
+    earlier = datetime(2026, 8, 14, 6, tzinfo=UTC)
+    assert metrics.otel_usage(conn, earlier, until=later)["tokens"] == 517
+
+
+def test_project_filter_narrows_telemetry(conn: Any) -> None:
+    """Фильтр по проекту работает и здесь: сессии те же, что у остальных цифр."""
+    with conn:
+        conn.execute("INSERT INTO projects (id, slug) VALUES (1, '-Users-x-первый')")
+        conn.execute("INSERT INTO sessions (id, project_id) VALUES ('s1', 1)")
+    otlp.ingest(conn, "metrics", metrics_payload(point(517, query_source="auxiliary")))
+    otlp.ingest(
+        conn,
+        "logs",
+        logs_payload(
+            event("tool_decision", 1, tool_name="Bash", decision="accept", source="user_permanent")
+        ),
+    )
+    since = datetime(2026, 8, 14, tzinfo=UTC)
+    assert metrics.otel_usage(conn, since, project="первый")["tokens"] == 517
+    assert metrics.otel_usage(conn, since, project="второй")["tokens"] == 0
+    assert metrics.otel_permissions(conn, since, project="первый")["manual"] == 1
+    assert metrics.otel_permissions(conn, since, project="второй")["manual"] == 0
+
+
+def test_session_list_reads_the_decision_from_the_database(conn: Any) -> None:
+    """Сквозная проверка: событие в БД доходит до статуса в списке сессий."""
+    asked = datetime(2026, 8, 14, 7, 0, tzinfo=UTC)
+    with conn:
+        conn.execute(
+            "INSERT INTO sessions (id, last_at, last_record_kind, last_record_at,"
+            " last_stop_reason, is_live) VALUES ('s1', ?, 'assistant', ?, 'tool_use', 1)",
+            (asked.strftime(metrics.TS_FORMAT), asked.strftime(metrics.TS_FORMAT)),
+        )
+    now = asked + timedelta(seconds=30)
+
+    rows = metrics.live_sessions(conn, now)
+    assert [row["status"] for row in rows] == [metrics.STATUS_PERMISSION]
+
+    otlp.ingest(
+        conn,
+        "logs",
+        logs_payload(
+            event("tool_decision", 1, tool_name="Bash", decision="accept", source="config")
+        ),
+    )
+    rows = metrics.live_sessions(conn, now)
+    assert [row["status"] for row in rows] == [metrics.STATUS_WORKING]
+    assert metrics.sessions_page(conn, now=now)[0]["status"] == metrics.STATUS_WORKING

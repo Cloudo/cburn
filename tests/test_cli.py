@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from cloudo_dash import cli, paths
+from cloudo_dash.db import connect
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "transcripts"
 FIXTURES = sorted(FIXTURES_DIR.glob("*.jsonl"))
@@ -212,3 +213,71 @@ def test_serve_arguments_are_parsed() -> None:
 def test_serve_binds_localhost_by_default() -> None:
     """Инвариант ТЗ §7: наружу сервер не смотрит."""
     assert cli.build_parser().parse_args(["serve"]).host == "127.0.0.1"
+
+
+# --- телеметрия (веха E) -----------------------------------------------------
+
+
+def test_otel_env_points_at_the_dashboard(
+    project: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Переменные окружения печатаются готовыми к вставке в профиль шелла."""
+    assert cli.main(["otel", "--env", "--port", "9999"]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert "export CLAUDE_CODE_ENABLE_TELEMETRY=1" in lines
+    assert "export OTEL_EXPORTER_OTLP_PROTOCOL=http/json" in lines
+    assert "export OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:9999/otlp" in lines
+
+
+def test_otel_settings_fragment_is_valid_json(
+    project: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Фрагмент для ~/.claude/settings.json — человек вставляет его руками:
+    сами мы туда не пишем, каталог Claude Code открыт только на чтение."""
+    assert cli.main(["otel", "--settings"]) == 0
+    fragment = json.loads(capsys.readouterr().out)
+    assert fragment["env"]["OTEL_METRICS_EXPORTER"] == "otlp"
+
+
+def test_otel_status_explains_silence(project: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Пока телеметрия не включена, команда говорит об этом и подсказывает как."""
+    assert cli.main(["otel"]) == 0
+    out = capsys.readouterr().out
+    assert "посылок не было" in out
+    assert "cdash otel --env" in out
+
+
+def test_otel_status_counts_what_arrived(project: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    from cloudo_dash.collector import otlp
+
+    with connect() as conn:
+        otlp.ingest(
+            conn,
+            "logs",
+            {
+                "resourceLogs": [
+                    {
+                        "scopeLogs": [
+                            {
+                                "logRecords": [
+                                    {
+                                        "timeUnixNano": "1786690860000000000",
+                                        "body": {"stringValue": "claude_code.api_request"},
+                                        "attributes": [
+                                            {
+                                                "key": "session.id",
+                                                "value": {"stringValue": "s1"},
+                                            }
+                                        ],
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+        )
+    assert cli.main(["otel"]) == 0
+    out = capsys.readouterr().out
+    assert "logs" in out
+    assert "событие api_request" in out
