@@ -115,6 +115,23 @@ CREATE TABLE IF NOT EXISTS model_prices (
     cache_read_per_mtok  REAL NOT NULL DEFAULT 0
 );
 
+-- Отдельные советы одного разбора: у каждого свой статус, чтобы отклонённый
+-- не приходил снова (TZ §5, задача D6). `key` — устойчивый отпечаток совета:
+-- по нему совет узнаётся в следующем такте, даже если формулировка изменилась.
+CREATE TABLE IF NOT EXISTS advice_items (
+    id        INTEGER PRIMARY KEY,
+    advice_id INTEGER NOT NULL REFERENCES advice(id),
+    key       TEXT NOT NULL,
+    title     TEXT NOT NULL,
+    severity  TEXT NOT NULL DEFAULT 'info',  -- info | warn | crit
+    detail    TEXT,
+    action    TEXT,
+    evidence  TEXT NOT NULL,   -- без него совет не сохраняется (TZ §6)
+    status    TEXT NOT NULL DEFAULT 'new',   -- new | accepted | rejected
+    UNIQUE (advice_id, key)
+);
+CREATE INDEX IF NOT EXISTS idx_advice_items ON advice_items(status, key);
+
 -- Заметные моменты внутри сессии: автосуммаризация (после неё контекст
 -- обваливается), в будущем — прочие вехи. Нужны, чтобы на графике контекста
 -- было видно, почему он упал (TZ §5, задача C2).

@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from . import __version__, autostart, config, paths, pricing
-from .analyzer import digest
+from .analyzer import advisor, digest
 from .collector.indexer import ingest_tree
 from .db import connect
 from .metrics import (
@@ -56,6 +56,12 @@ def build_parser() -> argparse.ArgumentParser:
     digest_cmd = sub.add_parser("digest", help="выжимка периода для советчика (JSON)")
     _add_filters(digest_cmd, period="24h")
     digest_cmd.add_argument("--out", metavar="ФАЙЛ", help="записать в файл вместо вывода")
+    advise = sub.add_parser("advise", help="разобрать период советчиком (claude -p)")
+    _add_filters(advise, period="24h")
+    advise.add_argument("--model", default=None, help="алиас модели (по умолчанию из конфига)")
+    advise.add_argument(
+        "--dry-run", action="store_true", help="показать дайджест и команду, не вызывая модель"
+    )
     events = sub.add_parser("events", help="незнакомые типы записей транскрипта")
     events.add_argument("--show", metavar="ТИП", help="показать сохранённые примеры записи")
     prices = sub.add_parser("prices", help="применить цены из конфига и пересчитать стоимость")
@@ -117,6 +123,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "reindex":
         return _reindex(args.full, args.project)
+
+    if args.command == "advise":
+        return _advise(args.project, args.period, args.model, args.dry_run)
 
     if args.command == "digest":
         return _digest(args.project, args.period, args.out)
@@ -229,6 +238,40 @@ def _progress(done: int, total: int, path: Path) -> None:
     if not sys.stderr.isatty():
         return
     print(f"\r{done}/{total}  {path.name[:36]:<36}", end="", file=sys.stderr, flush=True)
+
+
+def _advise(project: str | None, period: str, model: str | None, dry_run: bool) -> int:
+    """Прогнать дайджест через советчик (задача D2)."""
+    cfg = config.load()
+    chosen = model or cfg["analyzer"]["model"]
+    since = _since(period) or datetime.fromtimestamp(0, UTC)
+    with connect() as conn:
+        payload = digest.build(conn, since, config=cfg, project=project)
+        if dry_run:
+            print(" ".join(advisor.build_command(chosen)))
+            print(f"дайджест: ~{payload['size']['tokens_approx']} токенов")
+            return 0
+        if not payload["usage"]["turns"]:
+            print("за период ходов нет — советовать не о чем", file=sys.stderr)
+            return 1
+        try:
+            result = advisor.advise(conn, payload, model=chosen)
+        except (RuntimeError, OSError) as exc:
+            print(f"советчик не отработал: {exc}", file=sys.stderr)
+            return 1
+
+    print(f"модель {result['model']}, такт стоил {_usd(result['cost_usd'])}")
+    if not result["advice"]:
+        print("советов нет — либо всё ровно, либо совет не подкрепился цифрами")
+        return 0
+    for item in result["advice"]:
+        print(f"\n[{item['severity']}] {item['title']}")
+        if item["detail"]:
+            print(f"  {item['detail']}")
+        if item["action"]:
+            print(f"  что сделать: {item['action']}")
+        print(f"  на основании: {item['evidence']}")
+    return 0
 
 
 def _digest(project: str | None, period: str, out: str | None) -> int:
