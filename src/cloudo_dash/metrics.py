@@ -142,6 +142,138 @@ def recent_sessions(
     )
 
 
+def period_start(period: str | None) -> datetime | None:
+    """Начало периода: `today`, `24h`, `7d`, `all`, дата. None — вся история.
+
+    Живёт здесь, а не в CLI: тем же разбором пользуется экран «Сессии».
+    """
+    value = (period or "all").strip().lower()
+    now = datetime.now(UTC)
+    if value in {"all", ""}:
+        return None
+    if value == "today":
+        return local_day_start(now)
+    if value.endswith(("h", "d")) and value[:-1].isdigit():
+        hours = int(value[:-1]) * (24 if value.endswith("d") else 1)
+        return now - timedelta(hours=hours)
+    return datetime.fromisoformat(value).replace(tzinfo=UTC)
+
+
+def known_projects(conn: sqlite3.Connection) -> list[dict]:
+    """Проекты со счётчиком сессий — для выпадашки фильтра."""
+    return [
+        dict(row)
+        for row in conn.execute(
+            """
+            SELECT p.slug, COALESCE(p.display_name, p.slug) AS name, p.root_path,
+                   COUNT(s.id) AS sessions
+              FROM projects AS p
+              LEFT JOIN sessions AS s ON s.project_id = p.id AND s.hidden = 0
+             GROUP BY p.id
+             HAVING sessions > 0
+             ORDER BY sessions DESC
+            """
+        )
+    ]
+
+
+#: Сколько точек в спарклайне расхода сессии: столбик шире пары пикселей на
+#: экране всё равно не разглядеть, а данных на каждую точку нужно тем меньше,
+#: чем их больше.
+SPARK_POINTS = 24
+
+
+def sessions_page(
+    conn: sqlite3.Connection,
+    *,
+    project: str | None = None,
+    status: str | None = None,
+    since: datetime | None = None,
+    limit: int = 100,
+    now: datetime | None = None,
+) -> list[dict]:
+    """Экран «Сессии»: список с фильтрами, спарклайном и связью resume (задача C1).
+
+    Статус считается тем же правилом, что и на «Обзоре», но фильтруется уже
+    в Python: он выводится из нескольких полей, и переносить это в SQL значит
+    задвоить правило.
+    """
+    moment = now or datetime.now(UTC)
+    clause = ""
+    params: list[Any] = []
+    if project:
+        clause += " AND p.slug LIKE ?"
+        params.append(f"%{project}%")
+    if since is not None:
+        clause += " AND s.last_at >= ?"
+        params.append(_utc_stamp(since))
+    rows = [
+        dict(row)
+        for row in conn.execute(
+            f"""
+            SELECT s.id, COALESCE(p.display_name, p.slug) AS project, p.root_path,
+                   s.title, s.first_prompt, s.last_prompt, s.started_at, s.last_at,
+                   s.turns, s.tokens_out, s.cache_read, s.cache_write, s.cost_usd,
+                   s.last_context, s.parent_session_id, s.is_live,
+                   s.last_record_kind, s.last_record_at, s.last_stop_reason,
+                   (SELECT COUNT(*) FROM sessions AS child
+                     WHERE child.parent_session_id = s.id)             AS children,
+                   (SELECT COALESCE(SUM(t.is_sidechain), 0) FROM turns AS t
+                     WHERE t.session_id = s.id)                        AS sidechain_turns
+              FROM sessions AS s
+              LEFT JOIN projects AS p ON p.id = s.project_id
+             WHERE s.hidden = 0{clause}
+             ORDER BY s.last_at DESC LIMIT ?
+            """,  # noqa: S608
+            (*params, limit),
+        )
+    ]
+    for row in rows:
+        row["status"] = session_status(row, moment)
+        row["tokens"] = row["tokens_out"] + row["cache_read"] + row["cache_write"]
+    if status:
+        rows = [row for row in rows if row["status"] == status]
+    _attach_sparklines(conn, rows)
+    return rows
+
+
+def _attach_sparklines(conn: sqlite3.Connection, rows: list[dict]) -> None:
+    """Дорисовать каждой сессии её расход по времени — одним запросом на всех."""
+    for row in rows:
+        row["spark"] = []
+    by_id = {row["id"]: row for row in rows}
+    if not by_id:
+        return
+    ids = tuple(by_id)
+    marks = conn.execute(
+        f"""
+        SELECT session_id,
+               MIN(CAST(strftime('%s', ts) AS INTEGER)) AS started,
+               MAX(CAST(strftime('%s', ts) AS INTEGER)) AS ended
+          FROM turns WHERE session_id IN ({",".join("?" * len(ids))})
+         GROUP BY session_id
+        """,  # noqa: S608
+        ids,
+    ).fetchall()
+    spans = {row["session_id"]: (row["started"], row["ended"]) for row in marks}
+    buckets: dict[str, list[int]] = {sid: [0] * SPARK_POINTS for sid in spans}
+    for row in conn.execute(
+        f"""
+        SELECT session_id, CAST(strftime('%s', ts) AS INTEGER) AS at,
+               input_tokens + output_tokens + cache_read
+             + cache_write_5m + cache_write_1h AS tokens
+          FROM turns WHERE session_id IN ({",".join("?" * len(ids))})
+        """,  # noqa: S608
+        ids,
+    ):
+        started, ended = spans[row["session_id"]]
+        span = max(ended - started, 1)
+        index = min(int((row["at"] - started) / span * SPARK_POINTS), SPARK_POINTS - 1)
+        buckets[row["session_id"]][index] += row["tokens"]
+    for session_id, spark in buckets.items():
+        by_id[session_id]["spark"] = spark
+
+
 # --- обзор (задача A5) -------------------------------------------------------
 
 #: Окна burn rate в секундах. Десятисекундное — «что происходит прямо сейчас»:

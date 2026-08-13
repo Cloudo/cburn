@@ -183,6 +183,68 @@ export type OverviewFeed = {
   refresh: () => Promise<void>;
 };
 
+export type SessionRow = {
+  id: string;
+  project: string | null;
+  root_path: string | null;
+  title: string | null;
+  first_prompt: string | null;
+  last_prompt: string | null;
+  started_at: string | null;
+  last_at: string | null;
+  turns: number;
+  tokens: number;
+  tokens_out: number;
+  cache_read: number;
+  cache_write: number;
+  cost_usd: number;
+  last_context: number;
+  parent_session_id: string | null;
+  children: number;
+  sidechain_turns: number;
+  status: SessionStatus;
+  /** Расход по равным долям жизни сессии — столбики спарклайна. */
+  spark: number[];
+};
+
+export type ProjectRow = { slug: string; name: string; root_path: string | null; sessions: number };
+
+export type SessionsPage = { sessions: SessionRow[]; projects: ProjectRow[] };
+
+/** Список сессий с фильтрами (экран «Сессии», задача C1).
+ *
+ *  Отдельным запросом, а не через WebSocket: экран смотрят подолгу и редко, а
+ *  обзор летит каждую секунду всем подписчикам. */
+export function useSessions(filters: { project: string; status: string; period: string }): {
+  data: SessionsPage | null;
+  error: boolean;
+  reload: () => Promise<void>;
+} {
+  const [data, setData] = useState<SessionsPage | null>(null);
+  const [error, setError] = useState(false);
+  const { project, status, period } = filters;
+
+  const reload = useCallback(async () => {
+    const query = new URLSearchParams({ period });
+    if (project) query.set("project", project);
+    if (status) query.set("status", status);
+    try {
+      const response = await fetch(`api/sessions?${query}`);
+      if (!response.ok) throw new Error(String(response.status));
+      setData(await response.json());
+      setError(false);
+    } catch {
+      setError(true);
+    }
+  }, [project, status, period]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  return { data, error, reload };
+}
+
 /** Обзор, который сам себя обновляет: первый кадр и пуши приходят по WebSocket. */
 export function useOverview(): OverviewFeed {
   const [data, setData] = useState<Overview | null>(null);

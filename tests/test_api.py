@@ -87,8 +87,8 @@ def db_path(tmp_path: Path) -> Path:
     return tmp_path / "api.db"
 
 
-def seed(transcripts: Path, db_path: Path, lines: list[str]) -> None:
-    (transcripts / "s1.jsonl").write_text("".join(line + "\n" for line in lines))
+def seed(transcripts: Path, db_path: Path, lines: list[str], name: str = "s1.jsonl") -> None:
+    (transcripts / name).write_text("".join(line + "\n" for line in lines))
     conn = connect(db_path)
     ingest_tree(conn, transcripts.parent)
     conn.close()
@@ -600,6 +600,79 @@ def test_unknown_liveness_keeps_idle(transcripts: Path, db_path: Path) -> None:
         data = api.get("/api/overview").json()
 
     assert [row["status"] for row in data["live_sessions"]] == ["idle"]
+
+
+# --- экран «Сессии» (задача C1) ----------------------------------------------
+
+
+def test_sessions_page_filters_and_sparkline(transcripts: Path, db_path: Path) -> None:
+    """Список фильтруется по проекту и статусу и несёт спарклайн расхода."""
+    now = datetime.now(UTC)
+    seed(
+        transcripts,
+        db_path,
+        [
+            assistant("msg_1", session="живая", ts=now - timedelta(seconds=30)),
+            assistant("msg_2", session="старая", uuid="u2", ts=now - timedelta(hours=3)),
+        ],
+    )
+
+    with client(db_path, transcripts, liveness=lambda: {"живая"}) as api:
+        page = api.get("/api/sessions").json()
+        only_done = api.get("/api/sessions?status=done").json()
+        nothing = api.get("/api/sessions?project=нетакого").json()
+
+    assert {row["id"] for row in page["sessions"]} == {"живая", "старая"}
+    assert [row["id"] for row in only_done["sessions"]] == ["старая"]
+    assert nothing["sessions"] == []
+    assert page["projects"][0]["sessions"] == 2
+    spark = next(row["spark"] for row in page["sessions"] if row["id"] == "живая")
+    assert len(spark) == 24 and sum(spark) > 0
+
+
+def test_sessions_page_period_cuts_old(transcripts: Path, db_path: Path) -> None:
+    """Период отсекает старое: `24h` не показывает вчерашнюю сессию."""
+    now = datetime.now(UTC)
+    seed(
+        transcripts,
+        db_path,
+        [
+            assistant("msg_1", session="свежая", ts=now - timedelta(minutes=5)),
+            assistant("msg_2", session="вчерашняя", uuid="u2", ts=now - timedelta(days=2)),
+        ],
+    )
+
+    with client(db_path, transcripts) as api:
+        recent = api.get("/api/sessions?period=24h").json()["sessions"]
+        everything = api.get("/api/sessions?period=all").json()["sessions"]
+
+    assert [row["id"] for row in recent] == ["свежая"]
+    assert len(everything) == 2
+
+
+def test_sessions_page_marks_resume_chain(transcripts: Path, db_path: Path) -> None:
+    """У продолжения виден родитель, у родителя — счётчик продолжений."""
+    now = datetime.now(UTC)
+    seed(
+        transcripts,
+        db_path,
+        [assistant("msg_1", session="исток", ts=now - timedelta(minutes=30))],
+    )
+    seed(
+        transcripts,
+        db_path,
+        [
+            assistant("msg_1", session="продолжение", ts=now - timedelta(minutes=30)),
+            assistant("msg_2", session="продолжение", uuid="u2", ts=now - timedelta(minutes=5)),
+        ],
+        "вторая.jsonl",
+    )
+
+    with client(db_path, transcripts) as api:
+        rows = {row["id"]: row for row in api.get("/api/sessions").json()["sessions"]}
+
+    assert rows["продолжение"]["parent_session_id"] == "исток"
+    assert rows["исток"]["children"] == 1
 
 
 # --- метрики ТЗ §4 (задача B3) -----------------------------------------------

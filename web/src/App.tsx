@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Gauge, OutputMeter, Recorder, type Slice } from "./Gauge";
 import { Idle, Models, PlanLimits, Tools } from "./Profile";
 import { Dashboard, type WidgetContent } from "./Dashboard";
+import { Sessions } from "./Sessions";
 import {
   agoLabel,
   clockTime,
@@ -72,9 +73,27 @@ function slicesOf(source: Usage): Slice[] {
   ];
 }
 
+/** Экран выбирается хэшем: #/sessions. Роутер ради двух страниц не нужен, а
+ *  адрес должен переживать перезагрузку и жить в закладках. */
+function useScreen(): string {
+  const [screen, setScreen] = useState(() => window.location.hash.replace(/^#\/?/, ""));
+  useEffect(() => {
+    const onHash = () => setScreen(window.location.hash.replace(/^#\/?/, ""));
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+  return screen;
+}
+
+const SCREENS: Array<{ key: string; label: string }> = [
+  { key: "", label: "обзор" },
+  { key: "sessions", label: "сессии" },
+];
+
 export default function App() {
   const { data, connection, updatedAt, refresh } = useOverview();
   const [, tick] = useState(0);
+  const screen = useScreen();
 
   useEffect(() => {
     const timer = setInterval(() => tick((value) => value + 1), 1000);
@@ -88,7 +107,17 @@ export default function App() {
       <header className="masthead">
         <div className="brand">
           <span className="brand-name">cloudo-dash</span>
-          <span className="brand-note">расход Claude Code на этой машине</span>
+          <nav className="screens">
+            {SCREENS.map((item) => (
+              <a
+                key={item.key}
+                href={`#/${item.key}`}
+                className={item.key === screen ? "screen-link screen-link-on" : "screen-link"}
+              >
+                {item.label}
+              </a>
+            ))}
+          </nav>
         </div>
         <div className="status">
           {data && data.pending_sessions.length > 0 && (
@@ -103,7 +132,9 @@ export default function App() {
         </div>
       </header>
 
-      {data ? (
+      {screen === "sessions" ? (
+        <Sessions />
+      ) : data ? (
         <Dashboard widgets={buildWidgets(data, refresh)} />
       ) : (
         <p className="empty-note">

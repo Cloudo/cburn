@@ -30,13 +30,15 @@ from ..collector.watcher import TranscriptWatcher
 from ..db import connect
 from ..limits import LimitsWatcher
 from ..metrics import (
+    known_projects,
     overview,
-    recent_sessions,
+    period_start,
     refresh_liveness,
     session_chain,
     session_models,
     session_summary,
     session_tools,
+    sessions_page,
     set_hidden,
 )
 from ..processes import active_session_ids, process_for_session, terminate
@@ -167,10 +169,25 @@ def create_app(
         return {"plan": await asyncio.to_thread(plan_limits.refresh)}
 
     @app.get("/api/sessions")
-    async def api_sessions(limit: int = 50) -> dict[str, Any]:
+    async def api_sessions(
+        limit: int = 100,
+        project: str | None = None,
+        status: str | None = None,
+        period: str | None = None,
+    ) -> dict[str, Any]:
+        """Экран «Сессии»: фильтры по проекту, статусу и периоду (задача C1)."""
         conn = open_db()
         try:
-            return {"sessions": [dict(row) for row in recent_sessions(conn, limit)]}
+            return {
+                "sessions": sessions_page(
+                    conn,
+                    project=project,
+                    status=status,
+                    since=period_start(period),
+                    limit=limit,
+                ),
+                "projects": [dict(row) for row in known_projects(conn)],
+            }
         finally:
             conn.close()
 

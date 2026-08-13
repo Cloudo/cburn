@@ -9,7 +9,7 @@ from __future__ import annotations
 import argparse
 import sys
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 from . import __version__, config, paths, pricing
@@ -17,8 +17,8 @@ from .collector.indexer import ingest_tree
 from .db import connect
 from .metrics import (
     idle_turns,
-    local_day_start,
     model_share,
+    period_start,
     recent_sessions,
     session_chain,
     session_models,
@@ -75,18 +75,9 @@ def _add_filters(parser: argparse.ArgumentParser, *, period: str = "7d") -> None
 
 
 def _since(period: str) -> datetime | None:
-    """Начало периода. None — «за всю историю»."""
-    value = period.strip().lower()
-    now = datetime.now(UTC)
-    if value == "all":
-        return None
-    if value == "today":
-        return local_day_start(now)
-    if value.endswith(("h", "d")) and value[:-1].isdigit():
-        hours = int(value[:-1]) * (24 if value.endswith("d") else 1)
-        return now - timedelta(hours=hours)
+    """Начало периода; разбор общий с экраном «Сессии»."""
     try:
-        return datetime.fromisoformat(value).replace(tzinfo=UTC)
+        return period_start(period)
     except ValueError as exc:
         raise SystemExit(
             f"не разобран период «{period}»: ждём today, 24h, 7d, all или дату"
