@@ -42,6 +42,10 @@ select = ["E", "F", "I", "UP", "B"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 asyncio_mode = "auto"
+# Смоук на настоящей истории зависит от машины, а не от репозитория: по
+# умолчанию он выключен, запуск — `pytest -m real_history` (задача B8).
+markers = ["real_history: гоняется по настоящему ~/.claude/projects"]
+addopts = "-m 'not real_history'"
 
 [tool.mypy]
 python_version = "3.11"
