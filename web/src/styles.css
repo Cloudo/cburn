@@ -555,6 +555,21 @@ main.empty {
   border-bottom: 0;
 }
 
+.turn-head {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 7px;
+}
+
+/* Подписи наследуют выравнивание колонок, но не их цвета: шапка не должна
+   спорить со значениями. */
+.turn-head span {
+  color: inherit;
+}
+
 .turn time {
   color: var(--text-faint);
 }

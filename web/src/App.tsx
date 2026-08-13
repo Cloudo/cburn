@@ -210,6 +210,16 @@ export default function App() {
 
       <section className="panel feed">
         <h2>лента ходов</h2>
+        {/* Классы те же, что у строк: на узких экранах колонки прячутся по ним,
+            иначе подписи разъехались бы относительно значений. */}
+        <div className="turn turn-head" aria-hidden="true">
+          <span>время</span>
+          <span className="turn-model">модель</span>
+          <span className="turn-project">проект</span>
+          <span className="turn-output">выход</span>
+          <span className="turn-context">контекст</span>
+          <span className="turn-tools">инструменты</span>
+        </div>
         <ol>
           {data.recent_turns.map((turn) => (
             <TurnRow key={turn.message_id} turn={turn} />
