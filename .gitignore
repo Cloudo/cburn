@@ -30,3 +30,6 @@ web/dist/
 
 # Локальные настройки Claude Code
 .claude/settings.local.json
+
+# Изолированные копии репозитория для параллельной работы
+.claude/worktrees/

@@ -179,8 +179,13 @@ def advise(
     model: str = "haiku",
     budget_usd: float = MAX_BUDGET_USD,
     runner: Any = None,
+    kind: str = "manual",
 ) -> dict[str, Any]:
-    """Прогнать дайджест через модель и записать советы. Возвращает итог такта."""
+    """Прогнать дайджест через модель и записать советы. Возвращает итог такта.
+
+    `kind` — как такт случился: `manual` из CLI и с кнопки, `hourly`/`weekly`
+    от планировщика. По нему считается расписание и подписывается разбор.
+    """
     call = runner or run_claude
     prompt = json.dumps(
         {"digest": digest, "already_rejected": rejected_keys(conn)},
@@ -199,12 +204,13 @@ def advise(
     with conn:
         cursor = conn.execute(
             """
-            INSERT INTO advice (ts, period_start, period_end, digest_json, response_md,
+            INSERT INTO advice (ts, kind, period_start, period_end, digest_json, response_md,
                                 model, cost_usd, max_severity, status)
-            VALUES (:ts, :start, :end, :digest, :response, :model, :cost, :severity, 'new')
+            VALUES (:ts, :kind, :start, :end, :digest, :response, :model, :cost, :severity, 'new')
             """,
             {
                 "ts": datetime.now(UTC).isoformat(),
+                "kind": kind,
                 "start": period.get("since"),
                 "end": period.get("until"),
                 "digest": json.dumps(digest, ensure_ascii=False),

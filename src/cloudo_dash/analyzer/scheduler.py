@@ -90,9 +90,7 @@ def run_tick(
 ) -> dict[str, Any]:
     """Собрать дайджест за период такта и прогнать его через советчика."""
     payload = digest.build(conn, tick.since, config=config)
-    result = advisor.advise(conn, payload, model=tick.model, runner=runner)
-    with conn:
-        conn.execute("UPDATE advice SET kind = ? WHERE id = ?", (tick.kind, result["advice_id"]))
+    result = advisor.advise(conn, payload, model=tick.model, runner=runner, kind=tick.kind)
     result["kind"] = tick.kind
     log.info(
         "такт %s: советов %s, стоил $%.4f",

@@ -247,6 +247,7 @@ const DICT: Record<string, [string, string]> = {
   "advice.cancel": ["отмена", "cancel"],
   "advice.done": ["готово: советов {count}, такт стоил {cost}", "done: {count} advice, tick cost {cost}"],
   "advice.spent": ["разборов {runs}, потрачено {cost}", "{runs} runs, {cost} spent"],
+  "advice.kind.manual": ["вручную", "manual"],
   "advice.kind.hourly": ["часовой", "hourly"],
   "advice.kind.weekly": ["недельный", "weekly"],
   "advice.severity.info": ["к сведению", "info"],
