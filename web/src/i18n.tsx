@@ -23,6 +23,9 @@ const DICT: Record<string, [string, string]> = {
   "app.noConnection": ["нет связи с cdash serve", "no connection to cdash serve"],
   "app.connecting": ["подключаюсь…", "connecting…"],
   "app.lang": ["язык интерфейса", "interface language"],
+  "app.theme": ["тема оформления", "colour theme"],
+  "app.theme.light": ["светлая тема", "light theme"],
+  "app.theme.dark": ["тёмная тема", "dark theme"],
 
   "window.10s": ["10 секунд", "10 seconds"],
   "window.1m": ["минута", "minute"],

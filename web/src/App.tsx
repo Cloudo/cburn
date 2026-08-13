@@ -7,6 +7,7 @@ import { Session } from "./Session";
 import { Sessions } from "./Sessions";
 import { Settings } from "./Settings";
 import { useLang } from "./i18n";
+import { useTheme } from "./theme";
 import {
   agoLabel,
   clockTime,
@@ -79,6 +80,7 @@ const SCREENS = ["", "sessions", "settings"];
 
 export default function App() {
   const { lang, setLang, t } = useLang();
+  const { theme, setTheme } = useTheme();
   const { data, connection, updatedAt, refresh } = useOverview();
   const [, tick] = useState(0);
   const [burnWindow, setBurnWindow] = useState<string>("1m");
@@ -118,6 +120,14 @@ export default function App() {
           <span className={`dot dot-${connection}`} />
           <span>{connection === "live" ? t("app.live") : t("app.offline")}</span>
           <span className="status-ago">{updatedAt ? agoLabel(ago) : ""}</span>
+          <button
+            className="theme-toggle"
+            aria-label={t("app.theme")}
+            title={t(theme === "dark" ? "app.theme.light" : "app.theme.dark")}
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          >
+            {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+          </button>
           <div className="lang-picker" role="group" aria-label={t("app.lang")}>
             {(["ru", "en"] as const).map((key) => (
               <button
@@ -147,6 +157,32 @@ export default function App() {
         </p>
       )}
     </main>
+  );
+}
+
+/** Солнце и луна: кнопка показывает, куда переключит, а не что сейчас. */
+function SunIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" focusable="false">
+      <circle cx="8" cy="8" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <g stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+        <path d="M8 1v1.8M8 13.2V15M1 8h1.8M13.2 8H15M3 3l1.3 1.3M11.7 11.7 13 13M13 3l-1.3 1.3M4.3 11.7 3 13" />
+      </g>
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" focusable="false">
+      <path
+        d="M13.2 9.6A5.6 5.6 0 0 1 6.4 2.8a5.6 5.6 0 1 0 6.8 6.8Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 

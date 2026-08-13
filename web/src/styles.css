@@ -13,9 +13,39 @@
   --steel: #4d7fa3;
   --indigo: #7b6bc0;
   --mint: #5eab86;
+  --danger: #d98080;
+  --danger-strong: #c05c5c;
+  /* Подсветка строки под курсором и тени: на тёмном они светлеют, на светлом
+     темнеют, поэтому вынесены в токены, а не заданы цветом на месте. */
+  --tint: rgb(255 255 255 / 6%);
+  --tint-soft: rgb(255 255 255 / 5%);
+  --shadow: 0 10px 28px rgb(0 0 0 / 55%);
+  --shadow-soft: 0 6px 18px rgb(0 0 0 / 45%);
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
   --radius: 10px;
+}
+
+/* Светлая тема: тот же прибор при дневном свете. Акценты притемнены — на белом
+   фоне исходные читались как выцветшие. */
+:root[data-theme="light"] {
+  --bg: #f2f4f7;
+  --bg-panel: #ffffff;
+  --bg-sunken: #eaeef3;
+  --line: #d8dee6;
+  --text: #171c23;
+  --text-dim: #55606d;
+  --text-faint: #828d9b;
+  --amber: #b87613;
+  --steel: #3a6b8f;
+  --indigo: #5f4fa8;
+  --mint: #35825c;
+  --danger: #b34a4a;
+  --danger-strong: #a03b3b;
+  --tint: rgb(0 0 0 / 5%);
+  --tint-soft: rgb(0 0 0 / 3%);
+  --shadow: 0 10px 28px rgb(23 28 35 / 18%);
+  --shadow-soft: 0 6px 18px rgb(23 28 35 / 12%);
 }
 
 * {
@@ -106,7 +136,7 @@ main.empty {
 }
 
 .dot-offline {
-  background: #c05c5c;
+  background: var(--danger-strong);
 }
 
 /* --- раскладка --- */
@@ -160,6 +190,24 @@ main.empty {
 }
 
 /* --- переключатель окна --- */
+
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  padding: 3px 5px;
+  margin-left: 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.theme-toggle:hover {
+  color: var(--text);
+  background: var(--bg-sunken);
+}
 
 /* Переключатель языка живёт в строке состояния и подчиняется её гамме. */
 .lang-picker {
@@ -798,7 +846,7 @@ main.empty {
   background: var(--bg-panel);
   border: 1px solid var(--line);
   border-radius: 6px;
-  box-shadow: 0 6px 18px rgb(0 0 0 / 45%);
+  box-shadow: var(--shadow-soft);
   pointer-events: none;
   white-space: nowrap;
 }
@@ -930,7 +978,7 @@ main.empty {
   background: var(--bg-panel);
   border: 1px solid var(--line);
   border-radius: 8px;
-  box-shadow: 0 10px 28px rgb(0 0 0 / 55%);
+  box-shadow: var(--shadow);
 }
 
 .popover p {
@@ -969,13 +1017,13 @@ main.empty {
 }
 
 .popover-danger {
-  color: #d98080;
-  border-color: rgb(217 128 128 / 35%);
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
 }
 
 .popover-danger:hover {
-  color: #e79a9a;
-  border-color: #d98080;
+  color: var(--danger);
+  border-color: var(--danger);
 }
 
 /* --- вкладки статусов --- */
@@ -1027,7 +1075,7 @@ main.empty {
   min-width: 16px;
   padding: 0 4px;
   border-radius: 999px;
-  background: rgb(255 255 255 / 6%);
+  background: var(--tint);
   color: inherit;
   text-align: center;
 }
@@ -1084,7 +1132,7 @@ main.empty {
 
 .session-badge-idle {
   color: var(--text-faint);
-  background: rgb(255 255 255 / 5%);
+  background: var(--tint-soft);
 }
 
 .session-badge-done {
@@ -1300,7 +1348,7 @@ main.empty {
 }
 
 .plan-critical {
-  color: #d98080;
+  color: var(--danger);
 }
 
 .plan-track {
@@ -1323,7 +1371,7 @@ main.empty {
 }
 
 .plan-fill-critical {
-  background: #d98080;
+  background: var(--danger);
 }
 
 /* Активное окно — то, что тикает прямо сейчас. */
@@ -1381,7 +1429,7 @@ main.empty {
   background: var(--bg-panel);
   border: 1px solid var(--line);
   border-radius: 8px;
-  box-shadow: 0 12px 32px rgb(0 0 0 / 55%);
+  box-shadow: var(--shadow);
 }
 
 .tune-hint {
