@@ -509,7 +509,10 @@ function SessionCard({ session, now }: { session: LiveSession; now: string }) {
       </p>
       <div className="session-meta">
         <code>{session.id.slice(0, 8)}</code>
-        <span className="session-project">{session.project ?? "—"}</span>
+        {/* Полный путь — в подсказке: на карточке важно короткое имя. */}
+        <span className="session-project" title={session.root_path ?? undefined}>
+          {session.project ?? "—"}
+        </span>
       </div>
       <div className="session-meta">
         <span>активность {sinceLabel(session.last_at)}</span>

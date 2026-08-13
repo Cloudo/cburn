@@ -199,7 +199,9 @@ def test_sessions_list(transcripts: Path, db_path: Path) -> None:
         sessions = api.get("/api/sessions").json()["sessions"]
     assert [row["id"] for row in sessions] == ["s1"]
     assert sessions[0]["first_prompt"] == "вопрос"
-    assert sessions[0]["project"] == "проект"
+    # Имя проекта — последний сегмент рабочего пути (cwd), а не имя каталога
+    # транскриптов: slug вида `-Users-x-project` человеку ничего не говорит.
+    assert sessions[0]["project"] == "project"
 
 
 def test_session_details(transcripts: Path, db_path: Path) -> None:

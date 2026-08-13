@@ -349,6 +349,7 @@ def test_session_metadata_and_totals(conn: sqlite3.Connection, tmp_path: Path) -
     project = rows(conn, "SELECT * FROM projects")[0]
     assert project["slug"] == "мой-проект"
     assert project["root_path"] == "/Users/x/project"
+    assert project["display_name"] == "project"  # на экран идёт имя, а не slug
     assert session["project_id"] == project["id"]
 
 

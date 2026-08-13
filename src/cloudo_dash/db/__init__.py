@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from .. import paths
 
@@ -23,12 +23,28 @@ def connect(db_path: Path | None = None, *, apply_schema: bool = True) -> sqlite
     if apply_schema:
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
         _add_missing_columns(conn)
+        _fill_project_names(conn)
     return conn
 
 
 #: Колонки, добавленные в уже существующие таблицы. `CREATE TABLE IF NOT EXISTS`
 #: старую таблицу не трогает, а пересоздавать базу из-за одной колонки незачем.
 ADDED_COLUMNS = {"raw_events": {"version": "TEXT"}}
+
+
+def _fill_project_names(conn: sqlite3.Connection) -> None:
+    """Проставить имена проектам, проиндексированным до их появления.
+
+    Имя считается из рабочего пути; переиндексация ради него не нужна.
+    """
+    rows = conn.execute(
+        "SELECT id, root_path FROM projects WHERE display_name IS NULL AND root_path IS NOT NULL"
+    ).fetchall()
+    with conn:
+        for row in rows:
+            name = PurePosixPath(row["root_path"]).name
+            if name:
+                conn.execute("UPDATE projects SET display_name = ? WHERE id = ?", (name, row["id"]))
 
 
 def _add_missing_columns(conn: sqlite3.Connection) -> None:

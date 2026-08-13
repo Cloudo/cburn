@@ -16,7 +16,7 @@ import logging
 import sqlite3
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from .. import paths
 from ..pricing import apply_costs
@@ -283,6 +283,15 @@ def _project_slug(path: Path) -> str:
     return parts[0] if len(parts) > 1 else ""
 
 
+def project_name(root_path: str | None) -> str | None:
+    """Человеческое имя проекта — последний сегмент рабочего пути.
+
+    Slug остаётся ключом каталога в `~/.claude/projects`, но на экране от него
+    толку нет: `-Users-cloudo-code-cloudo-dash` читается хуже, чем `cloudo-dash`.
+    """
+    return PurePosixPath(root_path).name or None if root_path else None
+
+
 def _upsert_project(
     conn: sqlite3.Connection, path: Path, sessions: dict[str, _Session]
 ) -> int | None:
@@ -292,10 +301,12 @@ def _upsert_project(
     root_path = next((s.cwd for s in sessions.values() if s.cwd), None)
     conn.execute(
         """
-        INSERT INTO projects (slug, root_path) VALUES (?, ?)
-        ON CONFLICT(slug) DO UPDATE SET root_path = COALESCE(projects.root_path, excluded.root_path)
+        INSERT INTO projects (slug, root_path, display_name) VALUES (?, ?, ?)
+        ON CONFLICT(slug) DO UPDATE SET
+            root_path    = COALESCE(projects.root_path, excluded.root_path),
+            display_name = COALESCE(projects.display_name, excluded.display_name)
         """,
-        (slug, root_path),
+        (slug, root_path, project_name(root_path)),
     )
     row = conn.execute("SELECT id FROM projects WHERE slug = ?", (slug,)).fetchone()
     return int(row["id"]) if row else None

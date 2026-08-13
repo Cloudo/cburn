@@ -46,7 +46,7 @@ def session_summary(conn: sqlite3.Connection, session_id: str) -> SessionSummary
     row = conn.execute(
         """
         SELECT s.id                                        AS session_id,
-               p.slug                                      AS project,
+               COALESCE(p.display_name, p.slug)            AS project,
                p.root_path                                 AS root_path,
                s.title                                     AS title,
                s.started_at, s.last_at, s.first_prompt,
@@ -128,7 +128,8 @@ def recent_sessions(
     return list(
         conn.execute(
             f"""
-            SELECT s.id, p.slug AS project, s.last_at, s.started_at, s.turns, s.tokens_out,
+            SELECT s.id, COALESCE(p.display_name, p.slug) AS project, s.last_at, s.started_at,
+                   s.turns, s.tokens_out,
                    s.cache_read, s.cache_write, s.cost_usd, s.last_context, s.first_prompt,
                    s.title, s.title_source
               FROM sessions AS s
@@ -160,8 +161,8 @@ def _utc_stamp(moment: datetime) -> str:
 def project_filter(project: str | None, column: str = "session_id") -> tuple[str, list[str]]:
     """Условие «сессия из этого проекта» и его параметры (задача B7).
 
-    Проект ищется подстрокой в slug: набирать `-Users-cloudo-code-cloudo-dash`
-    целиком незачем, хватает `cloudo-dash`.
+    Ищется подстрокой в slug — имени каталога транскриптов: оно содержит весь
+    путь, поэтому `cloudo-dash` находит `-Users-cloudo-code-cloudo-dash`.
     """
     if not project:
         return "", []
@@ -305,7 +306,8 @@ def live_sessions(
         dict(row)
         for row in conn.execute(
             """
-            SELECT s.id, p.slug AS project, p.root_path, s.last_at, s.started_at,
+            SELECT s.id, COALESCE(p.display_name, p.slug) AS project, p.root_path,
+                   s.last_at, s.started_at,
                    s.turns, s.tokens_out, s.last_context, s.first_prompt, s.last_prompt,
                    s.title, s.title_source, s.last_record_kind, s.last_record_at,
                    s.last_stop_reason, s.is_live,
@@ -392,7 +394,8 @@ def top_sessions(conn: sqlite3.Connection, since: datetime, limit: int = 5) -> l
         dict(row)
         for row in conn.execute(
             """
-            SELECT s.id, p.slug AS project, s.last_at, s.first_prompt, s.title, s.last_context,
+            SELECT s.id, COALESCE(p.display_name, p.slug) AS project, s.last_at,
+                   s.first_prompt, s.title, s.last_context,
                    COUNT(t.id)                        AS turns,
                    COALESCE(SUM(t.output_tokens), 0)  AS output_tokens,
                    COALESCE(SUM(t.input_tokens + t.output_tokens
@@ -484,7 +487,7 @@ def recent_turns(conn: sqlite3.Connection, limit: int = 25) -> list[dict]:
             SELECT t.message_id, t.session_id, t.ts, t.model, t.output_tokens,
                    t.input_tokens, t.cache_read, t.is_sidechain,
                    t.cache_write_5m + t.cache_write_1h AS cache_write,
-                   t.context_estimate, p.slug AS project,
+                   t.context_estimate, COALESCE(p.display_name, p.slug) AS project,
                    (SELECT GROUP_CONCAT(c.tool, ' ') FROM tool_calls AS c
                      WHERE c.turn_id = t.id) AS tools
               FROM turns AS t

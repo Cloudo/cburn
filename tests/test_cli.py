@@ -147,7 +147,7 @@ def test_sessions_lists_indexed(project: Path, capsys: pytest.CaptureFixture[str
     assert cli.main(["sessions", "-n", "5"]) == 0
     out = capsys.readouterr().out
     assert out.strip(), "список сессий пуст"
-    assert "проект" in out
+    assert "project" in out  # имя из рабочего пути, а не slug каталога
 
 
 def test_sessions_on_empty_db(project: Path, capsys: pytest.CaptureFixture[str]) -> None:

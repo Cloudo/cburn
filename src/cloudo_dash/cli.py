@@ -48,7 +48,9 @@ def build_parser() -> argparse.ArgumentParser:
     reindex.add_argument(
         "--full", action="store_true", help="перечитать файлы целиком, а не только хвосты"
     )
-    reindex.add_argument("--project", help="только транскрипты этого проекта (часть slug)")
+    reindex.add_argument(
+        "--project", help="только транскрипты этого проекта (часть имени или пути)"
+    )
     events = sub.add_parser("events", help="незнакомые типы записей транскрипта")
     events.add_argument("--show", metavar="ТИП", help="показать сохранённые примеры записи")
     prices = sub.add_parser("prices", help="применить цены из конфига и пересчитать стоимость")
@@ -63,8 +65,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _add_filters(parser: argparse.ArgumentParser, *, period: str = "7d") -> None:
-    """Общие фильтры: проект подстрокой slug, период — `today`, `24h`, `7d`, `all`."""
-    parser.add_argument("--project", help="часть slug проекта, например cloudo-dash")
+    """Общие фильтры: проект подстрокой пути, период — `today`, `24h`, `7d`, `all`."""
+    parser.add_argument("--project", help="часть имени или пути проекта, например cloudo-dash")
     parser.add_argument(
         "--period",
         default=period,
