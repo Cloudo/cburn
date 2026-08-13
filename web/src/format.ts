@@ -21,6 +21,14 @@ function trim(value: number): string {
   return text.includes(",") ? text.replace(/,?0+$/, "") : text;
 }
 
+/** Деньги подписчику не счёт, а вес: точность до цента, разряды как у чисел. */
+export function usd(value: number): string {
+  const text = value
+    .toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    .replace(/\s/g, SPACE);
+  return `$${text}`;
+}
+
 export function clockTime(iso: string): string {
   const date = new Date(stamp(iso));
   return date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" });

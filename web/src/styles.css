@@ -398,6 +398,11 @@ main.empty {
   gap: 2px;
 }
 
+/* Деньги — итог под четырьмя счётчиками, а не пятый в паре. */
+.today-wide {
+  grid-column: 1 / -1;
+}
+
 .today dt {
   font-size: 11px;
   color: var(--text-faint);
@@ -1535,4 +1540,67 @@ main.empty {
   .turn {
     grid-template-columns: 66px minmax(0, 1fr) 62px;
   }
+}
+
+/* --- скроллбары ---
+   Нативный светлый бегунок выбивался из тёмной панели. Стилизуем оба
+   механизма: `scrollbar-*` понимают Firefox и свежий Chrome, `::-webkit-*`
+   нужен Safari и системному webview, в котором приложение поедет на M5. */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--line);
+  /* Прозрачная рамка отделяет бегунок от края — иначе он липнет к тексту. */
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 6px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Бегунок появляется, когда с виджетом работают: в покое панель остаётся
+   чистой, как с оверлейным скроллбаром macOS. */
+.widget-body {
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.2s;
+}
+
+.widget:hover .widget-body,
+.widget-body:focus-within {
+  scrollbar-color: var(--line) transparent;
+}
+
+.widget-body::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
+.widget:hover .widget-body::-webkit-scrollbar-thumb,
+.widget-body:focus-within::-webkit-scrollbar-thumb {
+  background: var(--line);
+  background-clip: padding-box;
+}
+
+.widget:hover .widget-body::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
+  background-clip: padding-box;
 }

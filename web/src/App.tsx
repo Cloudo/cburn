@@ -12,6 +12,7 @@ import {
   modelLabel,
   sinceLabel,
   toolLabel,
+  usd,
 } from "./format";
 import {
   closeSession,
@@ -225,6 +226,11 @@ function TodayWidget({ data }: { data: Overview }) {
         <div>
           <dt>запись кэша</dt>
           <dd>{grouped(data.today.cache_write)}</dd>
+        </div>
+        {/* Тариф подписочный: это не счёт, а «сколько стоило бы по API» (ТЗ §4). */}
+        <div className="today-wide">
+          <dt>по тарифам API</dt>
+          <dd>{usd(data.today.cost_usd)}</dd>
         </div>
       </dl>
       <p className="hint">
