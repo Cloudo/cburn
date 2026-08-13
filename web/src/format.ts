@@ -22,7 +22,7 @@ function trim(value: number): string {
 }
 
 export function clockTime(iso: string): string {
-  const date = new Date(iso.endsWith("Z") ? iso : `${iso}Z`);
+  const date = new Date(stamp(iso));
   return date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
@@ -37,3 +37,26 @@ export function modelLabel(model: string | null): string {
   return model.replace(/^claude-/, "").replace(/-\d{8}$/, "");
 }
 
+
+/** Сколько сессия уже идёт: «3 ч 12 мин», «7 мин». */
+export function duration(fromIso: string | null, toIso: string | null): string {
+  if (!fromIso || !toIso) return "—";
+  const ms = new Date(stamp(toIso)).getTime() - new Date(stamp(fromIso)).getTime();
+  const minutes = Math.max(Math.round(ms / 60000), 0);
+  if (minutes < 60) return `${minutes} мин`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours} ч ${rest} мин` : `${hours} ч`;
+}
+
+/** Насколько давно это было, от «сейчас». */
+export function sinceLabel(iso: string | null): string {
+  if (!iso) return "—";
+  const seconds = (Date.now() - new Date(stamp(iso)).getTime()) / 1000;
+  if (seconds < 45) return "только что";
+  return agoLabel(seconds);
+}
+
+function stamp(iso: string): string {
+  return iso.endsWith("Z") || iso.includes("+") ? iso : `${iso}Z`;
+}

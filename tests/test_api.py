@@ -380,3 +380,86 @@ def test_burn_window_carries_its_own_usage(transcripts: Path, db_path: Path) -> 
     assert burn["10s"]["usage"]["output_tokens"] == 60
     assert burn["5m"]["usage"]["cache_read"] == 1000  # оба хода
     assert burn["5m"]["usage"]["cache_write"] == 100  # по 50 на ход
+
+
+# --- закрытие сессии ---------------------------------------------------------
+
+
+def test_hide_removes_session_from_dashboard(transcripts: Path, db_path: Path) -> None:
+    seed(transcripts, db_path, [prompt("вопрос"), assistant("msg_1")])
+    with client(db_path, transcripts) as api:
+        assert len(api.get("/api/overview").json()["live_sessions"]) == 1
+
+        assert api.post("/api/sessions/s1/hide").json() == {"session_id": "s1", "hidden": True}
+        assert api.get("/api/overview").json()["live_sessions"] == []
+        assert api.get("/api/sessions").json()["sessions"] == []
+
+        api.post("/api/sessions/s1/hide", params={"hidden": False})
+        assert len(api.get("/api/overview").json()["live_sessions"]) == 1
+
+
+def test_hide_unknown_session_is_404(db_path: Path, transcripts: Path) -> None:
+    with client(db_path, transcripts) as api:
+        assert api.post("/api/sessions/нет-такой/hide").status_code == 404
+
+
+def test_close_terminates_the_only_matching_process(
+    transcripts: Path, db_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Процесс ищется по рабочему каталогу сессии и получает SIGTERM."""
+    from cloudo_dash.api import server
+    from cloudo_dash.processes import ClaudeProcess
+
+    seed(transcripts, db_path, [assistant("msg_1")])
+    killed: list[int] = []
+    monkeypatch.setattr(
+        server, "process_for_cwd", lambda cwd: ClaudeProcess(pid=4242, cwd=cwd or "")
+    )
+    monkeypatch.setattr(server, "terminate", lambda pid: killed.append(pid) is None)
+
+    with client(db_path, transcripts) as api:
+        result = api.post("/api/sessions/s1/close").json()
+        assert result["stopped"] is True
+        assert result["pid"] == 4242
+        assert killed == [4242]
+        assert api.get("/api/overview").json()["live_sessions"] == []
+
+
+def test_close_without_certain_process_only_hides(
+    transcripts: Path, db_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Каталогу отвечает несколько процессов — не убиваем ни одного."""
+    from cloudo_dash.api import server
+
+    seed(transcripts, db_path, [assistant("msg_1")])
+    monkeypatch.setattr(server, "process_for_cwd", lambda cwd: None)
+
+    with client(db_path, transcripts) as api:
+        result = api.post("/api/sessions/s1/close").json()
+        assert result["stopped"] is False
+        assert result["pid"] is None
+        assert "не определён" in result["note"]
+        assert api.get("/api/overview").json()["live_sessions"] == []
+
+
+def test_live_sessions_are_capped_and_sorted(transcripts: Path, db_path: Path) -> None:
+    """Не больше пяти сессий, самая свежая сверху."""
+    now = datetime.now(UTC)
+    lines = []
+    for index in range(7):
+        lines.append(
+            assistant(
+                f"msg_{index}",
+                session=f"s{index}",
+                uuid=f"u{index}",
+                ts=now - timedelta(seconds=index * 5),
+            )
+        )
+    seed(transcripts, db_path, lines)
+
+    with client(db_path, transcripts) as api:
+        live = api.get("/api/overview").json()["live_sessions"]
+
+    assert len(live) == 5
+    assert [row["id"] for row in live] == ["s0", "s1", "s2", "s3", "s4"]
+    assert live == sorted(live, key=lambda row: row["last_at"], reverse=True)

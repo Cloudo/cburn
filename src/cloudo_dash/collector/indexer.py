@@ -70,6 +70,8 @@ class _Session:
     cwd: str | None = None
     last_record_kind: str | None = None  # чем сессия заканчивается на этой записи
     last_record_at: str | None = None
+    title: str | None = None
+    title_source: str | None = None
 
 
 def ingest_file(conn: sqlite3.Connection, path: Path) -> IngestStats:
@@ -154,6 +156,13 @@ def _collect(
     sessions: dict[str, _Session],
     stats: IngestStats,
 ) -> None:
+    if record.kind is RecordKind.TITLE and record.session_id:
+        # У записей названия нет ни времени, ни uuid — только sessionId.
+        session = sessions.setdefault(record.session_id, _Session(session_id=record.session_id))
+        if record.title_source == "custom" or session.title_source != "custom":
+            session.title = record.title
+            session.title_source = record.title_source
+        return
     if record.session_id and record.ts:
         _touch_session(sessions, record)
 
@@ -248,9 +257,9 @@ def _upsert_sessions(
     conn.executemany(
         """
         INSERT INTO sessions (id, project_id, started_at, last_at, first_prompt,
-                              last_record_kind, last_record_at)
+                              last_record_kind, last_record_at, title, title_source)
         VALUES (:id, :project_id, :started_at, :last_at, :first_prompt,
-                :last_record_kind, :last_record_at)
+                :last_record_kind, :last_record_at, :title, :title_source)
         ON CONFLICT(id) DO UPDATE SET
             project_id   = COALESCE(sessions.project_id, excluded.project_id),
             started_at   = MIN(COALESCE(sessions.started_at, excluded.started_at),
@@ -260,7 +269,16 @@ def _upsert_sessions(
             last_record_kind = CASE
                 WHEN excluded.last_record_at >= COALESCE(sessions.last_record_at, '')
                 THEN excluded.last_record_kind ELSE sessions.last_record_kind END,
-            last_record_at = MAX(COALESCE(sessions.last_record_at, ''), excluded.last_record_at)
+            last_record_at = MAX(COALESCE(sessions.last_record_at, ''), excluded.last_record_at),
+            -- Название, заданное человеком, не затирается сгенерированным.
+            title = CASE
+                WHEN excluded.title IS NULL THEN sessions.title
+                WHEN sessions.title_source = 'custom' AND excluded.title_source <> 'custom'
+                THEN sessions.title ELSE excluded.title END,
+            title_source = CASE
+                WHEN excluded.title_source IS NULL THEN sessions.title_source
+                WHEN sessions.title_source = 'custom' AND excluded.title_source <> 'custom'
+                THEN sessions.title_source ELSE excluded.title_source END
         """,
         [
             {
@@ -271,6 +289,8 @@ def _upsert_sessions(
                 "first_prompt": session.first_prompt,
                 "last_record_kind": session.last_record_kind,
                 "last_record_at": session.last_record_at,
+                "title": session.title,
+                "title_source": session.title_source,
             }
             for session in sessions.values()
         ],

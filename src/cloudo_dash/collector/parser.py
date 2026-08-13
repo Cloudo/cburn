@@ -35,6 +35,10 @@ log = logging.getLogger(__name__)
 _ASSISTANT = "assistant"
 _USER = "user"
 
+#: Название сессии. `custom-title` задан человеком и важнее сгенерированного
+#: `ai-title`; у обеих записей нет ни timestamp, ни uuid — только sessionId.
+_TITLE_FIELDS = {"ai-title": "aiTitle", "custom-title": "customTitle"}
+
 #: Ограничение на текст промпта: в БД он нужен только как подпись сессии.
 PROMPT_LIMIT = 200
 
@@ -45,6 +49,7 @@ class RecordKind(StrEnum):
     ASSISTANT = "assistant"  # ответ модели (или его блок), несёт usage
     PROMPT = "prompt"  # настоящий промпт пользователя
     TOOL_RESULT = "tool_result"  # результат инструмента, приходит записью user
+    TITLE = "title"  # название сессии: ai-title или custom-title
     UNKNOWN = "unknown"  # всё прочее — в raw_events
 
 
@@ -120,6 +125,9 @@ class ParsedRecord:
     prompt_text: str | None = None
     prompt_source: str | None = None
     is_compact_summary: bool = False
+    # TITLE
+    title: str | None = None
+    title_source: str | None = None  # ai | custom
     # UNKNOWN
     payload: dict[str, Any] = field(default_factory=dict)
 
@@ -165,6 +173,15 @@ def _parse_record(record: dict[str, Any]) -> ParsedRecord:
         return _parse_assistant(record, message, common)
     if raw_type == _USER:
         return _parse_user(record, message, common)
+    if raw_type in _TITLE_FIELDS:
+        title = _str(record.get(_TITLE_FIELDS[raw_type]))
+        if title:
+            return ParsedRecord(
+                kind=RecordKind.TITLE,
+                title=title,
+                title_source=raw_type.removesuffix("-title"),
+                **common,
+            )
     return ParsedRecord(kind=RecordKind.UNKNOWN, payload=record, **common)
 
 
@@ -215,16 +232,25 @@ def _is_tool_result(content: Any) -> bool:
 #: сессии они бесполезны — настоящий вопрос стоит после них.
 _SERVICE_BLOCK = re.compile(r"<([a-z][\w-]*)>.*?</\1>", re.DOTALL | re.IGNORECASE)
 _SERVICE_OPEN = re.compile(r"^\s*<[a-z][\w-]*>", re.IGNORECASE)
+_COMMAND_NAME = re.compile(r"<command-name>\s*(.+?)\s*</command-name>", re.DOTALL | re.IGNORECASE)
 
 
 def _strip_service_blocks(text: str) -> str:
-    """Убрать служебные обёртки, если после них остаётся живой текст."""
+    """Оставить от промпта то, что написал человек.
+
+    Запуск слэш-команды выглядит как предупреждение `local-command-caveat`
+    и блоки `command-name`/`command-message` — живого текста там нет вовсе,
+    и подписью сессии становится сама команда.
+    """
     stripped = _SERVICE_BLOCK.sub(" ", text).strip()
     if stripped:
         return stripped
-    # Незакрытый служебный блок (обрезанный контекст IDE): оставляем как есть,
-    # пустая подпись сессии хуже некрасивой.
-    return text.strip()
+    command = _COMMAND_NAME.search(text)
+    if command:
+        return command.group(1)
+    # Один служебный текст без содержания: пусть подписью станет название
+    # сессии или проект — стена служебных предупреждений не подпись.
+    return ""
 
 
 def _prompt_text(content: Any) -> str | None:

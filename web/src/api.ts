@@ -30,13 +30,37 @@ export type BurnRate = {
 export type LiveSession = {
   id: string;
   project: string | null;
+  root_path: string | null;
   last_at: string | null;
+  started_at: string | null;
   turns: number;
   tokens_out: number;
   last_context: number;
   first_prompt: string | null;
+  title: string | null;
+  title_source: string | null;
   output_recent: number;
 };
+
+export type CloseResult = {
+  session_id: string;
+  stopped: boolean;
+  pid: number | null;
+  note: string | null;
+};
+
+/** Закрыть сессию: завершить её процесс и убрать с дашборда. */
+export async function closeSession(id: string): Promise<CloseResult> {
+  const response = await fetch(`api/sessions/${encodeURIComponent(id)}/close`, { method: "POST" });
+  if (!response.ok) throw new Error(`не удалось закрыть сессию: ${response.status}`);
+  return response.json();
+}
+
+/** Убрать сессию с дашборда, не трогая процесс. */
+export async function hideSession(id: string): Promise<void> {
+  const response = await fetch(`api/sessions/${encodeURIComponent(id)}/hide`, { method: "POST" });
+  if (!response.ok) throw new Error(`не удалось убрать сессию: ${response.status}`);
+}
 
 export type Turn = {
   message_id: string;

@@ -18,6 +18,7 @@ class SessionSummary:
     session_id: str
     project: str | None
     root_path: str | None
+    title: str | None
     started_at: str | None
     last_at: str | None
     first_prompt: str | None
@@ -42,6 +43,7 @@ def session_summary(conn: sqlite3.Connection, session_id: str) -> SessionSummary
         SELECT s.id                                        AS session_id,
                p.slug                                      AS project,
                p.root_path                                 AS root_path,
+               s.title                                     AS title,
                s.started_at, s.last_at, s.first_prompt,
                COUNT(t.id)                                 AS turns,
                COALESCE(SUM(t.is_sidechain), 0)            AS sidechain_turns,
@@ -102,10 +104,12 @@ def recent_sessions(conn: sqlite3.Connection, limit: int = 20) -> list[sqlite3.R
     return list(
         conn.execute(
             """
-            SELECT s.id, p.slug AS project, s.last_at, s.turns, s.tokens_out,
-                   s.cache_read, s.cache_write, s.last_context, s.first_prompt
+            SELECT s.id, p.slug AS project, s.last_at, s.started_at, s.turns, s.tokens_out,
+                   s.cache_read, s.cache_write, s.last_context, s.first_prompt,
+                   s.title, s.title_source
               FROM sessions AS s
               LEFT JOIN projects AS p ON p.id = s.project_id
+             WHERE s.hidden = 0
              ORDER BY s.last_at DESC LIMIT ?
             """,
             (limit,),
@@ -184,22 +188,33 @@ def burn_rates(conn: sqlite3.Connection, now: datetime) -> dict[str, dict]:
     return rates
 
 
-def live_sessions(conn: sqlite3.Connection, now: datetime, seconds: int = 120) -> list[dict]:
-    """Сессии, в которых был ход за последние `seconds` (уточнение — задача B4)."""
+#: Сколько живых сессий показывать на дашборде.
+LIVE_LIMIT = 5
+
+
+def live_sessions(
+    conn: sqlite3.Connection, now: datetime, seconds: int = 120, limit: int = LIVE_LIMIT
+) -> list[dict]:
+    """Сессии, в которых был ход за последние `seconds` (уточнение — задача B4).
+
+    Скрытые вручную не показываются, порядок — по последней активности.
+    """
     return [
         dict(row)
         for row in conn.execute(
             """
-            SELECT s.id, p.slug AS project, s.last_at, s.turns, s.tokens_out,
-                   s.last_context, s.first_prompt,
+            SELECT s.id, p.slug AS project, p.root_path, s.last_at, s.started_at,
+                   s.turns, s.tokens_out, s.last_context, s.first_prompt,
+                   s.title, s.title_source,
                    (SELECT COALESCE(SUM(t.output_tokens), 0) FROM turns AS t
                      WHERE t.session_id = s.id AND t.ts >= ?) AS output_recent
               FROM sessions AS s
               LEFT JOIN projects AS p ON p.id = s.project_id
-             WHERE s.last_at >= ?
+             WHERE s.last_at >= ? AND s.hidden = 0
              ORDER BY s.last_at DESC
+             LIMIT ?
             """,
-            (_utc_stamp(now - timedelta(seconds=seconds)),) * 2,
+            (_utc_stamp(now - timedelta(seconds=seconds)),) * 2 + (limit,),
         )
     ]
 
@@ -210,7 +225,7 @@ def top_sessions(conn: sqlite3.Connection, since: datetime, limit: int = 5) -> l
         dict(row)
         for row in conn.execute(
             """
-            SELECT s.id, p.slug AS project, s.last_at, s.first_prompt, s.last_context,
+            SELECT s.id, p.slug AS project, s.last_at, s.first_prompt, s.title, s.last_context,
                    COUNT(t.id)                        AS turns,
                    COALESCE(SUM(t.output_tokens), 0)  AS output_tokens,
                    COALESCE(SUM(t.input_tokens + t.output_tokens
@@ -350,3 +365,25 @@ def pending_sessions(conn: sqlite3.Connection, now: datetime, minutes: int = 10)
             (_utc_stamp(now - timedelta(minutes=minutes)),),
         )
     ]
+
+
+def set_hidden(conn: sqlite3.Connection, session_id: str, hidden: bool) -> bool:
+    """Убрать сессию с дашборда или вернуть обратно. В транскриптах ничего не меняется."""
+    with conn:
+        cursor = conn.execute(
+            "UPDATE sessions SET hidden = ? WHERE id = ?", (int(hidden), session_id)
+        )
+    return cursor.rowcount > 0
+
+
+def session_cwd(conn: sqlite3.Connection, session_id: str) -> str | None:
+    """Рабочий каталог сессии — по нему ищется её процесс."""
+    row = conn.execute(
+        """
+        SELECT p.root_path FROM sessions AS s
+          LEFT JOIN projects AS p ON p.id = s.project_id
+         WHERE s.id = ?
+        """,
+        (session_id,),
+    ).fetchone()
+    return str(row["root_path"]) if row and row["root_path"] else None

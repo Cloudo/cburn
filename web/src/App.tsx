@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
 import { Gauge, OutputMeter, Recorder, type Slice } from "./Gauge";
-import { agoLabel, clockTime, compact, grouped, modelLabel } from "./format";
-import { useOverview, type Turn, type Usage } from "./api";
+import { agoLabel, clockTime, compact, duration, grouped, modelLabel, sinceLabel } from "./format";
+import {
+  closeSession,
+  hideSession,
+  useOverview,
+  type LiveSession,
+  type Turn,
+  type Usage,
+} from "./api";
 
 const WINDOWS = ["10s", "1m", "5m", "60m"] as const;
 const WINDOW_LABEL: Record<string, string> = {
@@ -189,24 +196,12 @@ export default function App() {
             ) : (
               <ul className="sessions">
                 {data.live_sessions.map((session) => (
-                  <li
+                  <SessionCard
                     key={session.id}
-                    className={data.pending_sessions.includes(session.id) ? "session-working" : ""}
-                  >
-                    <div className="session-head">
-                      <code>{session.id.slice(0, 8)}</code>
-                      <span className="session-project">{session.project ?? "—"}</span>
-                      {data.pending_sessions.includes(session.id) && (
-                        <span className="session-badge">ждёт ответа</span>
-                      )}
-                    </div>
-                    <p className="session-prompt">{session.first_prompt ?? "без промпта"}</p>
-                    <div className="session-meta">
-                      <span>ходов {session.turns}</span>
-                      <span>контекст {compact(session.last_context)}</span>
-                      <span>выход {compact(session.tokens_out)}</span>
-                    </div>
-                  </li>
+                    session={session}
+                    pending={data.pending_sessions.includes(session.id)}
+                    now={data.now}
+                  />
                 ))}
               </ul>
             )}
@@ -256,6 +251,81 @@ export default function App() {
         </ol>
       </section>
     </main>
+  );
+}
+
+function SessionCard({
+  session,
+  pending,
+  now,
+}: {
+  session: LiveSession;
+  pending: boolean;
+  now: string;
+}) {
+  const [asking, setAsking] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  const close = async () => {
+    setAsking(false);
+    try {
+      const result = await closeSession(session.id);
+      setNote(result.stopped ? `процесс ${result.pid} завершён` : result.note);
+    } catch (error) {
+      setNote(String(error));
+    }
+  };
+
+  const hide = async () => {
+    setAsking(false);
+    try {
+      await hideSession(session.id);
+    } catch (error) {
+      setNote(String(error));
+    }
+  };
+
+  return (
+    <li className={pending ? "session-working" : ""}>
+      <div className="session-head">
+        <span className="session-name">{session.title ?? session.id.slice(0, 8)}</span>
+        {pending && <span className="session-badge">ждёт ответа</span>}
+        <div className="session-close">
+          <button
+            className="session-close-button"
+            aria-label="закрыть сессию"
+            aria-expanded={asking}
+            onClick={() => setAsking((open) => !open)}
+          >
+            ×
+          </button>
+          {asking && (
+            <div className="popover" role="dialog" aria-label="закрыть сессию">
+              <p>Завершить процесс Claude Code и убрать сессию с дашборда?</p>
+              <div className="popover-actions">
+                <button className="popover-danger" onClick={close}>
+                  Закрыть сессию
+                </button>
+                <button onClick={hide}>Только убрать</button>
+                <button onClick={() => setAsking(false)}>Отмена</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+      <p className="session-prompt">{session.first_prompt ?? "без промпта"}</p>
+      <div className="session-meta">
+        <code>{session.id.slice(0, 8)}</code>
+        <span className="session-project">{session.project ?? "—"}</span>
+      </div>
+      <div className="session-meta">
+        <span>активность {sinceLabel(session.last_at)}</span>
+        <span>идёт {duration(session.started_at, now)}</span>
+        <span>ходов {session.turns}</span>
+        <span>контекст {compact(session.last_context)}</span>
+      </div>
+      {note && <p className="session-note">{note}</p>}
+    </li>
   );
 }
 

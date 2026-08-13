@@ -28,6 +28,9 @@ CREATE TABLE IF NOT EXISTS sessions (
     started_at        TEXT,
     last_at           TEXT,
     first_prompt      TEXT,              -- обрезан до 200 символов
+    title             TEXT,              -- из записей ai-title / custom-title
+    title_source      TEXT,              -- ai | custom (своё название важнее)
+    hidden            INTEGER NOT NULL DEFAULT 0,  -- убрана с дашборда вручную
     parent_session_id TEXT REFERENCES sessions(id),  -- resume-форк
     turns             INTEGER NOT NULL DEFAULT 0,
     tokens_in         INTEGER NOT NULL DEFAULT 0,

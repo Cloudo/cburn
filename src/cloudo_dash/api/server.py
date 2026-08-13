@@ -29,10 +29,13 @@ from ..db import connect
 from ..metrics import (
     overview,
     recent_sessions,
+    session_cwd,
     session_models,
     session_summary,
     session_tools,
+    set_hidden,
 )
+from ..processes import process_for_cwd, terminate
 
 log = logging.getLogger(__name__)
 
@@ -154,6 +157,45 @@ def create_app(
             }
         finally:
             conn.close()
+
+    @app.post("/api/sessions/{session_id}/hide")
+    async def api_hide(session_id: str, hidden: bool = True) -> dict[str, Any]:
+        """Убрать сессию с дашборда или вернуть её обратно."""
+        conn = connect(db_path, apply_schema=False)
+        try:
+            if not set_hidden(conn, session_id, hidden):
+                raise HTTPException(status_code=404, detail="сессия не найдена")
+        finally:
+            conn.close()
+        return {"session_id": session_id, "hidden": hidden}
+
+    @app.post("/api/sessions/{session_id}/close")
+    async def api_close(session_id: str) -> dict[str, Any]:
+        """Завершить процесс сессии и убрать её с дашборда.
+
+        Процесс ищется по рабочему каталогу — другой связки с `sessionId` нет.
+        Если каталогу отвечает несколько процессов, не завершаем ничего:
+        закрыть чужую работающую сессию хуже, чем не закрыть эту.
+        """
+        conn = connect(db_path, apply_schema=False)
+        try:
+            cwd = session_cwd(conn, session_id)
+            if cwd is None and session_summary(conn, session_id) is None:
+                raise HTTPException(status_code=404, detail="сессия не найдена")
+            process = process_for_cwd(cwd)
+            stopped = terminate(process.pid) if process is not None else False
+            set_hidden(conn, session_id, True)
+        finally:
+            conn.close()
+        return {
+            "session_id": session_id,
+            "hidden": True,
+            "stopped": stopped,
+            "pid": process.pid if process is not None else None,
+            "note": None
+            if stopped
+            else "процесс не определён однозначно — сессия только убрана с дашборда",
+        }
 
     @app.get("/api/health")
     async def api_health() -> dict[str, Any]:

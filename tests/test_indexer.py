@@ -562,3 +562,56 @@ def test_service_records_do_not_clear_pending(conn: sqlite3.Connection, tmp_path
     )
     ingest_file(conn, path)
     assert rows(conn, "SELECT last_record_kind FROM sessions")[0]["last_record_kind"] == "prompt"
+
+
+# --- название сессии ---------------------------------------------------------
+
+
+def title_record(title: str, *, kind: str = "ai-title", session: str = "s1") -> str:
+    field = "aiTitle" if kind == "ai-title" else "customTitle"
+    return json.dumps({"type": kind, field: title, "sessionId": session})
+
+
+def test_ai_title_becomes_session_name(conn: sqlite3.Connection, tmp_path: Path) -> None:
+    path = tmp_path / "proj" / "s1.jsonl"
+    write_transcript(path, [assistant("msg_1"), title_record("Review ROADMAP next tasks")])
+    ingest_file(conn, path)
+
+    session = rows(conn, "SELECT * FROM sessions")[0]
+    assert session["title"] == "Review ROADMAP next tasks"
+    assert session["title_source"] == "ai"
+
+
+def test_custom_title_wins_over_generated(conn: sqlite3.Connection, tmp_path: Path) -> None:
+    """Название, заданное человеком, не затирается сгенерированным."""
+    path = tmp_path / "proj" / "s1.jsonl"
+    write_transcript(
+        path,
+        [
+            assistant("msg_1"),
+            title_record("своё имя", kind="custom-title"),
+            title_record("сгенерированное"),
+        ],
+    )
+    ingest_file(conn, path)
+
+    session = rows(conn, "SELECT * FROM sessions")[0]
+    assert (session["title"], session["title_source"]) == ("своё имя", "custom")
+
+    with path.open("a") as fh:
+        fh.write(title_record("ещё одно сгенерированное") + "\n")
+    ingest_file(conn, path)
+    assert rows(conn, "SELECT title FROM sessions")[0]["title"] == "своё имя"
+
+
+def test_title_record_does_not_create_pending_state(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """У записи названия нет времени — она не должна двигать состояние сессии."""
+    path = tmp_path / "proj" / "s1.jsonl"
+    write_transcript(path, [assistant("msg_1", ts="2026-08-13T10:00:00Z"), title_record("имя")])
+    ingest_file(conn, path)
+
+    session = rows(conn, "SELECT * FROM sessions")[0]
+    assert session["last_record_kind"] == "assistant"
+    assert session["last_at"] == "2026-08-13T10:00:00Z"
