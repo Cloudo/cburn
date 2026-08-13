@@ -21,6 +21,8 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
+from starlette.types import Scope
 
 from .. import config, paths, pricing
 from ..collector.indexer import IngestStats
@@ -314,10 +316,27 @@ async def _pump(events: asyncio.Queue[IngestStats], hub: Hub, collect: Any) -> N
             await hub.broadcast({"type": "overview", "data": payload})
 
 
+class Frontend(StaticFiles):
+    """Статика фронта с разной политикой кеша для оболочки и ассетов.
+
+    `index.html` браузер обязан сверять каждый раз: иначе после пересборки он
+    берёт из кеша старую оболочку и грузит несуществующий бандл. Сами ассеты
+    Vite именует с хешем содержимого, поэтому их можно кешировать навсегда.
+    """
+
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        response = await super().get_response(path, scope)
+        if response.headers.get("content-type", "").startswith("text/html"):
+            response.headers["Cache-Control"] = "no-cache"
+        elif path.startswith("assets/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
+
+
 def _mount_frontend(app: FastAPI) -> None:
     """Раздать собранный фронт, если он есть (задача A6)."""
     if (WEB_DIST / "index.html").exists():
-        app.mount("/", StaticFiles(directory=WEB_DIST, html=True), name="web")
+        app.mount("/", Frontend(directory=WEB_DIST, html=True), name="web")
         return
 
     @app.get("/")

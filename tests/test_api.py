@@ -313,6 +313,25 @@ def test_built_frontend_is_served(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
         assert api.get("/api/health").json()["ok"] is True  # API не перекрыт статикой
 
 
+def test_frontend_cache_policy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Оболочку браузер сверяет каждый раз, ассеты с хешем кеширует навсегда.
+
+    Без этого пересобранный фронт грузится в старой оболочке из кеша браузера.
+    """
+    from cloudo_dash.api import server
+
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<!doctype html><title>cloudo-dash</title>")
+    (dist / "assets" / "index-abc123.js").write_text("console.log(1)")
+    monkeypatch.setattr(server, "WEB_DIST", dist)
+
+    app = server.create_app(db_path=tmp_path / "api.db", watch=False)
+    with TestClient(app) as api:
+        assert api.get("/").headers["cache-control"] == "no-cache"
+        assert "immutable" in api.get("/assets/index-abc123.js").headers["cache-control"]
+
+
 # --- самописец и живые показания ---------------------------------------------
 
 
