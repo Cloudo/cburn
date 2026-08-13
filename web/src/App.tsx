@@ -58,18 +58,6 @@ const COLORS = {
   input: "#5eab86",
 };
 
-//: Окно разбивки: «как прибор» держит её в такт со стрелкой, остальные
-//: значения отвязывают её — например, чтобы смотреть долю кэша за сутки.
-const SLICE_WINDOWS = ["sync", "10s", "1m", "5m", "60m", "today"] as const;
-const SLICE_LABEL: Record<string, string> = {
-  sync: "как прибор",
-  "10s": "10 с",
-  "1m": "мин",
-  "5m": "5 мин",
-  "60m": "час",
-  today: "сегодня",
-};
-
 function slicesOf(source: Usage): Slice[] {
   return [
     { key: "cache_read", label: "чтение кэша", value: source.cache_read, color: COLORS.cacheRead },
@@ -237,12 +225,11 @@ function buildWidgets(data: Overview, refresh: () => Promise<void>): WidgetConte
 
 function GaugeWidget({ data }: { data: Overview }) {
   const [window, setWindow] = useState<string>("1m");
-  const [sliceWindow, setSliceWindow] = useState<string>("sync");
 
   const burn = data.burn[window];
-  const sliceKey = sliceWindow === "sync" ? window : sliceWindow;
-  const sliceSource = sliceKey === "today" ? data.today : data.burn[sliceKey].usage;
-  const slices = slicesOf(sliceSource);
+  // Разбивка всегда за то же окно, что и стрелка: два разных периода рядом
+  // читались как одно целое и путали.
+  const slices = slicesOf(burn.usage);
   const peak = Math.max(...WINDOWS.map((key) => data.burn[key].output_per_min), 500);
   const total = slices.reduce((sum, item) => sum + item.value, 0);
 
@@ -262,38 +249,28 @@ function GaugeWidget({ data }: { data: Overview }) {
         ))}
       </div>
 
-      <Gauge value={burn.tokens_per_min} slices={slices} caption={WINDOW_CAPTION[window]} />
+      {/* Разбивка — сбоку от прибора: по бокам полукруга остаётся пустое поле,
+          а список из четырёх строк как раз в него укладывается. */}
+      <div className="gauge-row">
+        <Gauge value={burn.tokens_per_min} slices={slices} caption={WINDOW_CAPTION[window]} />
 
-      <div className="legend-head">
-        <span className="legend-title">разбивка</span>
-        <div className="slice-windows" role="tablist" aria-label="окно разбивки">
-          {SLICE_WINDOWS.map((key) => (
-            <button
-              key={key}
-              role="tab"
-              aria-selected={key === sliceWindow}
-              className={key === sliceWindow ? "slice-window slice-window-on" : "slice-window"}
-              onClick={() => setSliceWindow(key)}
-            >
-              {SLICE_LABEL[key]}
-            </button>
-          ))}
+        <div className="breakdown">
+          <span className="legend-title">разбивка</span>
+          <ul className="legend">
+            {slices.map((slice) => {
+              const share = total > 0 ? (slice.value / total) * 100 : 0;
+              return (
+                <li key={slice.key}>
+                  <span className="legend-swatch" style={{ background: slice.color }} />
+                  <span className="legend-label">{slice.label}</span>
+                  <span className="legend-share">{share < 1 ? "<1" : Math.round(share)}%</span>
+                  <span className="legend-value">{compact(slice.value)}</span>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       </div>
-
-      <ul className="legend">
-        {slices.map((slice) => {
-          const share = total > 0 ? (slice.value / total) * 100 : 0;
-          return (
-            <li key={slice.key}>
-              <span className="legend-swatch" style={{ background: slice.color }} />
-              <span className="legend-label">{slice.label}</span>
-              <span className="legend-share">{share < 1 ? "<1" : Math.round(share)}%</span>
-              <span className="legend-value">{compact(slice.value)}</span>
-            </li>
-          );
-        })}
-      </ul>
 
       <OutputMeter value={burn.output_per_min} peak={peak} />
       <Recorder series={data.series} bucketSeconds={data.series_bucket_seconds} />

@@ -161,24 +161,30 @@ main.empty {
 
 /* --- переключатель окна --- */
 
+/* Окно усреднения выбирают редко, а выбранное и так названо под числом
+   («за последнюю минуту»), поэтому переключатель приглушён и проявляется
+   только при наведении. Место он занимает всегда: иначе прибор прыгал бы. */
 .windows {
   display: flex;
   gap: 2px;
-  background: var(--bg-sunken);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 2px;
   width: fit-content;
   margin: 0 auto;
+  opacity: 0.3;
+  transition: opacity 0.15s;
+}
+
+.widget:hover .windows,
+.windows:focus-within {
+  opacity: 1;
 }
 
 .window {
   border: 0;
   background: transparent;
-  color: var(--text-dim);
+  color: var(--text-faint);
   font-family: var(--sans);
-  font-size: 12px;
-  padding: 5px 14px;
+  font-size: 11px;
+  padding: 2px 9px;
   border-radius: 999px;
   cursor: pointer;
   transition: color 0.15s, background 0.15s;
@@ -189,7 +195,6 @@ main.empty {
 }
 
 .window-on {
-  background: rgb(232 163 61 / 14%);
   color: var(--amber);
 }
 
@@ -209,7 +214,7 @@ main.empty {
 
 .gauge svg {
   width: 100%;
-  max-width: 400px;
+  max-width: 560px;
   height: auto;
   overflow: visible;
 }
@@ -310,6 +315,7 @@ main.empty {
 
 .legend-label {
   flex: 1;
+  white-space: nowrap; /* «чтение кэша» в две строки ломает ритм списка */
 }
 
 .legend-share {
@@ -797,13 +803,33 @@ main.empty {
 
 /* --- окно разбивки --- */
 
-.legend-head {
+/* Прибор и разбивка в ряд: полукруг оставляет по бокам пустые поля, и список
+   составляющих занимает одно из них вместо того, чтобы уезжать вниз. */
+.gauge-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 18px 0 10px;
-  flex-wrap: wrap;
+  gap: 20px;
+  margin-top: 8px;
+}
+
+.gauge-row .gauge {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+.breakdown {
+  flex: 0 1 205px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Сбоку места на одну колонку: строки идут друг под другом. */
+.breakdown .legend {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
 }
 
 .legend-title {
@@ -811,37 +837,6 @@ main.empty {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-faint);
-}
-
-.slice-windows {
-  display: flex;
-  gap: 2px;
-}
-
-.slice-window {
-  border: 0;
-  background: transparent;
-  color: var(--text-faint);
-  font-family: var(--sans);
-  font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: color 0.15s, background 0.15s;
-}
-
-.slice-window:hover {
-  color: var(--text);
-}
-
-.slice-window-on {
-  background: rgb(77 127 163 / 18%);
-  color: var(--steel);
-}
-
-.slice-window:focus-visible {
-  outline: 2px solid var(--steel);
-  outline-offset: 2px;
 }
 
 /* --- карточка живой сессии --- */
@@ -1594,6 +1589,23 @@ main.empty {
 @container widget (max-width: 260px) {
   .widget-at {
     display: none;
+  }
+}
+
+@container widget (max-width: 560px) {
+  .gauge-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .breakdown {
+    flex: none;
+  }
+
+  .breakdown .legend {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 20px;
   }
 }
 
