@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo } from "react";
 
-import { clockTime, compact, duration, grouped, modelLabel, toolLabel, usd } from "./format";
+import { clockTime, compact, duration, grouped, modelLabel, spent, toolLabel, usd } from "./format";
 import { useLang } from "./i18n";
 import { useSession, type SessionEvent, type SessionTurn } from "./api";
 
@@ -36,6 +36,12 @@ export function Session({ id }: { id: string }) {
 
   const { session, turns, events, models, tools, chain } = data;
   const idle = turns.filter((turn) => turn.is_idle).length;
+  // Время в инструменте знает только телеметрия — без неё колонка пустует.
+  const seconds = new Map(
+    (data.tool_times ?? [])
+      .filter((row) => row.tool && row.seconds)
+      .map((row) => [row.tool as string, row.seconds as number]),
+  );
 
   return (
     <section className="screen">
@@ -106,7 +112,12 @@ export function Session({ id }: { id: string }) {
             {tools.map((tool) => (
               <li key={tool.tool}>
                 <span className="bars-label">{toolLabel(tool.tool)}</span>
-                <span className="bars-value">{tool.calls}</span>
+                <span className="bars-value">
+                  {tool.calls}
+                  {seconds.get(tool.tool) !== undefined && (
+                    <span className="bars-extra">{spent(seconds.get(tool.tool)!)}</span>
+                  )}
+                </span>
               </li>
             ))}
           </ul>

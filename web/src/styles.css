@@ -2208,6 +2208,12 @@ main.empty {
   color: var(--text-faint);
 }
 
+/* Время в инструменте: есть только с телеметрией, поэтому приписка, а не колонка. */
+.bars-extra {
+  margin-left: 8px;
+  color: var(--text-dim);
+}
+
 .turns {
   border: 1px solid var(--line);
   border-radius: var(--radius);

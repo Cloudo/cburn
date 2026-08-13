@@ -41,6 +41,7 @@ from ..metrics import (
     session_events,
     session_models,
     session_summary,
+    session_tool_times,
     session_tools,
     session_turns,
     sessions_page,
@@ -302,6 +303,8 @@ def create_app(
                     {"tool": tool, "calls": calls}
                     for tool, calls in session_tools(conn, session_id)
                 ],
+                # Сколько времени ушло в каждый инструмент — знает телеметрия (веха E).
+                "tool_times": session_tool_times(conn, session_id),
                 # Линия работы: resume рассыпает одну работу по нескольким сессиям.
                 "chain": session_chain(conn, session_id),
                 # Экран «Сессия» (задача C2): график контекста и лента ходов.

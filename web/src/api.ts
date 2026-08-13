@@ -309,6 +309,14 @@ export type SessionDetails = {
   };
   models: Array<{ model: string; turns: number; output_tokens: number }>;
   tools: Array<{ tool: string; calls: number }>;
+  /** Время в инструментах — только из телеметрии, поэтому список бывает пуст. */
+  tool_times?: Array<{
+    tool: string | null;
+    calls: number;
+    seconds: number | null;
+    slowest: number | null;
+    failures: number;
+  }>;
   chain: { sessions: string[]; turns: number; tokens: number; cost_usd: number };
   turns: SessionTurn[];
   events: SessionEvent[];

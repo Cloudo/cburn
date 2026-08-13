@@ -568,6 +568,45 @@ def test_project_filter_narrows_telemetry(conn: Any) -> None:
     assert metrics.otel_permissions(conn, since, project="второй")["manual"] == 0
 
 
+def test_tool_times_come_from_events(conn: Any) -> None:
+    """Время в инструменте есть только в телеметрии: в транскрипте между
+    запросом и результатом лежит и ожидание разрешения."""
+    otlp.ingest(
+        conn,
+        "logs",
+        logs_payload(
+            event("tool_result", 1, tool_name="Bash", duration_ms="968", success="true"),
+            event("tool_result", 2, tool_name="Bash", duration_ms="4032", success="false"),
+            event("tool_result", 3, tool_name="Read", duration_ms="12", success="true"),
+        ),
+    )
+    rows = metrics.session_tool_times(conn, "s1")
+    assert [row["tool"] for row in rows] == ["Bash", "Read"]  # порядок по времени
+    assert rows[0]["calls"] == 2
+    assert rows[0]["seconds"] == 5.0
+    assert rows[0]["slowest"] == 4.032
+    assert rows[0]["failures"] == 1
+    assert metrics.session_tool_times(conn, "нет-такой") == []
+
+
+def test_session_endpoint_carries_tool_times(client: TestClient) -> None:
+    conn = connect(client.db_path, apply_schema=False)  # type: ignore[attr-defined]
+    try:
+        with conn:
+            conn.execute("INSERT INTO sessions (id) VALUES ('s1')")
+        otlp.ingest(
+            conn,
+            "logs",
+            logs_payload(event("tool_result", 1, tool_name="Bash", duration_ms="968")),
+        )
+    finally:
+        conn.close()
+    times = client.get("/api/sessions/s1").json()["tool_times"]
+    assert times == [
+        {"tool": "Bash", "calls": 1, "seconds": 0.968, "slowest": 0.968, "failures": 0}
+    ]
+
+
 def test_session_list_reads_the_decision_from_the_database(conn: Any) -> None:
     """Сквозная проверка: событие в БД доходит до статуса в списке сессий."""
     asked = datetime(2026, 8, 14, 7, 0, tzinfo=UTC)

@@ -112,6 +112,33 @@ def session_tools(
     ]
 
 
+def session_tool_times(conn: sqlite3.Connection, session_id: str, limit: int = 10) -> list[dict]:
+    """Сколько времени сессия провела в каждом инструменте (веха E).
+
+    Длительность знает только телеметрия: в транскрипте между запросом
+    инструмента и его результатом нет ничего, кроме двух отметок времени, а они
+    включают и ожидание разрешения. `duration_ms` приходит строкой, отсюда CAST.
+    """
+    return [
+        dict(row)
+        for row in conn.execute(
+            """
+            SELECT json_extract(attrs, '$.tool_name')                    AS tool,
+                   COUNT(*)                                              AS calls,
+                   SUM(CAST(json_extract(attrs, '$.duration_ms') AS REAL)) / 1000.0 AS seconds,
+                   MAX(CAST(json_extract(attrs, '$.duration_ms') AS REAL)) / 1000.0 AS slowest,
+                   -- Атрибут `success` приходит строкой, а у части событий его
+                   -- нет вовсе: без COALESCE сумма схлопнулась бы в NULL.
+                   SUM(COALESCE(json_extract(attrs, '$.success') IN ('false', 0), 0)) AS failures
+              FROM otel_events
+             WHERE name = 'tool_result' AND session_id = ?
+             GROUP BY tool ORDER BY seconds DESC LIMIT ?
+            """,
+            (session_id, limit),
+        )
+    ]
+
+
 def recent_sessions(
     conn: sqlite3.Connection,
     limit: int = 20,

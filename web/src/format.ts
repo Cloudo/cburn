@@ -100,6 +100,17 @@ export function duration(fromIso: string | null, toIso: string | null): string {
   return rest ? `${h} ${rest} ${word("мин", "m")}` : h;
 }
 
+/** Сколько времени заняла работа: «8 с», «3 мин», «1 ч 5 мин». */
+export function spent(seconds: number): string {
+  if (seconds < 60) return `${seconds < 10 ? seconds.toFixed(1) : Math.round(seconds)} ${word("с", "s")}`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} ${word("мин", "m")}`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  const h = `${hours} ${word("ч", "h")}`;
+  return rest ? `${h} ${rest} ${word("мин", "m")}` : h;
+}
+
 /** Насколько давно это было, от «сейчас». */
 export function sinceLabel(iso: string | null): string {
   if (!iso) return "—";
