@@ -249,7 +249,8 @@ def _off_transcript(
     занижены.
     """
     usage = metrics.otel_usage(conn, since, until, project)
-    if not usage["tokens"] and not usage["cost_usd"]:
+    work = metrics.otel_work(conn, since)
+    if not usage["tokens"] and not usage["cost_usd"] and not work["active_seconds"]:
         return {"available": False, "note": "телеметрия OTel не включена — данных нет"}
     return {
         "available": True,
@@ -257,6 +258,11 @@ def _off_transcript(
         "cost_usd": usage["cost_usd"],
         "share_of_cost": round(usage["share"], 4),
         "kinds": usage["request_kinds"],
+        # Сколько времени работа реально шла и что получилось на выходе:
+        # расход сам по себе ни хорош, ни плох — важно, что за него сделано.
+        "active_minutes": round(work["active_seconds"] / 60, 1),
+        "lines_added": work["lines_added"],
+        "lines_removed": work["lines_removed"],
     }
 
 

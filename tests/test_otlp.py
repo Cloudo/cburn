@@ -490,6 +490,24 @@ def test_permission_breakdown_has_a_tail_limit(conn: Any) -> None:
     assert built["size"]["within_limit"]
 
 
+def test_digest_carries_work_done(conn: Any) -> None:
+    """Советчику нужен не только расход, но и что за него сделано."""
+    otlp.ingest(
+        conn,
+        "metrics",
+        metrics_payload(point(600, type="user"), name="claude_code.active_time.total"),
+    )
+    otlp.ingest(
+        conn,
+        "metrics",
+        metrics_payload(point(120, type="added"), name="claude_code.lines_of_code.count"),
+    )
+    built = digest.build(conn, datetime(2026, 8, 14, tzinfo=UTC))["off_transcript"]
+    assert built["available"] is True
+    assert built["active_minutes"] == 10.0
+    assert built["lines_added"] == 120
+
+
 def test_digest_marks_missing_telemetry(conn: Any) -> None:
     """Без телеметрии секции помечены прочерком: ноль подтверждений — не факт."""
     built = digest.build(conn, datetime(2026, 8, 14, tzinfo=UTC))
