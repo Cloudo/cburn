@@ -124,6 +124,14 @@ export function Telemetry({ otel }: { otel?: Otel }) {
           </span>
         </div>
       </div>
+      {otel.api.errors > 0 && (
+        <p className="hint">
+          {t("otel.errors", {
+            count: otel.api.errors,
+            statuses: otel.api.by_status.map((row) => row.status).join(", "),
+          })}
+        </p>
+      )}
       {permissions.by_tool.length > 0 && (
         <ol className="ranked">
           {permissions.by_tool.slice(0, 5).map((row) => (

@@ -529,14 +529,11 @@ def test_overview_carries_telemetry(client: TestClient) -> None:
 
 def test_overview_without_telemetry_says_so(client: TestClient) -> None:
     otel = client.get("/api/overview").json()["otel"]
-    assert otel == {
-        "active": False,
-        "last_at": None,
-        "off_transcript": otel["off_transcript"],
-        "permissions": otel["permissions"],
-    }
+    assert otel["active"] is False
+    assert otel["last_at"] is None
     assert otel["off_transcript"]["tokens"] == 0
     assert otel["permissions"]["decisions"] == 0
+    assert otel["api"] == {"errors": 0, "by_status": []}
 
 
 def test_period_bounds_are_respected(conn: Any) -> None:
@@ -566,6 +563,25 @@ def test_project_filter_narrows_telemetry(conn: Any) -> None:
     assert metrics.otel_usage(conn, since, project="второй")["tokens"] == 0
     assert metrics.otel_permissions(conn, since, project="первый")["manual"] == 1
     assert metrics.otel_permissions(conn, since, project="второй")["manual"] == 0
+
+
+def test_api_failures_are_visible_only_here(conn: Any) -> None:
+    """Сорвавшийся запрос в транскрипт не попадает: там только итоговый ответ."""
+    otlp.ingest(
+        conn,
+        "logs",
+        logs_payload(
+            event("api_error", 1, status_code="429", attempt=1),
+            event("api_error", 2, status_code="429", attempt=2),
+            event("api_error", 3, status_code="529", attempt=1),
+            event("api_refusal", 4),
+            event("api_request", 5),  # удавшийся запрос ошибкой не считается
+        ),
+    )
+    stats = metrics.otel_errors(conn, datetime(2026, 8, 14, tzinfo=UTC))
+    assert stats["errors"] == 4
+    assert stats["by_status"][0] == {"status": "429", "errors": 2}
+    assert {row["status"] for row in stats["by_status"]} == {"429", "529", "—"}
 
 
 def test_tool_times_come_from_events(conn: Any) -> None:

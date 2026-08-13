@@ -89,6 +89,15 @@ const DICT: Record<string, [string, string]> = {
     "и ещё {auto} разрешено автоматически",
     "plus {auto} allowed automatically",
   ],
+  "settings.otel": ["телеметрия", "telemetry"],
+  "settings.otelHint": [
+    "Приём данных от Claude Code. Сама телеметрия включается его переменными окружения — их печатает команда cdash otel --env.",
+    "Receiving data from Claude Code. Telemetry itself is switched on by its environment variables — run cdash otel --env to print them.",
+  ],
+  "otel.errors": [
+    "Запросов к API сорвалось: {count} (коды {statuses}). В файлах истории их нет — там виден только тот ответ, который в итоге пришёл.",
+    "Failed API requests: {count} (codes {statuses}). The history files don't show them — only the reply that eventually arrived.",
+  ],
 
   "dash.widgets": ["виджеты", "widgets"],
   "dash.tune": ["настройка дашборда", "dashboard settings"],

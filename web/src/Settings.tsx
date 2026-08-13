@@ -128,6 +128,16 @@ export function Settings() {
         </fieldset>
 
         <fieldset className="settings-group">
+          <legend>{t("settings.otel")}</legend>
+          <Check
+            label={t("settings.enabled")}
+            value={config.otel?.enabled ?? true}
+            onChange={(value) => patch("otel", "enabled", value)}
+          />
+          <p className="hint">{t("settings.otelHint")}</p>
+        </fieldset>
+
+        <fieldset className="settings-group">
           <legend>telegram</legend>
           <Choice
             label={t("settings.channel")}

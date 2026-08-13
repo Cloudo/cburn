@@ -158,6 +158,8 @@ export type Otel = {
     rejected: number;
     by_tool: Array<{ tool: string; decisions: number }>;
   };
+  /** Неудавшиеся запросы к API: в транскрипт они не попадают вовсе. */
+  api: { errors: number; by_status: Array<{ status: string; errors: number }> };
 };
 
 export type Overview = {
@@ -372,6 +374,8 @@ export type Config = {
     weekly_deep_model: string;
     allow_snippets: boolean;
   };
+  /** Может не прийти: сервер старше этого фронта. */
+  otel?: { enabled: boolean };
   telegram: {
     mode: string;
     bridge_url: string;

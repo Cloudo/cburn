@@ -970,6 +970,26 @@ def otel_permissions(
     }
 
 
+def otel_errors(conn: sqlite3.Connection, since: datetime) -> dict:
+    """Ошибки и отказы API за период (веха E).
+
+    В транскрипт неудавшийся запрос не попадает вовсе: там видно только то,
+    что в итоге ответила модель. Повторы после 429 или 529 при этом стоят
+    времени, и знать о них полезно.
+    """
+    rows = [
+        dict(row)
+        for row in conn.execute(
+            "SELECT COALESCE(json_extract(attrs, '$.status_code'), '—') AS status,"
+            "       COUNT(*) AS errors"
+            "  FROM otel_events WHERE name IN ('api_error', 'api_refusal') AND ts >= ?"
+            " GROUP BY status ORDER BY errors DESC",
+            (_utc_stamp(since),),
+        )
+    ]
+    return {"errors": sum(row["errors"] for row in rows), "by_status": rows}
+
+
 def otel_state(conn: sqlite3.Connection, since: datetime) -> dict:
     """Срез телеметрии для обзора: работает ли она и что видит (веха E)."""
     last_at = conn.execute(
@@ -981,6 +1001,7 @@ def otel_state(conn: sqlite3.Connection, since: datetime) -> dict:
         "last_at": last_at,
         "off_transcript": otel_usage(conn, since),
         "permissions": otel_permissions(conn, since),
+        "api": otel_errors(conn, since),
     }
 
 
