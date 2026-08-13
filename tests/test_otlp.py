@@ -199,6 +199,66 @@ def test_event_name_from_body_when_attribute_is_missing(conn: Any) -> None:
     assert conn.execute("SELECT name FROM otel_events").fetchone()[0] == "api_error"
 
 
+def test_histogram_is_counted_as_a_loss(conn: Any) -> None:
+    """Гистограмм Claude Code не шлёт; появятся — увидим по счётчику потерь."""
+    payload = metrics_payload(point(1), name="claude_code.some.histogram")
+    metric = payload["resourceMetrics"][0]["scopeMetrics"][0]["metrics"][0]
+    metric["histogram"] = {"dataPoints": [metric.pop("sum")["dataPoints"][0]]}
+    stats = otlp.ingest(conn, "metrics", payload)
+    assert (stats["stored"], stats["dropped"]) == (0, 1)
+
+
+def test_attribute_values_of_every_shape_are_read(conn: Any) -> None:
+    """OTLP `AnyValue` бывает не только строкой: булево, массив, вложенный список."""
+    record = event("tool_result", 1)
+    record["attributes"] += [
+        {"key": "success", "value": {"boolValue": True}},
+        {"key": "duration_ms", "value": {"intValue": "968"}},
+        {"key": "ratio", "value": {"doubleValue": 0.5}},
+        {
+            "key": "workspace.host_paths",
+            "value": {"arrayValue": {"values": [{"stringValue": "/tmp/x"}]}},
+        },
+        {
+            "key": "nested",
+            "value": {"kvlistValue": {"values": [{"key": "k", "value": {"stringValue": "v"}}]}},
+        },
+    ]
+    otlp.ingest(conn, "logs", logs_payload(record))
+    attrs = json.loads(conn.execute("SELECT attrs FROM otel_events").fetchone()[0])
+    assert attrs["success"] is True
+    assert attrs["duration_ms"] == 968
+    assert attrs["ratio"] == 0.5
+    assert attrs["workspace.host_paths"] == ["/tmp/x"]
+    assert attrs["nested"] == {"k": "v"}
+
+
+def test_events_without_a_session_are_still_stored(conn: Any) -> None:
+    """Событие без `session.id` — тоже событие: до первого промпта их хватает."""
+    record = event("session_start", 1)
+    record["attributes"] = [item for item in record["attributes"] if item["key"] != "session.id"]
+    assert otlp.ingest(conn, "logs", logs_payload(record))["stored"] == 1
+    assert otlp.ingest(conn, "logs", logs_payload(record))["stored"] == 0  # повтор гасится
+    assert conn.execute("SELECT session_id FROM otel_events").fetchone()[0] is None
+
+
+def test_record_time_falls_back_to_the_observed_one(conn: Any) -> None:
+    """Часть записей приезжает без своего времени — тогда берётся время приёма."""
+    record = event("api_request", 1)
+    record["timeUnixNano"] = "0"
+    assert otlp.ingest(conn, "logs", logs_payload(record))["stored"] == 1
+    assert conn.execute("SELECT ts FROM otel_events").fetchone()[0] == "2026-08-14T07:01:00.000000Z"
+
+
+def test_several_resources_in_one_batch(conn: Any) -> None:
+    """Экспортёр вправе сложить в посылку несколько ресурсов и скоупов."""
+    payload = metrics_payload(point(10, type="input"))
+    payload["resourceMetrics"].append(
+        metrics_payload(point(20, type="output"))["resourceMetrics"][0]
+    )
+    assert otlp.ingest(conn, "metrics", payload)["stored"] == 2
+
+
 def test_snake_case_fields_are_understood(conn: Any) -> None:
     """OTLP/JSON разрешает и оригинальные имена полей protobuf."""
     payload = {
