@@ -115,8 +115,10 @@ def recent_sessions(conn: sqlite3.Connection, limit: int = 20) -> list[sqlite3.R
 
 # --- обзор (задача A5) -------------------------------------------------------
 
-#: Окна, в которых считается burn rate, минуты (ТЗ §4).
-BURN_WINDOWS = (1, 5, 60)
+#: Окна burn rate в секундах. Десятисекундное — «что происходит прямо сейчас»:
+#: ход добавляет в окно сотни тысяч токенов разом, и в минутном усреднении это
+#: видно как ступенька длиной в минуту (ТЗ §4).
+BURN_WINDOWS = (10, 60, 300, 3600)
 
 #: Формат времени в транскриптах: UTC с Z. Строковое сравнение здесь корректно
 #: и позволяет фильтровать по времени прямо в SQL, без разбора дат.
@@ -157,17 +159,24 @@ def window_usage(conn: sqlite3.Connection, since: datetime, until: datetime | No
     return usage
 
 
+def window_key(seconds: int) -> str:
+    """Ключ окна в ответе API: 10s, 1m, 5m, 60m."""
+    return f"{seconds}s" if seconds < 60 else f"{seconds // 60}m"
+
+
 def burn_rates(conn: sqlite3.Connection, now: datetime) -> dict[str, dict]:
-    """Burn rate по окнам ТЗ §4 — в токенах в минуту."""
+    """Burn rate по окнам ТЗ §4 — всегда в токенах в минуту, окна разной длины."""
     rates: dict[str, dict] = {}
-    for minutes in BURN_WINDOWS:
-        usage = window_usage(conn, now - timedelta(minutes=minutes))
-        rates[f"{minutes}m"] = {
+    for seconds in BURN_WINDOWS:
+        usage = window_usage(conn, now - timedelta(seconds=seconds))
+        minutes = seconds / 60
+        rates[window_key(seconds)] = {
             "tokens_per_min": usage["tokens"] / minutes,
             "output_per_min": usage["output_tokens"] / minutes,
-            "cost_per_hour": usage["cost_usd"] * 60 / minutes,  # цены — задача B1
+            "cost_per_hour": usage["cost_usd"] / minutes * 60,  # цены — задача B1
             "turns": usage["turns"],
             "sessions": usage["sessions"],
+            "window_seconds": seconds,
         }
     return rates
 
@@ -239,5 +248,102 @@ def overview(conn: sqlite3.Connection, now: datetime | None = None) -> dict:
         "today": window_usage(conn, day_start),
         "live_sessions": live_sessions(conn, moment),
         "top_sessions": top_sessions(conn, day_start),
+        "recent_turns": recent_turns(conn),
+        "series": burn_series(conn, moment),
+        "pending_sessions": pending_sessions(conn, moment),
+        "series_bucket_seconds": SERIES_BUCKET_SECONDS,
         "totals": dict(totals),
     }
+
+
+def recent_turns(conn: sqlite3.Connection, limit: int = 25) -> list[dict]:
+    """Лента последних ходов с инструментами, которые в них вызывались."""
+    return [
+        dict(row)
+        for row in conn.execute(
+            """
+            SELECT t.message_id, t.session_id, t.ts, t.model, t.output_tokens,
+                   t.input_tokens, t.cache_read, t.is_sidechain,
+                   t.cache_write_5m + t.cache_write_1h AS cache_write,
+                   t.context_estimate, p.slug AS project,
+                   (SELECT GROUP_CONCAT(c.tool, ' ') FROM tool_calls AS c
+                     WHERE c.turn_id = t.id) AS tools
+              FROM turns AS t
+              LEFT JOIN sessions AS s ON s.id = t.session_id
+              LEFT JOIN projects AS p ON p.id = s.project_id
+             ORDER BY t.ts DESC, t.id DESC LIMIT ?
+            """,
+            (limit,),
+        )
+    ]
+
+
+#: Шаг самописца. Мельче нет смысла: Claude Code дописывает транскрипт
+#: порциями раз в 2–6 секунд, а расход хода известен только по его завершении.
+SERIES_BUCKET_SECONDS = 5
+SERIES_SPAN_MINUTES = 5
+
+
+def burn_series(
+    conn: sqlite3.Connection,
+    now: datetime,
+    *,
+    bucket_seconds: int = SERIES_BUCKET_SECONDS,
+    span_minutes: int = SERIES_SPAN_MINUTES,
+) -> list[dict]:
+    """Расход по корзинам времени — лента самописца за последние минуты.
+
+    Пустые корзины заполняются нулями: без них провал в работе выглядел бы
+    как непрерывная нагрузка, только с редкими точками.
+    """
+    start = now - timedelta(minutes=span_minutes)
+    edge = int(start.timestamp()) // bucket_seconds * bucket_seconds
+    last = int(now.timestamp()) // bucket_seconds * bucket_seconds
+    filled = {
+        int(row["bucket"]): row
+        for row in conn.execute(
+            """
+            SELECT CAST(strftime('%s', ts) AS INTEGER) / :step * :step AS bucket,
+                   COUNT(*)                                            AS turns,
+                   SUM(output_tokens)                                  AS output_tokens,
+                   SUM(input_tokens + output_tokens + cache_read
+                       + cache_write_5m + cache_write_1h)              AS tokens
+              FROM turns
+             WHERE ts >= :since
+             GROUP BY bucket
+            """,
+            {"step": bucket_seconds, "since": _utc_stamp(start)},
+        )
+    }
+    series: list[dict] = []
+    for bucket in range(edge, last + bucket_seconds, bucket_seconds):
+        row = filled.get(bucket)
+        series.append(
+            {
+                "at": datetime.fromtimestamp(bucket, UTC).isoformat(),
+                "turns": row["turns"] if row else 0,
+                "tokens": row["tokens"] if row else 0,
+                "output_tokens": row["output_tokens"] if row else 0,
+            }
+        )
+    return series
+
+
+def pending_sessions(conn: sqlite3.Connection, now: datetime, minutes: int = 10) -> list[str]:
+    """Сессии, где запрос уже отправлен, а ответ ещё не дописан (ТЗ §4).
+
+    Признак — последняя запись сессии не ход ассистента: промпт или результат
+    инструмента лежит без ответа. Токены такого запроса ещё неизвестны: они
+    появятся в транскрипте только вместе с завершённым ходом.
+    """
+    return [
+        str(row["id"])
+        for row in conn.execute(
+            """
+            SELECT id FROM sessions
+             WHERE last_record_kind IN ('prompt', 'tool_result')
+               AND last_record_at >= ?
+            """,
+            (_utc_stamp(now - timedelta(minutes=minutes)),),
+        )
+    ]

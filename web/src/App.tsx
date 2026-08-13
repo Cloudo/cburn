@@ -3,8 +3,19 @@ import { Gauge, OutputMeter, Recorder, type Slice } from "./Gauge";
 import { agoLabel, clockTime, compact, grouped, modelLabel } from "./format";
 import { useOverview, type Overview, type Turn } from "./api";
 
-const WINDOWS = ["1m", "5m", "60m"] as const;
-const WINDOW_LABEL: Record<string, string> = { "1m": "минута", "5m": "5 минут", "60m": "час" };
+const WINDOWS = ["10s", "1m", "5m", "60m"] as const;
+const WINDOW_LABEL: Record<string, string> = {
+  "10s": "10 секунд",
+  "1m": "минута",
+  "5m": "5 минут",
+  "60m": "час",
+};
+const WINDOW_CAPTION: Record<string, string> = {
+  "10s": "за последние 10 секунд",
+  "1m": "за последнюю минуту",
+  "5m": "за последние 5 минут",
+  "60m": "за последний час",
+};
 
 const COLORS = {
   cacheRead: "#4d7fa3",
@@ -87,7 +98,7 @@ export default function App() {
           <Gauge
             value={burn.tokens_per_min}
             slices={slices}
-            caption={`за последн${window === "1m" ? "юю минуту" : window === "5m" ? "ие 5 минут" : "ий час"}`}
+            caption={WINDOW_CAPTION[window]}
           />
 
           <ul className="legend">

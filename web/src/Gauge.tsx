@@ -7,7 +7,7 @@
 
 import { useState, type MouseEvent } from "react";
 
-import { compact, grouped } from "./format";
+import { compact, grouped, useSmoothNumber } from "./format";
 
 export type Slice = { key: string; label: string; value: number; color: string };
 
@@ -57,10 +57,9 @@ export function scalePosition(value: number): number {
 type Props = { value: number; slices: Slice[]; caption: string };
 
 export function Gauge({ value, slices, caption }: Props) {
-  const position = scalePosition(value);
+  const smooth = useSmoothNumber(value);
+  const position = scalePosition(smooth);
   const total = slices.reduce((sum, slice) => sum + slice.value, 0);
-  const needle = polar(R_SCALE - 18, position);
-  const tail = polar(-16, position);
 
   let cursor = 0;
   const segments = slices.map((slice) => {
@@ -104,19 +103,25 @@ export function Gauge({ value, slices, caption }: Props) {
           );
         })}
 
+        {/* Стрелка рисуется влево (положение нуля) и поворачивается: CSS-переход
+            работает с transform, а атрибуты x1/y1/x2/y2 линии он не анимирует —
+            от них стрелка прыгала. */}
         <line
           className="gauge-needle"
-          x1={tail.x}
-          y1={tail.y}
-          x2={needle.x}
-          y2={needle.y}
-          style={{ transformOrigin: `${CX}px ${CY}px` }}
+          x1={CX + 16}
+          y1={CY}
+          x2={CX - (R_SCALE - 18)}
+          y2={CY}
+          style={{
+            transform: `rotate(${position * 180}deg)`,
+            transformOrigin: `${CX}px ${CY}px`,
+          }}
         />
         <circle className="gauge-hub" cx={CX} cy={CY} r={9} />
       </svg>
 
       <figcaption>
-        <strong className="gauge-value">{compact(value)}</strong>
+        <strong className="gauge-value">{compact(smooth)}</strong>
         <span className="gauge-unit">токенов в минуту</span>
         <span className="gauge-caption">{caption}</span>
       </figcaption>
@@ -126,14 +131,15 @@ export function Gauge({ value, slices, caption }: Props) {
 
 /** Линейная шкала выходных токенов: их немного, и логарифм тут только мешает. */
 export function OutputMeter({ value, peak }: { value: number; peak: number }) {
+  const smooth = useSmoothNumber(value);
   const ceiling = Math.max(peak, 1000);
-  const share = Math.min(value / ceiling, 1);
+  const share = Math.min(smooth / ceiling, 1);
   return (
     <div className="meter">
       <div className="meter-head">
         <span className="meter-label">выход модели</span>
         <span className="meter-value">
-          {compact(value)} <span className="meter-unit">ток/мин</span>
+          {compact(smooth)} <span className="meter-unit">ток/мин</span>
         </span>
       </div>
       <div className="meter-track">

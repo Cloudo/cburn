@@ -36,6 +36,10 @@ CREATE TABLE IF NOT EXISTS sessions (
     cache_write       INTEGER NOT NULL DEFAULT 0,
     cost_usd          REAL NOT NULL DEFAULT 0,
     last_context      INTEGER NOT NULL DEFAULT 0,  -- context_estimate последнего хода
+    -- Чем заканчивается сессия на последней прочитанной записи: prompt или
+    -- tool_result без ответа означают, что запрос сейчас выполняется.
+    last_record_kind  TEXT,
+    last_record_at    TEXT,
     is_live           INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id, last_at);

@@ -512,3 +512,53 @@ def test_empty_resume_copy_does_not_erase_usage(conn: sqlite3.Connection, tmp_pa
     ingest_file(conn, copy)
 
     assert rows(conn, "SELECT output_tokens FROM turns")[0]["output_tokens"] == 100
+
+
+# --- чем закончилась сессия --------------------------------------------------
+
+
+def test_pending_state_after_prompt(conn: sqlite3.Connection, tmp_path: Path) -> None:
+    """Промпт без ответа означает, что запрос сейчас выполняется."""
+    path = tmp_path / "proj" / "s1.jsonl"
+    write_transcript(path, [assistant("msg_1"), prompt("новый вопрос", ts="2026-08-13T11:00:00Z")])
+    ingest_file(conn, path)
+
+    session = rows(conn, "SELECT * FROM sessions")[0]
+    assert session["last_record_kind"] == "prompt"
+    assert session["last_record_at"] == "2026-08-13T11:00:00Z"
+
+
+def test_pending_state_clears_after_answer(conn: sqlite3.Connection, tmp_path: Path) -> None:
+    path = tmp_path / "proj" / "s1.jsonl"
+    write_transcript(path, [prompt("вопрос", ts="2026-08-13T11:00:00Z")])
+    ingest_file(conn, path)
+    assert rows(conn, "SELECT last_record_kind FROM sessions")[0]["last_record_kind"] == "prompt"
+
+    with path.open("a") as fh:
+        fh.write(assistant("msg_1", ts="2026-08-13T11:00:20Z") + "\n")
+    ingest_file(conn, path)
+
+    session = rows(conn, "SELECT * FROM sessions")[0]
+    assert session["last_record_kind"] == "assistant"
+    assert session["last_record_at"] == "2026-08-13T11:00:20Z"
+
+
+def test_service_records_do_not_clear_pending(conn: sqlite3.Connection, tmp_path: Path) -> None:
+    """Между промптом и ответом пишутся attachment и прочая служебка."""
+    path = tmp_path / "proj" / "s1.jsonl"
+    write_transcript(
+        path,
+        [
+            prompt("вопрос", ts="2026-08-13T11:00:00Z"),
+            json.dumps(
+                {
+                    "type": "attachment",
+                    "sessionId": "s1",
+                    "uuid": "a1",
+                    "timestamp": "2026-08-13T11:00:05Z",
+                }
+            ),
+        ],
+    )
+    ingest_file(conn, path)
+    assert rows(conn, "SELECT last_record_kind FROM sessions")[0]["last_record_kind"] == "prompt"

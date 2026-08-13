@@ -68,6 +68,8 @@ class _Session:
     last_at: str | None = None
     first_prompt: str | None = None
     cwd: str | None = None
+    last_record_kind: str | None = None  # чем сессия заканчивается на этой записи
+    last_record_at: str | None = None
 
 
 def ingest_file(conn: sqlite3.Connection, path: Path) -> IngestStats:
@@ -199,6 +201,13 @@ def _touch_session(sessions: dict[str, _Session], record: ParsedRecord) -> None:
         session.started_at = record.ts
     if session.last_at is None or record.ts > session.last_at:
         session.last_at = record.ts
+    # Служебные записи (attachment и прочие) на «чем закончилась сессия» не
+    # влияют: между промптом и ответом их пишется сколько угодно.
+    if record.kind is not RecordKind.UNKNOWN and (
+        session.last_record_at is None or record.ts >= session.last_record_at
+    ):
+        session.last_record_kind = record.kind.value
+        session.last_record_at = record.ts
     session.cwd = session.cwd or record.cwd
     # Подпись сессии — первый настоящий промпт человека: ни сабагент,
     # ни пересказ автосуммаризации на эту роль не годятся.
@@ -238,14 +247,20 @@ def _upsert_sessions(
 ) -> None:
     conn.executemany(
         """
-        INSERT INTO sessions (id, project_id, started_at, last_at, first_prompt)
-        VALUES (:id, :project_id, :started_at, :last_at, :first_prompt)
+        INSERT INTO sessions (id, project_id, started_at, last_at, first_prompt,
+                              last_record_kind, last_record_at)
+        VALUES (:id, :project_id, :started_at, :last_at, :first_prompt,
+                :last_record_kind, :last_record_at)
         ON CONFLICT(id) DO UPDATE SET
             project_id   = COALESCE(sessions.project_id, excluded.project_id),
             started_at   = MIN(COALESCE(sessions.started_at, excluded.started_at),
                                excluded.started_at),
             last_at      = MAX(COALESCE(sessions.last_at, excluded.last_at), excluded.last_at),
-            first_prompt = COALESCE(sessions.first_prompt, excluded.first_prompt)
+            first_prompt = COALESCE(sessions.first_prompt, excluded.first_prompt),
+            last_record_kind = CASE
+                WHEN excluded.last_record_at >= COALESCE(sessions.last_record_at, '')
+                THEN excluded.last_record_kind ELSE sessions.last_record_kind END,
+            last_record_at = MAX(COALESCE(sessions.last_record_at, ''), excluded.last_record_at)
         """,
         [
             {
@@ -254,6 +269,8 @@ def _upsert_sessions(
                 "started_at": session.started_at,
                 "last_at": session.last_at,
                 "first_prompt": session.first_prompt,
+                "last_record_kind": session.last_record_kind,
+                "last_record_at": session.last_record_at,
             }
             for session in sessions.values()
         ],

@@ -113,6 +113,7 @@ def test_overview_counts_recent_turns(transcripts: Path, db_path: Path) -> None:
         data = api.get("/api/overview").json()
 
     assert data["totals"]["turns"] == 3
+    assert data["burn"]["10s"]["turns"] == 0  # оба хода старше десяти секунд
     assert data["burn"]["1m"]["turns"] == 2  # ход пятичасовой давности не в окне
     assert data["burn"]["1m"]["tokens_per_min"] == pytest.approx(2 * 2 + 300 + 2000 + 100)
     assert data["burn"]["60m"]["turns"] == 2
@@ -144,6 +145,7 @@ def test_burn_rate_is_per_minute(transcripts: Path, db_path: Path) -> None:
     assert burn["1m"]["turns"] == 0
     assert burn["5m"]["output_per_min"] == pytest.approx(100)
     assert burn["60m"]["output_per_min"] == pytest.approx(500 / 60)
+    assert burn["5m"]["window_seconds"] == 300
 
 
 # --- сессии ------------------------------------------------------------------
@@ -341,3 +343,20 @@ def test_ws_pushes_without_new_turns(transcripts: Path, db_path: Path) -> None:
 
     assert message["type"] == "overview"
     assert elapsed < server.TICK_SECONDS * 2
+
+
+def test_ten_second_window_reacts_immediately(transcripts: Path, db_path: Path) -> None:
+    """Короткое окно показывает, что происходит прямо сейчас, а не в среднем."""
+    now = datetime.now(UTC)
+    seed(
+        transcripts,
+        db_path,
+        [assistant("msg_1", ts=now - timedelta(seconds=3), output=60, cache_read=0)],
+    )
+    with client(db_path, transcripts) as api:
+        burn = api.get("/api/overview").json()["burn"]
+
+    assert burn["10s"]["window_seconds"] == 10
+    # Шесть секунд работы в десятисекундном окне — это 360 токенов в минуту.
+    assert burn["10s"]["output_per_min"] == pytest.approx(360)
+    assert burn["1m"]["output_per_min"] == pytest.approx(60)
