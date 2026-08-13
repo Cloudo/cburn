@@ -45,7 +45,10 @@ CREATE TABLE IF NOT EXISTS sessions (
     last_record_kind  TEXT,
     last_record_at    TEXT,
     last_stop_reason  TEXT,              -- stop_reason последнего хода: end_turn | tool_use | …
-    is_live           INTEGER  -- 1 живёт, 0 процесса нет, NULL не спрашивали (B4)
+    is_live           INTEGER,  -- 1 живёт, 0 процесса нет, NULL не спрашивали (B4)
+    -- Момент запуска самого молодого потомка процесса сессии: по нему
+    -- видно, гоняется инструмент или висит запрос разрешения.
+    busy_since        TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id, last_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_parent  ON sessions(parent_session_id);

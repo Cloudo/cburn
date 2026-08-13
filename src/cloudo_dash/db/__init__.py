@@ -29,7 +29,7 @@ def connect(db_path: Path | None = None, *, apply_schema: bool = True) -> sqlite
 
 #: Колонки, добавленные в уже существующие таблицы. `CREATE TABLE IF NOT EXISTS`
 #: старую таблицу не трогает, а пересоздавать базу из-за одной колонки незачем.
-ADDED_COLUMNS = {"raw_events": {"version": "TEXT"}}
+ADDED_COLUMNS = {"raw_events": {"version": "TEXT"}, "sessions": {"busy_since": "TEXT"}}
 
 
 def _fill_project_names(conn: sqlite3.Connection) -> None:

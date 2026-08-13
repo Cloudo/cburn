@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -271,7 +272,7 @@ def sessions_page(
             SELECT s.id, COALESCE(p.display_name, p.slug) AS project, p.root_path,
                    s.title, s.first_prompt, s.last_prompt, s.started_at, s.last_at,
                    s.turns, s.tokens_out, s.cache_read, s.cache_write, s.cost_usd,
-                   s.last_context, s.parent_session_id, s.is_live,
+                   s.last_context, s.parent_session_id, s.is_live, s.busy_since,
                    s.last_record_kind, s.last_record_at, s.last_stop_reason,
                    (SELECT COUNT(*) FROM sessions AS child
                      WHERE child.parent_session_id = s.id)             AS children,
@@ -434,9 +435,13 @@ LIVE_WINDOW_SECONDS = 3600
 #: После этой паузы сессия перестаёт быть «сейчас» и уходит в простой.
 IDLE_AFTER_SECONDS = 120
 
-#: Столько ждём ответа инструмента, прежде чем решить, что висит запрос
-#: разрешения: обычный инструмент отвечает быстрее.
+#: Столько ждём ответа инструмента, прежде чем смотреть на процессы: до этого
+#: любой инструмент считается работающим, разрешение так быстро не спрашивают.
 PERMISSION_AFTER_SECONDS = 25
+
+#: Насколько потомок может оказаться старше записи о запросе инструмента:
+#: транскрипт дописывается порциями раз в 2-6 с и отстаёт от запуска процесса.
+CHILD_LAG_SECONDS = 10
 
 #: Статусы сессии — по тому, кого она в этот момент ждёт.
 STATUS_WORKING = "working"  # ход не завершён: модель думает или гоняет инструменты
@@ -451,8 +456,9 @@ def session_status(row: dict, now: datetime) -> str:
 
     Ход не завершён — работает модель: и когда она думает над промптом, и когда
     крутит инструменты. Завершённый ход означает обратное: ждут человека.
-    Отдельный случай — инструмент запрошен, а результата нет: почти всегда это
-    висящий запрос разрешения.
+    Отдельный случай — инструмент запрошен, а результата нет: это либо долгий
+    инструмент, либо висящий запрос разрешения, и в транскрипте они выглядят
+    одинаково. Разводит их `_tool_is_running` — по процессам.
 
     Тишина сама по себе не отличает паузу от конца работы: транскрипт не знает,
     что сессия закрылась. Это знает `is_live` — флаг ставится по списку
@@ -464,9 +470,9 @@ def session_status(row: dict, now: datetime) -> str:
     kind = row.get("last_record_kind")
 
     if kind == "assistant" and row.get("last_stop_reason") == "tool_use":
-        if quiet >= PERMISSION_AFTER_SECONDS:
-            return STATUS_PERMISSION
-        return STATUS_WORKING
+        if quiet < PERMISSION_AFTER_SECONDS or _tool_is_running(row):
+            return STATUS_WORKING
+        return STATUS_PERMISSION
     if quiet >= IDLE_AFTER_SECONDS:
         return STATUS_DONE if row.get("is_live") == 0 else STATUS_IDLE
     if kind in {"prompt", "tool_result"}:
@@ -474,10 +480,33 @@ def session_status(row: dict, now: datetime) -> str:
     return STATUS_ANSWERED
 
 
-def _seconds_since(stamp: str | None, now: datetime) -> float:
+def _tool_is_running(row: dict) -> bool:
+    """Гоняет ли сессия инструмент прямо сейчас — по процессам (задача B4).
+
+    Признак работы — потомок процесса сессии, запущенный не раньше запроса
+    инструмента. Постоянные потомки (MCP-серверы) и фоновые команды стартовали
+    раньше и не в счёт, поэтому сравнение по времени, а не «есть потомки».
+    Пока процессы не опрашивали (`is_live IS NULL`), признака нет — тогда
+    остаётся прежняя догадка про висящее разрешение.
+    """
+    if row.get("is_live") is None:
+        return False
+    started, asked = _moment(row.get("busy_since")), _moment(row.get("last_record_at"))
+    if started is None or asked is None:
+        return False
+    return started >= asked - timedelta(seconds=CHILD_LAG_SECONDS)
+
+
+def _moment(stamp: str | None) -> datetime | None:
     if not stamp:
+        return None
+    return datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+
+
+def _seconds_since(stamp: str | None, now: datetime) -> float:
+    moment = _moment(stamp)
+    if moment is None:
         return float("inf")
-    moment = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
     return (now - moment).total_seconds()
 
 
@@ -499,7 +528,7 @@ def live_sessions(
                    s.last_at, s.started_at,
                    s.turns, s.tokens_out, s.last_context, s.first_prompt, s.last_prompt,
                    s.title, s.title_source, s.last_record_kind, s.last_record_at,
-                   s.last_stop_reason, s.is_live,
+                   s.last_stop_reason, s.is_live, s.busy_since,
                    (SELECT COALESCE(SUM(t.output_tokens), 0) FROM turns AS t
                      WHERE t.session_id = s.id AND t.ts >= ?) AS output_recent
               FROM sessions AS s
@@ -558,23 +587,35 @@ def session_chain(conn: sqlite3.Connection, session_id: str) -> dict:
     }
 
 
-def refresh_liveness(conn: sqlite3.Connection, active_ids: set[str] | None) -> int:
-    """Проставить `is_live` по списку живых сессий Claude Code (задача B4).
+def refresh_liveness(conn: sqlite3.Connection, active: Mapping[str, datetime | None] | None) -> int:
+    """Проставить `is_live` и `busy_since` по живым сессиям Claude Code (задача B4).
 
-    `active_ids=None` означает «спросить не удалось» — тогда флаги остаются
-    как были: лучше устаревшая живость, чем ложное «закончилась» на всех.
+    `active=None` означает «спросить не удалось» — тогда флаги остаются как
+    были: лучше устаревшая живость, чем ложное «закончилась» на всех. Значение
+    сессии — момент запуска её самого молодого потомка (см. `processes`).
     Возвращает число изменённых строк.
     """
-    if active_ids is None:
+    if active is None:
         return 0
-    ids = tuple(active_ids)
-    live = f"id IN ({','.join('?' * len(ids))})" if ids else "0"
+    ids = tuple(active)
+    holes = ",".join("?" * len(ids))
+    changed = 0
     with conn:
-        cursor = conn.execute(
-            f"UPDATE sessions SET is_live = ({live}) WHERE is_live IS NOT ({live})",  # noqa: S608
-            ids * 2,
-        )
-    return cursor.rowcount
+        # Умершие: живость гаснет вместе с занятостью — процесса нет.
+        changed += conn.execute(
+            f"UPDATE sessions SET is_live = 0, busy_since = NULL"  # noqa: S608
+            f" WHERE (is_live IS NOT 0 OR busy_since IS NOT NULL)"
+            f"{f' AND id NOT IN ({holes})' if ids else ''}",
+            ids,
+        ).rowcount
+        for session_id, started in active.items():
+            stamp = _utc_stamp(started) if started else None
+            changed += conn.execute(
+                "UPDATE sessions SET is_live = 1, busy_since = :stamp"
+                " WHERE id = :id AND (is_live IS NOT 1 OR busy_since IS NOT :stamp)",
+                {"id": session_id, "stamp": stamp},
+            ).rowcount
+    return changed
 
 
 def top_sessions(conn: sqlite3.Connection, since: datetime, limit: int = 5) -> list[dict]:

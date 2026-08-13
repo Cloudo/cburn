@@ -123,7 +123,7 @@ def client(
     *,
     watch: bool = False,
     limits: object | None = None,
-    liveness: Callable[[], set[str] | None] = lambda: None,
+    liveness: Callable[[], dict[str, datetime | None] | None] = lambda: None,
 ) -> TestClient:
     """Тестовое приложение. По умолчанию живость «неизвестна»: тесты не должны
     запускать `claude agents --json`."""
@@ -569,6 +569,47 @@ def test_session_statuses(transcripts: Path, db_path: Path) -> None:
     assert data["pending_sessions"] == ["working"]
 
 
+def test_long_tool_is_working_not_permission(transcripts: Path, db_path: Path) -> None:
+    """Долгий инструмент - не висящее разрешение: у процесса есть свежий потомок.
+
+    В транскрипте оба случая выглядят одинаково (запрос инструмента без
+    ответа), разводит их только процесс: прогон тестов запускает потомка, а на
+    вопросе «разрешить?» процесс простаивает.
+    """
+    now = datetime.now(UTC)
+    tool_use = [{"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "ls"}}]
+    asked = now - timedelta(seconds=90)
+    lines = [
+        assistant(
+            "msg_a",
+            session=session,
+            uuid=f"u-{session}",
+            ts=asked,
+            content=tool_use,
+            stop_reason="tool_use",
+        )
+        for session in ("гоняет", "спрашивает", "давний-потомок")
+    ]
+    seed(transcripts, db_path, lines)
+
+    def liveness() -> dict[str, datetime | None]:
+        return {
+            "гоняет": asked + timedelta(seconds=1),  # потомок запущен по запросу
+            "спрашивает": None,  # потомков нет — процесс ждёт человека
+            "давний-потомок": asked - timedelta(hours=1),  # MCP-сервер, не в счёт
+        }
+
+    with client(db_path, transcripts, liveness=liveness) as api:
+        data = api.get("/api/overview").json()
+
+    statuses = {row["id"]: row["status"] for row in data["live_sessions"]}
+    assert statuses == {
+        "гоняет": "working",
+        "спрашивает": "permission",
+        "давний-потомок": "permission",
+    }
+
+
 def test_finished_session_leaves_idle(transcripts: Path, db_path: Path) -> None:
     """Молчащая сессия без процесса — «закончилась», а не «простаивает» (B4)."""
     now = datetime.now(UTC)
@@ -581,7 +622,7 @@ def test_finished_session_leaves_idle(transcripts: Path, db_path: Path) -> None:
         ],
     )
 
-    with client(db_path, transcripts, liveness=lambda: {"жива"}) as api:
+    with client(db_path, transcripts, liveness=lambda: {"жива": None}) as api:
         data = api.get("/api/overview").json()
 
     statuses = {row["id"]: row["status"] for row in data["live_sessions"]}
@@ -618,7 +659,7 @@ def test_sessions_page_filters_and_sparkline(transcripts: Path, db_path: Path) -
         ],
     )
 
-    with client(db_path, transcripts, liveness=lambda: {"живая"}) as api:
+    with client(db_path, transcripts, liveness=lambda: {"живая": None}) as api:
         page = api.get("/api/sessions").json()
         only_done = api.get("/api/sessions?status=done").json()
         nothing = api.get("/api/sessions?project=нетакого").json()

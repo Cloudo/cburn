@@ -5,6 +5,13 @@
 не найти — его нет ни в аргументах, ни в открытых дескрипторах: транскрипт
 дописывается и сразу закрывается.
 
+Про занятость. Отличить работающий инструмент от висящего запроса разрешения
+по транскрипту нельзя: и там, и там последняя запись - запрос инструмента без
+ответа. Разница видна в процессах: долгий Bash - это живой потомок процесса
+сессии, а на вопросе "разрешить?" процесс просто ждёт человека. Постоянные
+потомки (MCP-серверы) стартуют вместе с сессией, поэтому смотрим на самого
+молодого: относится он к текущему запросу или нет, решает `metrics`.
+
 Про завершение. Своего обработчика сигналов у Claude Code нет: зарегистри-
 рованные `SIGINT`/`SIGHUP`/`SIGTERM` вызывают немедленный `process.exit()`,
 тогда как хуки `SessionEnd` выполняются асинхронно на штатном выходе (`/exit`,
@@ -21,7 +28,9 @@ import os
 import signal
 import subprocess
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 log = logging.getLogger(__name__)
 
@@ -57,14 +66,65 @@ def active_sessions(*, use_cache: bool = False) -> list[ClaudeSession]:
     return _ask(use_cache=use_cache) or []
 
 
-def active_session_ids(*, use_cache: bool = True) -> set[str] | None:
-    """Идентификаторы живых сессий; None — спросить не удалось.
+def live_state(*, use_cache: bool = True) -> dict[str, datetime | None] | None:
+    """Живые сессии и момент запуска самого молодого потомка каждой.
 
-    Отличать одно от другого обязательно: молчащий `claude` не повод объявить
-    все сессии завершёнными.
+    None вместо словаря — спросить не удалось; отличать это от «сессий нет»
+    обязательно: молчащий `claude` не повод объявить все сессии завершёнными.
+    None у сессии — потомков нет, то есть процесс ничего не выполняет.
     """
     sessions = _ask(use_cache=use_cache)
-    return None if sessions is None else {session.session_id for session in sessions}
+    if sessions is None:
+        return None
+    starts = youngest_children({session.pid for session in sessions})
+    return {session.session_id: starts.get(session.pid) for session in sessions}
+
+
+def youngest_children(pids: Iterable[int]) -> dict[int, datetime]:
+    """Момент запуска самого позднего прямого потомка для каждого из `pids`.
+
+    Процессы без потомков в ответ не попадают. Возраст берётся у `ps` (`etime`),
+    а не время старта (`lstart`): формат `etime` не зависит от локали.
+    """
+    wanted = set(pids)
+    if not wanted:
+        return {}
+    now = datetime.now(UTC)
+    try:
+        result = subprocess.run(
+            ["ps", "-axo", "pid=,ppid=,etime="],
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        log.warning("не удалось получить список процессов: %s", exc)
+        return {}
+    starts: dict[int, datetime] = {}
+    for line in result.stdout.splitlines():
+        parts = line.split()
+        if len(parts) != 3 or not parts[1].isdigit():
+            continue
+        parent = int(parts[1])
+        age = _parse_etime(parts[2])
+        if parent not in wanted or age is None:
+            continue
+        started = now - age
+        if started > starts.get(parent, started - timedelta(seconds=1)):
+            starts[parent] = started
+    return starts
+
+
+def _parse_etime(value: str) -> timedelta | None:
+    """`[[dd-]hh:]mm:ss` из `ps` в длительность."""
+    days, _, clock = value.rpartition("-")
+    chunks = clock.split(":")
+    if not all(chunk.isdigit() for chunk in chunks) or not 2 <= len(chunks) <= 3:
+        return None
+    if days and not days.isdigit():
+        return None
+    hours, minutes, seconds = ([0] * (3 - len(chunks))) + [int(chunk) for chunk in chunks]
+    return timedelta(days=int(days or 0), hours=hours, minutes=minutes, seconds=seconds)
 
 
 def _ask(*, use_cache: bool) -> list[ClaudeSession] | None:

@@ -43,7 +43,7 @@ from ..metrics import (
     sessions_page,
     set_hidden,
 )
-from ..processes import active_session_ids, process_for_session, terminate
+from ..processes import live_state, process_for_session, terminate
 
 log = logging.getLogger(__name__)
 
@@ -53,9 +53,15 @@ log = logging.getLogger(__name__)
 #: секундный такт ничего не нагружает.
 TICK_SECONDS = 1.0
 
-#: Как часто сверять сессии со списком процессов Claude Code. Опрос стоит около
-#: 1,3 с, а сессии не появляются и не заканчиваются чаще (задача B4).
-LIVENESS_SECONDS = 15.0
+#: Как часто сверять сессии с процессами Claude Code. Чаще, чем появляются и
+#: заканчиваются сессии, потому что тем же проходом обновляется занятость —
+#: она меняется на каждой команде. Дорогой `claude agents --json` при этом
+#: кэшируется внутри `processes`, наружу каждый раз ходит только `ps`.
+LIVENESS_SECONDS = 5.0
+
+#: Опрос живости: живые сессии и момент запуска их самого молодого потомка.
+#: None — спросить не удалось (см. `processes.live_state`).
+LivenessProbe = Callable[[], dict[str, datetime | None] | None]
 
 #: Собранный фронт (задача A6). Пока его нет, отдаётся заглушка.
 WEB_DIST = Path(__file__).resolve().parents[3] / "web" / "dist"
@@ -97,7 +103,7 @@ def create_app(
     projects_dir: Path | None = None,
     watch: bool = True,
     limits: LimitsWatcher | None = None,
-    liveness: Callable[[], set[str] | None] | None = None,
+    liveness: LivenessProbe | None = None,
 ) -> FastAPI:
     """Собрать приложение.
 
@@ -303,11 +309,11 @@ def create_app(
     return app
 
 
-def _default_liveness() -> set[str] | None:
-    return active_session_ids(use_cache=False)
+def _default_liveness() -> dict[str, datetime | None] | None:
+    return live_state(use_cache=True)
 
 
-async def _refresh_liveness(open_db: Any, probe: Callable[[], set[str] | None]) -> None:
+async def _refresh_liveness(open_db: Any, probe: LivenessProbe) -> None:
     """Один проход сверки `is_live` со списком процессов Claude Code (задача B4).
 
     Опрос синхронный и не быстрый (около 1,3 с), поэтому уходит в поток: цикл
@@ -328,7 +334,7 @@ async def _refresh_liveness(open_db: Any, probe: Callable[[], set[str] | None]) 
         log.exception("не удалось обновить живость сессий")
 
 
-async def _liveness(open_db: Any, probe: Callable[[], set[str] | None]) -> None:
+async def _liveness(open_db: Any, probe: LivenessProbe) -> None:
     """Периодическая сверка живости."""
     while True:
         await asyncio.sleep(LIVENESS_SECONDS)
