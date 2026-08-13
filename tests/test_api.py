@@ -324,7 +324,7 @@ def test_series_has_bucket_per_step(transcripts: Path, db_path: Path) -> None:
         db_path,
         [
             # Оба хода с одной меткой времени: иначе они попадают в соседние
-            # корзины, когда замер приходится на границу пятисекундного шага.
+            # корзины, когда замер приходится на границу шага.
             assistant("msg_1", ts=now - timedelta(seconds=8), output=100, cache_read=0),
             assistant("msg_2", uuid="u2", ts=now - timedelta(seconds=8), output=50, cache_read=0),
             assistant("msg_3", uuid="u3", ts=now - timedelta(minutes=2), output=10, cache_read=0),
@@ -334,12 +334,12 @@ def test_series_has_bucket_per_step(transcripts: Path, db_path: Path) -> None:
         data = api.get("/api/overview").json()
 
     series = data["series"]
-    assert data["series_bucket_seconds"] == 5
-    assert len(series) >= 5 * 12  # пять минут по пять секунд
+    assert data["series_bucket_seconds"] == 2
+    assert len(series) >= 5 * 30  # пять минут по две секунды
     assert sum(bucket["turns"] for bucket in series) == 3
     assert sum(bucket["output_tokens"] for bucket in series) == 160
     assert any(bucket["turns"] == 0 for bucket in series), "пустые корзины не заполнены"
-    # Соседние ходы попадают в одну корзину: шаг именно 5 секунд, а не секунда.
+    # Соседние ходы попадают в одну корзину: шаг именно 2 секунды, а не секунда.
     busiest = max(series, key=lambda bucket: bucket["turns"])
     assert busiest["turns"] == 2
 
