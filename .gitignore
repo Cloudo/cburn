@@ -20,6 +20,9 @@ cloudo-dash.db*
 node_modules/
 web/dist/
 
+# Артефакты браузерных проверок
+.playwright-mcp/
+
 # macOS / редакторы
 .DS_Store
 .idea/

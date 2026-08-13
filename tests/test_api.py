@@ -58,13 +58,13 @@ def assistant(
     )
 
 
-def prompt(text: str, *, session: str = "s1") -> str:
+def prompt(text: str, *, session: str = "s1", ts: datetime | None = None) -> str:
     return json.dumps(
         {
             "type": "user",
-            "uuid": f"p-{session}",
+            "uuid": f"p-{session}-{text[:6]}",
             "sessionId": session,
-            "timestamp": datetime.now(UTC).strftime(TS_FORMAT),
+            "timestamp": (ts or datetime.now(UTC)).astimezone(UTC).strftime(TS_FORMAT),
             "message": {"content": text},
         }
     )
@@ -179,7 +179,13 @@ def test_health(db_path: Path, transcripts: Path) -> None:
         assert api.get("/api/health").json()["ok"] is True
 
 
-def test_root_reports_missing_frontend(db_path: Path, transcripts: Path) -> None:
+def test_root_reports_missing_frontend(
+    db_path: Path, transcripts: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Пока фронт не собран, корень подсказывает, как это сделать."""
+    from cloudo_dash.api import server
+
+    monkeypatch.setattr(server, "WEB_DIST", tmp_path / "нет-сборки")
     with client(db_path, transcripts) as api:
         body = api.get("/").json()
     assert "/api/overview" in body["api"]
@@ -242,3 +248,96 @@ def test_watcher_stops_with_app(transcripts: Path, db_path: Path) -> None:
     time.sleep(0.3)
     after = {thread.name for thread in threading.enumerate()}
     assert "cdash-watcher" not in after - before
+
+
+def test_built_frontend_is_served(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Собранный фронт раздаётся статикой с того же порта, что и API."""
+    from cloudo_dash.api import server
+
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("<!doctype html><title>cloudo-dash</title>")
+    monkeypatch.setattr(server, "WEB_DIST", dist)
+
+    app = server.create_app(db_path=tmp_path / "api.db", watch=False)
+    with TestClient(app) as api:
+        page = api.get("/")
+        assert page.status_code == 200
+        assert "cloudo-dash" in page.text
+        assert api.get("/api/health").json()["ok"] is True  # API не перекрыт статикой
+
+
+# --- самописец и живые показания ---------------------------------------------
+
+
+def test_series_has_bucket_per_step(transcripts: Path, db_path: Path) -> None:
+    """Лента самописца — сплошная сетка корзин, включая пустые."""
+    now = datetime.now(UTC)
+    seed(
+        transcripts,
+        db_path,
+        [
+            assistant("msg_1", ts=now - timedelta(seconds=8), output=100, cache_read=0),
+            assistant("msg_2", uuid="u2", ts=now - timedelta(seconds=7), output=50, cache_read=0),
+            assistant("msg_3", uuid="u3", ts=now - timedelta(minutes=2), output=10, cache_read=0),
+        ],
+    )
+    with client(db_path, transcripts) as api:
+        data = api.get("/api/overview").json()
+
+    series = data["series"]
+    assert data["series_bucket_seconds"] == 5
+    assert len(series) >= 5 * 12  # пять минут по пять секунд
+    assert sum(bucket["turns"] for bucket in series) == 3
+    assert sum(bucket["output_tokens"] for bucket in series) == 160
+    assert any(bucket["turns"] == 0 for bucket in series), "пустые корзины не заполнены"
+    # Соседние ходы попадают в одну корзину: шаг именно 5 секунд, а не секунда.
+    busiest = max(series, key=lambda bucket: bucket["turns"])
+    assert busiest["turns"] == 2
+
+
+def test_pending_session_is_reported(transcripts: Path, db_path: Path) -> None:
+    """Промпт без ответа — признак того, что запрос сейчас выполняется."""
+    now = datetime.now(UTC)
+    seed(
+        transcripts,
+        db_path,
+        [
+            assistant("msg_1", ts=now - timedelta(seconds=30)),
+            prompt("новый вопрос", ts=now - timedelta(seconds=3)),
+        ],
+    )
+    with client(db_path, transcripts) as api:
+        assert api.get("/api/overview").json()["pending_sessions"] == ["s1"]
+
+
+def test_answered_session_is_not_pending(transcripts: Path, db_path: Path) -> None:
+    now = datetime.now(UTC)
+    seed(
+        transcripts,
+        db_path,
+        [
+            prompt("вопрос", ts=now - timedelta(seconds=20)),
+            assistant("msg_1", ts=now - timedelta(seconds=5)),
+        ],
+    )
+    with client(db_path, transcripts) as api:
+        assert api.get("/api/overview").json()["pending_sessions"] == []
+
+
+def test_ws_pushes_without_new_turns(transcripts: Path, db_path: Path) -> None:
+    """Тикер шлёт обзор и в тишине: окна burn rate скользят сами по себе."""
+    from cloudo_dash.api import server
+
+    seed(transcripts, db_path, [assistant("msg_1")])
+    with (
+        client(db_path, transcripts, watch=False) as api,
+        api.websocket_connect("/ws") as socket,
+    ):
+        socket.receive_json()  # кадр при подключении
+        started = time.monotonic()
+        message = socket.receive_json()  # кадр от тикера, файлов никто не трогал
+        elapsed = time.monotonic() - started
+
+    assert message["type"] == "overview"
+    assert elapsed < server.TICK_SECONDS * 2

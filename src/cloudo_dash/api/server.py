@@ -36,6 +36,11 @@ from ..metrics import (
 
 log = logging.getLogger(__name__)
 
+#: Как часто обзор уходит подписчикам, даже когда в транскриптах тихо. Без
+#: этого стрелка замирала бы на последнем ходе: окна burn rate скользят, и в
+#: паузе расход должен падать сам.
+TICK_SECONDS = 2.0
+
 #: Собранный фронт (задача A6). Пока его нет, отдаётся заглушка.
 WEB_DIST = Path(__file__).resolve().parents[3] / "web" / "dist"
 
@@ -97,15 +102,18 @@ def create_app(
             watcher = TranscriptWatcher(root, db_path=db_path, on_ingest=publish)
             watcher.start()
             pump = asyncio.create_task(_pump(events, hub, open_db))
+        # Тикер не зависит от watcher: окна burn rate скользят и без новых ходов.
+        ticker = asyncio.create_task(_ticker(hub, open_db))
         try:
             yield
         finally:
             if watcher is not None:
                 watcher.stop()
-            if pump is not None:
-                pump.cancel()
-                with suppress(asyncio.CancelledError):
-                    await pump
+            for task in (pump, ticker):
+                if task is not None:
+                    task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await task
 
     app = FastAPI(title="cloudo-dash", lifespan=lifespan)
 
@@ -170,22 +178,38 @@ def create_app(
     return app
 
 
+async def _ticker(hub: Hub, open_db: Any) -> None:
+    """Периодический обзор: показания прибора не должны застывать в паузах."""
+    while True:
+        await asyncio.sleep(TICK_SECONDS)
+        if hub.size == 0:  # некому показывать — незачем и считать
+            continue
+        payload = _collect(open_db)
+        if payload is not None:
+            await hub.broadcast({"type": "overview", "data": payload})
+
+
+def _collect(open_db: Any) -> dict[str, Any] | None:
+    conn = open_db()
+    try:
+        return overview(conn)
+    except Exception:
+        log.exception("не удалось собрать обзор")
+        return None
+    finally:
+        conn.close()
+
+
 async def _pump(events: asyncio.Queue[IngestStats], hub: Hub, open_db: Any) -> None:
     """Событие от watcher → свежий обзор всем подписчикам."""
     while True:
-        stats = await events.get()
+        await events.get()
         # Пачку событий подряд схлопываем: обзор всё равно считается целиком.
         while not events.empty():
-            stats = events.get_nowait()
-        conn = open_db()
-        try:
-            payload = overview(conn)
-        except Exception:
-            log.exception("не удалось собрать обзор после %s", stats.path)
-            continue
-        finally:
-            conn.close()
-        await hub.broadcast({"type": "overview", "data": payload})
+            events.get_nowait()
+        payload = _collect(open_db)
+        if payload is not None:
+            await hub.broadcast({"type": "overview", "data": payload})
 
 
 def _mount_frontend(app: FastAPI) -> None:

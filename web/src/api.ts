@@ -1,0 +1,122 @@
+// Единственный канал к бэкенду: HTTP и WebSocket на localhost. Прямых обращений
+// к файловой системе у фронта нет — иначе обёртка Tauri на M5 потребовала бы
+// переделки (см. CLAUDE.md, инварианты).
+
+import { useEffect, useRef, useState } from "react";
+
+export type Usage = {
+  turns: number;
+  sessions: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read: number;
+  cache_write_5m: number;
+  cache_write_1h: number;
+  cache_write: number;
+  cost_usd: number;
+  tokens: number;
+};
+
+export type BurnRate = {
+  tokens_per_min: number;
+  output_per_min: number;
+  cost_per_hour: number;
+  turns: number;
+  sessions: number;
+};
+
+export type LiveSession = {
+  id: string;
+  project: string | null;
+  last_at: string | null;
+  turns: number;
+  tokens_out: number;
+  last_context: number;
+  first_prompt: string | null;
+  output_recent: number;
+};
+
+export type Turn = {
+  message_id: string;
+  session_id: string;
+  ts: string;
+  model: string | null;
+  output_tokens: number;
+  input_tokens: number;
+  cache_read: number;
+  cache_write: number;
+  context_estimate: number;
+  is_sidechain: number;
+  project: string | null;
+  tools: string | null;
+};
+
+export type Bucket = { at: string; turns: number; tokens: number; output_tokens: number };
+
+export type Overview = {
+  now: string;
+  burn: Record<string, BurnRate>;
+  today: Usage;
+  live_sessions: LiveSession[];
+  top_sessions: Array<{
+    id: string;
+    project: string | null;
+    turns: number;
+    tokens: number;
+    output_tokens: number;
+    last_context: number;
+    first_prompt: string | null;
+  }>;
+  totals: { sessions: number; turns: number; projects: number; last_turn_at: string | null };
+  recent_turns: Turn[];
+  series: Bucket[];
+  series_bucket_seconds: number;
+  pending_sessions: string[];
+};
+
+export type Connection = "connecting" | "live" | "offline";
+
+const RECONNECT_DELAY = 2000;
+
+/** Обзор, который сам себя обновляет: первый кадр и пуши приходят по WebSocket. */
+export function useOverview(): { data: Overview | null; connection: Connection; updatedAt: number } {
+  const [data, setData] = useState<Overview | null>(null);
+  const [connection, setConnection] = useState<Connection>("connecting");
+  const [updatedAt, setUpdatedAt] = useState(0);
+  const timer = useRef<number>(0);
+
+  useEffect(() => {
+    let socket: WebSocket | null = null;
+    let stopped = false;
+
+    const open = () => {
+      if (stopped) return;
+      const url = new URL("ws", window.location.href);
+      url.protocol = url.protocol.replace("http", "ws");
+      socket = new WebSocket(url);
+
+      socket.onopen = () => setConnection("live");
+      socket.onmessage = (event) => {
+        const message = JSON.parse(event.data);
+        if (message.type === "overview") {
+          setData(message.data);
+          setUpdatedAt(Date.now());
+        }
+      };
+      socket.onclose = () => {
+        setConnection("offline");
+        if (!stopped) timer.current = window.setTimeout(open, RECONNECT_DELAY);
+      };
+      socket.onerror = () => socket?.close();
+    };
+
+    open();
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer.current);
+      socket?.close();
+    };
+  }, []);
+
+  return { data, connection, updatedAt };
+}
