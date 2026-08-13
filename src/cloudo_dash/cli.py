@@ -1,6 +1,6 @@
 """CLI `cdash` (TZ §10).
 
-Реализовано: `paths`, `initdb`, `reindex`, `sessions`, `session`, `serve`.
+Реализовано: `paths`, `initdb`, `reindex`, `prices`, `sessions`, `session`, `serve`.
 Фильтры по проекту и периоду и команда `stats` — задача B7.
 """
 
@@ -9,7 +9,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from . import __version__, config, paths
+from . import __version__, config, paths, pricing
 from .collector.indexer import ingest_tree
 from .db import connect
 from .metrics import recent_sessions, session_models, session_summary, session_tools
@@ -32,6 +32,10 @@ def build_parser() -> argparse.ArgumentParser:
     session = sub.add_parser("session", help="детали одной сессии")
     session.add_argument("session_id", help="полный id или его начало")
     sub.add_parser("reindex", help="дочитать транскрипты в БД")
+    prices = sub.add_parser("prices", help="применить цены из конфига и пересчитать стоимость")
+    prices.add_argument(
+        "--init", action="store_true", help="записать в конфиг заготовку тарифов, если их нет"
+    )
     serve = sub.add_parser("serve", help="запустить API-сервер и дашборд")
     serve.add_argument("--port", type=int, help="порт (по умолчанию из конфига)")
     serve.add_argument("--host", default="127.0.0.1", help="только localhost, TZ §7")
@@ -63,6 +67,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "reindex":
         return _reindex()
+
+    if args.command == "prices":
+        return _prices(args.init)
 
     if args.command == "sessions":
         return _sessions(args.limit)
@@ -105,12 +112,41 @@ def _thousands(value: int) -> str:
 def _reindex() -> int:
     """Дочитать все транскрипты. Прогресс и батчи — задача B2."""
     with connect() as conn:
+        pricing.sync_prices(conn, config.load())
         results = ingest_tree(conn, paths.CLAUDE_PROJECTS_DIR)
     lines = sum(result.lines for result in results)
     turns = sum(result.turns_new for result in results)
     known = sum(result.turns_known for result in results)
     print(f"файлов: {len(results)}, прочитано строк: {_thousands(lines)}")
     print(f"новых ходов: {_thousands(turns)}, уже известных: {_thousands(known)}")
+    return 0
+
+
+def _prices(init: bool) -> int:
+    """Применить `[prices]` из конфига ко всей истории."""
+    cfg = config.load()
+    if init and not cfg["prices"]:
+        cfg["prices"] = pricing.sample_prices()
+        config.save(cfg)
+        print(f"заготовка тарифов записана в {paths.CONFIG_PATH} — проверьте цены")
+    with connect() as conn:
+        models = pricing.recalculate(conn, cfg)
+        rows = pricing.known_prices(conn)
+        unknown = pricing.unknown_models(conn)
+        total = conn.execute("SELECT COALESCE(SUM(cost_usd), 0) FROM turns").fetchone()[0]
+    if not models:
+        print("цен нет: заполните секцию [prices] в конфиге или запустите `cdash prices --init`")
+        return 1
+    print("модель                вход   выход   кэш 5m   кэш 1h   чтение  (за млн токенов)")
+    for row in rows:
+        print(
+            f"{row['model']:<20} {row['in_per_mtok']:>6.2f} {row['out_per_mtok']:>7.2f}"
+            f" {row['cache_write_per_mtok']:>8.2f} {row['cache_write_1h_per_mtok']:>8.2f}"
+            f" {row['cache_read_per_mtok']:>8.2f}"
+        )
+    for row in unknown:
+        print(f"без цены: {row['model']} ({_thousands(row['turns'])} ходов, считается нулём)")
+    print(f"вся история: ${total:,.2f}".replace(",", " "))
     return 0
 
 
@@ -175,6 +211,7 @@ def _session(prefix: str) -> int:
         f"кэш запись   : {_thousands(summary.cache_write)}"
         f" (5m {_thousands(summary.cache_write_5m)}, 1h {_thousands(summary.cache_write_1h)})"
     )
+    print(f"стоимость    : ${summary.cost_usd:,.2f}".replace(",", " "))
     print(f"контекст     : {_thousands(summary.last_context)} на последнем ходе")
     if models:
         parts = [f"{model} {turns} ходов / {_thousands(out)}" for model, turns, out in models]

@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .. import paths
+from ..pricing import apply_costs
 from .parser import ParsedRecord, RecordKind, Usage, parse_line
 
 log = logging.getLogger(__name__)
@@ -104,6 +105,7 @@ def ingest_file(conn: sqlite3.Connection, path: Path) -> IngestStats:
         project_id = _upsert_project(conn, path, sessions)
         _upsert_sessions(conn, sessions, project_id)
         _insert_turns(conn, turns, stats)
+        apply_costs(conn, turns.keys())
         _refresh_session_totals(conn, sessions.keys())
         _save_offset(
             conn, path, file_stat.st_ino, file_stat.st_size, new_offset, file_stat.st_mtime

@@ -1,0 +1,49 @@
+# Заготовка тарифов для `cdash prices --init`: копируется в
+# ~/.config/cloudo-dash/config.toml, оттуда и берётся расчёт. Сам файл в
+# подсчёте расхода не участвует.
+#
+# Снимок цен Claude API на 2026-08-13, доллары за миллион токенов.
+# Источник: https://platform.claude.com/docs/en/about-claude/pricing
+# Цены меняются — сверяйтесь с источником и правьте свой конфиг.
+
+[prices."claude-opus-5"]
+input = 5.0
+output = 25.0
+cache_write_5m = 6.25
+cache_write_1h = 10.0
+cache_read = 0.5
+
+[prices."claude-opus-4-8"]
+input = 5.0
+output = 25.0
+cache_write_5m = 6.25
+cache_write_1h = 10.0
+cache_read = 0.5
+
+[prices."claude-sonnet-5"]
+input = 2.0
+output = 10.0
+cache_write_5m = 2.5
+cache_write_1h = 4.0
+cache_read = 0.2
+
+[prices."claude-sonnet-4-6"]
+input = 3.0
+output = 15.0
+cache_write_5m = 3.75
+cache_write_1h = 6.0
+cache_read = 0.3
+
+[prices."claude-haiku-4-5"]
+input = 1.0
+output = 5.0
+cache_write_5m = 1.25
+cache_write_1h = 2.0
+cache_read = 0.1
+
+[prices."claude-fable-5"]
+input = 10.0
+output = 50.0
+cache_write_5m = 12.5
+cache_write_1h = 20.0
+cache_read = 1.0

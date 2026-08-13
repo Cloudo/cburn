@@ -29,6 +29,7 @@ class SessionSummary:
     cache_read: int
     cache_write_5m: int
     cache_write_1h: int
+    cost_usd: float
     last_context: int
 
     @property
@@ -52,6 +53,7 @@ def session_summary(conn: sqlite3.Connection, session_id: str) -> SessionSummary
                COALESCE(SUM(t.cache_read), 0)              AS cache_read,
                COALESCE(SUM(t.cache_write_5m), 0)          AS cache_write_5m,
                COALESCE(SUM(t.cache_write_1h), 0)          AS cache_write_1h,
+               COALESCE(SUM(t.cost_usd), 0)                AS cost_usd,
                s.last_context
           FROM sessions AS s
           LEFT JOIN projects AS p ON p.id = s.project_id

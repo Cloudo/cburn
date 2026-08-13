@@ -22,7 +22,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 
-from .. import paths
+from .. import config, paths, pricing
 from ..collector.indexer import IngestStats
 from ..collector.watcher import TranscriptWatcher
 from ..db import connect
@@ -101,7 +101,8 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        connect(db_path).close()  # схема должна существовать до первого запроса
+        with connect(db_path) as conn:  # схема должна существовать до первого запроса
+            pricing.recalculate(conn, config.load())
         loop = asyncio.get_running_loop()
         watcher: TranscriptWatcher | None = None
         pump: asyncio.Task[None] | None = None
