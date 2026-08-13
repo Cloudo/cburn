@@ -24,7 +24,7 @@ import hashlib
 import logging
 import sqlite3
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import orjson
@@ -211,6 +211,28 @@ def note_ingest(conn: sqlite3.Connection, signal: str, *, stored: int, dropped: 
         )
 
 
+def prune(conn: sqlite3.Connection, keep_days: int, now: datetime | None = None) -> dict[str, int]:
+    """Убрать телеметрию старше `keep_days` суток; 0 — не убирать ничего.
+
+    Событий приходит по несколько на каждый ход и каждый вызов инструмента,
+    около 400 байт на штуку: за месяц активной работы это сотни мегабайт, и
+    без срока хранения БД растёт быстрее полезных данных. Данные парсера при
+    этом не трогаются — у них своя история и свой смысл.
+    """
+    if keep_days <= 0:
+        return {"metrics": 0, "events": 0}
+    edge = stamp((now or datetime.now(UTC)) - timedelta(days=keep_days))
+    removed = {}
+    for table in ("otel_metrics", "otel_events"):
+        before = conn.total_changes
+        with conn:
+            conn.execute(f"DELETE FROM {table} WHERE ts < ?", (edge,))  # noqa: S608
+        removed[table.removeprefix("otel_")] = conn.total_changes - before
+    if any(removed.values()):
+        log.info("телеметрия старше %s суток убрана: %s", keep_days, removed)
+    return removed
+
+
 def status(conn: sqlite3.Connection) -> dict[str, Any]:
     """Что приёмник видел: приёмы по сигналам и накопленное по именам."""
     signals = {
@@ -236,7 +258,21 @@ def status(conn: sqlite3.Connection) -> dict[str, Any]:
             " FROM otel_events GROUP BY name ORDER BY records DESC"
         )
     ]
-    return {"signals": signals, "metrics": metrics, "events": events}
+    # Сколько всего накоплено и с какого дня: по этому видно, работает ли срок
+    # хранения и во что данные обходятся на диске.
+    stored = conn.execute(
+        "SELECT SUM(rows) AS rows, SUM(bytes) AS bytes, MIN(oldest) AS oldest FROM ("
+        "  SELECT COUNT(*) AS rows, COALESCE(SUM(LENGTH(attrs)), 0) AS bytes,"
+        "         MIN(ts) AS oldest FROM otel_metrics"
+        "  UNION ALL"
+        "  SELECT COUNT(*), COALESCE(SUM(LENGTH(attrs)), 0), MIN(ts) FROM otel_events)"
+    ).fetchone()
+    return {
+        "signals": signals,
+        "metrics": metrics,
+        "events": events,
+        "stored": dict(stored),
+    }
 
 
 def stamp(moment: datetime) -> str:

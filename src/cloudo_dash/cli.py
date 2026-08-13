@@ -79,6 +79,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--settings", action="store_true", help="фрагмент env для ~/.claude/settings.json"
     )
     otel.add_argument("--port", type=int, help="порт дашборда (по умолчанию из конфига)")
+    otel.add_argument("--prune", action="store_true", help="убрать данные старше otel.keep_days")
     serve = sub.add_parser("serve", help="запустить API-сервер и дашборд")
     serve.add_argument("--port", type=int, help="порт (по умолчанию из конфига)")
     serve.add_argument("--host", default="127.0.0.1", help="только localhost, TZ §7")
@@ -165,7 +166,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "otel":
-        return _otel(args.env, args.settings, args.port)
+        return _otel(args.env, args.settings, args.port, args.prune)
 
     if args.command == "serve":
         return _serve(args.host, args.port, args.reload)
@@ -192,7 +193,7 @@ def _otel_env(port: int) -> dict[str, str]:
     }
 
 
-def _otel(show_env: bool, show_settings: bool, port: int | None) -> int:
+def _otel(show_env: bool, show_settings: bool, port: int | None, prune: bool = False) -> int:
     """Состояние приёма телеметрии и способ её включить.
 
     Сами переменные окружения приложение не прописывает: `~/.claude` открыт
@@ -208,11 +209,16 @@ def _otel(show_env: bool, show_settings: bool, port: int | None) -> int:
         print(json.dumps({"env": env}, ensure_ascii=False, indent=2))
         return 0
 
+    settings = config.load()["otel"]
+    keep_days = int(settings.get("keep_days") or 0)
     with connect() as conn:
+        if prune:
+            removed = otlp.prune(conn, keep_days)
+            print(f"убрано: метрик {removed['metrics']}, событий {removed['events']}")
         state = otlp.status(conn)
     print(
         f"приёмник : http://127.0.0.1:{bind_port}/otlp (в конфиге: "
-        f"{'включён' if config.load()['otel']['enabled'] else 'выключен'})"
+        f"{'включён' if settings['enabled'] else 'выключен'})"
     )
     if not state["signals"]:
         print("посылок не было — телеметрия в Claude Code ещё не включена")
@@ -225,6 +231,13 @@ def _otel(show_env: bool, show_settings: bool, port: int | None) -> int:
         print(f"  {row['name']:34} точек {row['points']:6}  сумма {row['total']:,.2f}")
     for row in state["events"]:
         print(f"  событие {row['name']:26} {row['records']:6}")
+    stored = state["stored"]
+    if stored["rows"]:
+        keep = f"хранится {keep_days} суток" if keep_days else "хранится всё"
+        print(
+            f"накоплено: {_thousands(stored['rows'])} строк, "
+            f"{stored['bytes'] / 1024:,.0f} КБ атрибутов, с {stored['oldest']} ({keep})"
+        )
     if not state["signals"]:
         print()
         print("включить (в профиль шелла или в env-секцию ~/.claude/settings.json):")

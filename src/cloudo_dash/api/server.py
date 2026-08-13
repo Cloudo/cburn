@@ -148,6 +148,9 @@ def create_app(
         # Советчик стоит денег на каждом такте, поэтому включается только
         # конфигом и пропускает такты без активности (задача D3).
         advice_loop = asyncio.create_task(scheduler.loop(open_db, config.load, runner=advisor_run))
+        # Телеметрия копится быстрее полезных данных — чистка на старте и раз
+        # в сутки (веха E). Данные парсера при этом не трогаются.
+        housekeeping = asyncio.create_task(_prune_otel(open_db))
         ask_live = liveness or _default_liveness
         # Первый проход — до первого запроса: иначе живая сессия успеет
         # мигнуть «закончилась».
@@ -158,7 +161,7 @@ def create_app(
         finally:
             if watcher is not None:
                 watcher.stop()
-            for task in (pump, ticker, probe, advice_loop):
+            for task in (pump, ticker, probe, advice_loop, housekeeping):
                 if task is not None:
                     task.cancel()
                     with suppress(asyncio.CancelledError):
@@ -446,6 +449,33 @@ async def _liveness(open_db: Any, probe: LivenessProbe) -> None:
     while True:
         await asyncio.sleep(LIVENESS_SECONDS)
         await _refresh_liveness(open_db, probe)
+
+
+#: Как часто убирать устаревшую телеметрию. Реже суток смысла нет: срок
+#: хранения считается в сутках, а удаление стоит доли секунды.
+PRUNE_SECONDS = 24 * 3600
+
+
+def _prune_once(open_db: Any, keep_days: int) -> dict[str, int]:
+    """Одна чистка в своём соединении: объект SQLite принадлежит потоку."""
+    conn = open_db()
+    try:
+        return otlp.prune(conn, keep_days)
+    finally:
+        conn.close()
+
+
+async def _prune_otel(open_db: Any) -> None:
+    """Чистка телеметрии по сроку хранения: сразу и дальше раз в сутки."""
+    while True:
+        keep_days = int((config.load().get("otel") or {}).get("keep_days") or 0)
+        try:
+            await asyncio.to_thread(_prune_once, open_db, keep_days)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # фоновая задача не должна падать молча
+            log.exception("не удалось убрать устаревшую телеметрию")
+        await asyncio.sleep(PRUNE_SECONDS)
 
 
 async def _ticker(hub: Hub, collect: Any) -> None:

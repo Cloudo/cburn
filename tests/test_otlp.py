@@ -367,6 +367,51 @@ def test_status_endpoint_shows_what_arrived(client: TestClient) -> None:
     assert [row["name"] for row in state["events"]] == ["api_request"]
 
 
+# --- срок хранения -----------------------------------------------------------
+
+
+def test_old_telemetry_is_pruned(conn: Any) -> None:
+    """Событий приходит по несколько на ход — без срока хранения БД растёт
+    быстрее полезных данных."""
+    otlp.ingest(conn, "metrics", metrics_payload(point(1200, type="input")))
+    otlp.ingest(conn, "logs", logs_payload(event("api_request", 1)))
+    now = datetime(2026, 9, 14, tzinfo=UTC)  # месяц спустя
+
+    assert otlp.prune(conn, keep_days=60, now=now) == {"metrics": 0, "events": 0}
+    assert otlp.prune(conn, keep_days=7, now=now) == {"metrics": 1, "events": 1}
+    assert conn.execute("SELECT COUNT(*) FROM otel_events").fetchone()[0] == 0
+
+
+def test_pruning_keeps_recent_and_never_touches_turns(conn: Any) -> None:
+    """Чистка не трогает данные парсера: у них своя история и свой смысл."""
+    with conn:
+        conn.execute("INSERT INTO sessions (id) VALUES ('s1')")
+        conn.execute(
+            "INSERT INTO turns (message_id, session_id, ts) VALUES ('m1', 's1', ?)",
+            ("2020-01-01T00:00:00.000000Z",),
+        )
+    otlp.ingest(conn, "logs", logs_payload(event("api_request", 1)))
+    otlp.prune(conn, keep_days=1, now=datetime(2026, 8, 14, 7, 30, tzinfo=UTC))
+    assert conn.execute("SELECT COUNT(*) FROM otel_events").fetchone()[0] == 1
+    assert conn.execute("SELECT COUNT(*) FROM turns").fetchone()[0] == 1
+
+
+def test_zero_days_means_keep_everything(conn: Any) -> None:
+    otlp.ingest(conn, "logs", logs_payload(event("api_request", 1)))
+    otlp.prune(conn, keep_days=0, now=datetime(2030, 1, 1, tzinfo=UTC))
+    assert conn.execute("SELECT COUNT(*) FROM otel_events").fetchone()[0] == 1
+
+
+def test_status_reports_volume(conn: Any) -> None:
+    """По объёму видно, работает ли срок хранения и во что данные обходятся."""
+    otlp.ingest(conn, "metrics", metrics_payload(point(1200, type="input")))
+    otlp.ingest(conn, "logs", logs_payload(event("api_request", 1)))
+    stored = otlp.status(conn)["stored"]
+    assert stored["rows"] == 2
+    assert stored["bytes"] > 0
+    assert stored["oldest"] == "2026-08-14T07:01:00.000000Z"
+
+
 # --- что телеметрия даёт дашборду и советчику -------------------------------
 
 

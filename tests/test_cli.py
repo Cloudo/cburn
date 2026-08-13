@@ -281,3 +281,21 @@ def test_otel_status_counts_what_arrived(project: Path, capsys: pytest.CaptureFi
     out = capsys.readouterr().out
     assert "logs" in out
     assert "событие api_request" in out
+    assert "накоплено: 1 строк" in out  # объём и охват: видно, растёт ли база
+
+
+def test_otel_prune_removes_old_records(project: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Срок хранения применяется и руками: события копятся быстрее ходов."""
+    from cloudo_dash.collector import otlp
+
+    with connect() as conn:
+        otlp.store_events(
+            conn,
+            [
+                otlp.EventRecord(
+                    name="api_request", ts="2020-01-01T00:00:00.000000Z", session_id="s1", attrs={}
+                )
+            ],
+        )
+    assert cli.main(["otel", "--prune"]) == 0
+    assert "убрано: метрик 0, событий 1" in capsys.readouterr().out

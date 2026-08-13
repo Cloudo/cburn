@@ -40,7 +40,9 @@ DEFAULTS: dict[str, Any] = {
     "server": {"port": 8799},
     # Приём официальной телеметрии Claude Code (веха E). Сам по себе флаг
     # ничего не включает: телеметрию задаёт окружение Claude Code, см. `cdash otel`.
-    "otel": {"enabled": True},
+    # События идут пачкой на каждый ход и каждый вызов инструмента — около
+    # 400 байт на событие, поэтому у них свой срок хранения; 0 — хранить всё.
+    "otel": {"enabled": True, "keep_days": 30},
     "prices": {},
 }
 
@@ -76,6 +78,8 @@ NUMERIC_LIMITS: dict[tuple[str, str], tuple[float, float]] = {
     ("thresholds", "burn_rate_warn_per_min"): (100, 100_000_000),
     ("analyzer", "interval_minutes"): (5, 24 * 60),
     ("server", "port"): (1_024, 65_535),
+    # Ноль — не чистить вовсе; верхняя граница просто отсекает опечатки.
+    ("otel", "keep_days"): (0, 3_650),
 }
 
 ANALYZER_MODELS = {"haiku", "sonnet", "opus"}
