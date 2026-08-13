@@ -1,8 +1,6 @@
 // Числа на приборе читаются на бегу, поэтому крупные округляются до трёх
 // значащих цифр, а точные значения остаются в подписях.
 
-import { useEffect, useRef, useState } from "react";
-
 const SPACE = " "; // тонкий пробел: 2 439 123 не разъезжается в моноширинном
 
 export function grouped(value: number): string {
@@ -39,32 +37,3 @@ export function modelLabel(model: string | null): string {
   return model.replace(/^claude-/, "").replace(/-\d{8}$/, "");
 }
 
-/** Значение, догоняющее цель за то же время, что и стрелка. */
-export function useSmoothNumber(target: number, duration = 900): number {
-  const [shown, setShown] = useState(target);
-  const from = useRef(target);
-  const started = useRef(0);
-  const frame = useRef(0);
-
-  useEffect(() => {
-    from.current = shown;
-    started.current = performance.now();
-    cancelAnimationFrame(frame.current);
-
-    const step = (now: number) => {
-      const t = Math.min((now - started.current) / duration, 1);
-      // Та же кривая, что у стрелки: цифра и стрелка приходят одновременно.
-      const eased = 1 - Math.pow(1 - t, 3);
-      setShown(from.current + (target - from.current) * eased);
-      if (t < 1) frame.current = requestAnimationFrame(step);
-    };
-
-    frame.current = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(frame.current);
-    // shown намеренно не в зависимостях: иначе анимация перезапускалась бы на
-    // каждом кадре и не доезжала до цели.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target, duration]);
-
-  return shown;
-}

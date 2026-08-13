@@ -7,7 +7,7 @@
 
 import { useState, type MouseEvent } from "react";
 
-import { compact, grouped, useSmoothNumber } from "./format";
+import { compact, grouped } from "./format";
 
 export type Slice = { key: string; label: string; value: number; color: string };
 
@@ -57,8 +57,7 @@ export function scalePosition(value: number): number {
 type Props = { value: number; slices: Slice[]; caption: string };
 
 export function Gauge({ value, slices, caption }: Props) {
-  const smooth = useSmoothNumber(value);
-  const position = scalePosition(smooth);
+  const position = scalePosition(value);
   const total = slices.reduce((sum, slice) => sum + slice.value, 0);
 
   let cursor = 0;
@@ -121,7 +120,7 @@ export function Gauge({ value, slices, caption }: Props) {
       </svg>
 
       <figcaption>
-        <strong className="gauge-value">{compact(smooth)}</strong>
+        <strong className="gauge-value">{compact(value)}</strong>
         <span className="gauge-unit">токенов в минуту</span>
         <span className="gauge-caption">{caption}</span>
       </figcaption>
@@ -131,15 +130,14 @@ export function Gauge({ value, slices, caption }: Props) {
 
 /** Линейная шкала выходных токенов: их немного, и логарифм тут только мешает. */
 export function OutputMeter({ value, peak }: { value: number; peak: number }) {
-  const smooth = useSmoothNumber(value);
   const ceiling = Math.max(peak, 1000);
-  const share = Math.min(smooth / ceiling, 1);
+  const share = Math.min(value / ceiling, 1);
   return (
     <div className="meter">
       <div className="meter-head">
         <span className="meter-label">выход модели</span>
         <span className="meter-value">
-          {compact(smooth)} <span className="meter-unit">ток/мин</span>
+          {compact(value)} <span className="meter-unit">ток/мин</span>
         </span>
       </div>
       <div className="meter-track">
