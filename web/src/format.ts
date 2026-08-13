@@ -7,12 +7,12 @@ export function grouped(value: number): string {
   return Math.round(value).toLocaleString("ru-RU").replace(/\s/g, SPACE);
 }
 
-/** Крупные числа сокращаются как в США: K, M, B — слитно с числом. */
+/** Крупные числа сокращаются как в США: K, M, B через тонкий пробел. */
 export function compact(value: number): string {
   const abs = Math.abs(value);
-  if (abs >= 1_000_000_000) return `${trim(value / 1_000_000_000)}B`;
-  if (abs >= 1_000_000) return `${trim(value / 1_000_000)}M`;
-  if (abs >= 1_000) return `${trim(value / 1_000)}K`;
+  if (abs >= 1_000_000_000) return `${trim(value / 1_000_000_000)}${SPACE}B`;
+  if (abs >= 1_000_000) return `${trim(value / 1_000_000)}${SPACE}M`;
+  if (abs >= 1_000) return `${trim(value / 1_000)}${SPACE}K`;
   return grouped(value);
 }
 
