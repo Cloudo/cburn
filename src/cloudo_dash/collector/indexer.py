@@ -105,6 +105,7 @@ def ingest_file(conn: sqlite3.Connection, path: Path) -> IngestStats:
         project_id = _upsert_project(conn, path, sessions)
         _upsert_sessions(conn, sessions, project_id)
         _insert_turns(conn, turns, stats)
+        _link_parents(conn, turns)
         apply_costs(conn, turns.keys())
         _refresh_session_totals(conn, sessions.keys())
         _save_offset(
@@ -422,6 +423,64 @@ def _insert_turns(conn: sqlite3.Connection, turns: dict[str, _Turn], stats: Inge
         rows,
     )
     stats.tools_new = _count(conn, "tool_calls") - tools_before
+
+
+#: По сколько message_id спрашивать за раз: в файле их бывают тысячи, а число
+#: параметров в запросе SQLite ограничено.
+_CHUNK = 500
+
+
+def _link_parents(conn: sqlite3.Connection, turns: dict[str, _Turn]) -> None:
+    """Связать сессию с той, из которой её продолжили (задача B5).
+
+    При resume Claude Code копирует прошлые ходы в новый файл с новым
+    `sessionId`, сохраняя `message.id`. Дедупликация оставляет такой ход за
+    первым владельцем — значит, ходы этого файла, записанные на чужую сессию,
+    и есть скопированная история.
+
+    Направление связи задаёт время, а не порядок чтения файлов: родитель — та
+    из двух сессий, что началась раньше. Иначе связь зависела бы от того, чей
+    файл попался обходу первым. Пара сравнивается по `(started_at, id)`, так
+    что порядок строгий и цикл невозможен. Связь ставится один раз.
+    """
+    by_session: dict[str, list[str]] = {}
+    for message_id, turn in turns.items():
+        by_session.setdefault(turn.session_id, []).append(message_id)
+
+    for session_id, message_ids in by_session.items():
+        shared: dict[str, int] = {}
+        for start in range(0, len(message_ids), _CHUNK):
+            chunk = message_ids[start : start + _CHUNK]
+            rows = conn.execute(
+                f"""
+                SELECT session_id, COUNT(*) AS shared
+                  FROM turns
+                 WHERE message_id IN ({",".join("?" * len(chunk))})
+                   AND session_id <> ?
+                 GROUP BY session_id
+                """,  # noqa: S608
+                (*chunk, session_id),
+            )
+            for row in rows:
+                shared[row["session_id"]] = shared.get(row["session_id"], 0) + row["shared"]
+        if not shared:
+            continue
+        candidate = max(shared, key=lambda other: shared[other])
+        pair = {
+            row["id"]: row["started_at"] or ""
+            for row in conn.execute(
+                "SELECT id, started_at FROM sessions WHERE id IN (?, ?)",
+                (session_id, candidate),
+            )
+        }
+        if len(pair) < 2:
+            continue
+        older, younger = sorted(pair, key=lambda one: (pair[one], one))
+        conn.execute(
+            "UPDATE sessions SET parent_session_id = ? WHERE id = ? AND parent_session_id IS NULL",
+            (older, younger),
+        )
+        log.info("сессия %s продолжает %s (общих ходов %s)", younger, older, shared[candidate])
 
 
 def _refresh_session_totals(conn: sqlite3.Connection, session_ids: Iterable[str]) -> None:

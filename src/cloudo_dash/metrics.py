@@ -30,6 +30,9 @@ class SessionSummary:
     cache_write_5m: int
     cache_write_1h: int
     cost_usd: float
+    sidechain_tokens: int
+    sidechain_cost_usd: float
+    parent_session_id: str | None
     last_context: int
 
     @property
@@ -54,6 +57,11 @@ def session_summary(conn: sqlite3.Connection, session_id: str) -> SessionSummary
                COALESCE(SUM(t.cache_write_5m), 0)          AS cache_write_5m,
                COALESCE(SUM(t.cache_write_1h), 0)          AS cache_write_1h,
                COALESCE(SUM(t.cost_usd), 0)                AS cost_usd,
+               -- Расход сабагентов входит в сессию и виден отдельной строкой (ТЗ §4).
+               COALESCE(SUM(t.is_sidechain * (t.input_tokens + t.output_tokens + t.cache_read
+                          + t.cache_write_5m + t.cache_write_1h)), 0) AS sidechain_tokens,
+               COALESCE(SUM(t.is_sidechain * t.cost_usd), 0) AS sidechain_cost_usd,
+               s.parent_session_id,
                s.last_context
           FROM sessions AS s
           LEFT JOIN projects AS p ON p.id = s.project_id
@@ -279,6 +287,47 @@ def live_sessions(
     for row in rows:
         row["status"] = session_status(row, now)
     return rows
+
+
+def session_chain(conn: sqlite3.Connection, session_id: str) -> dict:
+    """Вся линия работы, к которой принадлежит сессия (задача B5).
+
+    Resume копирует историю в новый `sessionId`, поэтому одна работа
+    рассыпана по нескольким сессиям. Линия строится от корня цепочки вниз;
+    ходы при этом не задваиваются — копии гасятся дедупликацией по
+    `message_id` ещё при импорте.
+    """
+    rows = conn.execute(
+        """
+        WITH RECURSIVE up(id, parent) AS (
+            SELECT id, parent_session_id FROM sessions WHERE id = :id
+            UNION
+            SELECT s.id, s.parent_session_id FROM sessions AS s JOIN up ON up.parent = s.id
+        ),
+        root AS (SELECT id FROM up WHERE parent IS NULL LIMIT 1),
+        down(id) AS (
+            SELECT id FROM root
+            UNION
+            SELECT s.id FROM sessions AS s JOIN down ON s.parent_session_id = down.id
+        )
+        SELECT d.id,
+               (SELECT COUNT(*) FROM turns AS t WHERE t.session_id = d.id)          AS turns,
+               (SELECT COALESCE(SUM(t.input_tokens + t.output_tokens + t.cache_read
+                                  + t.cache_write_5m + t.cache_write_1h), 0)
+                  FROM turns AS t WHERE t.session_id = d.id)                        AS tokens,
+               (SELECT COALESCE(SUM(t.cost_usd), 0) FROM turns AS t
+                 WHERE t.session_id = d.id)                                         AS cost_usd
+          FROM down AS d
+        """,
+        {"id": session_id},
+    ).fetchall()
+    sessions = [dict(row) for row in rows]
+    return {
+        "sessions": [row["id"] for row in sessions],
+        "turns": sum(row["turns"] for row in sessions),
+        "tokens": sum(row["tokens"] for row in sessions),
+        "cost_usd": sum(row["cost_usd"] for row in sessions),
+    }
 
 
 def refresh_liveness(conn: sqlite3.Connection, active_ids: set[str] | None) -> int:

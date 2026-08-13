@@ -11,6 +11,7 @@ import pytest
 from cloudo_dash import paths as indexer_paths
 from cloudo_dash.collector.indexer import ingest_file, ingest_tree
 from cloudo_dash.db import connect
+from cloudo_dash.metrics import session_chain
 
 FIXTURES = sorted((Path(__file__).parent / "fixtures" / "transcripts").glob("*.jsonl"))
 
@@ -501,6 +502,83 @@ def test_ingest_tree_reports_progress(conn: sqlite3.Connection, tmp_path: Path) 
 
     assert [(done, total) for done, total, _ in seen] == [(1, 3), (2, 3), (3, 3)]
     assert [name for _, _, name in seen] == ["proj-a", "proj-b", "proj-c"]
+
+
+# --- resume-форки (задача B5) ------------------------------------------------
+
+
+def test_resume_links_child_to_parent(conn: sqlite3.Connection, tmp_path: Path) -> None:
+    """Скопированные при resume ходы связывают новую сессию с исходной."""
+    write_transcript(
+        tmp_path / "proj" / "s1.jsonl",
+        [
+            assistant("msg_1", session="s1", uuid="u1", ts="2026-08-13T10:00:00Z"),
+            assistant("msg_2", session="s1", uuid="u2", ts="2026-08-13T10:05:00Z"),
+        ],
+    )
+    # Resume: прошлые ходы скопированы в новый файл с новым sessionId.
+    write_transcript(
+        tmp_path / "proj" / "s2.jsonl",
+        [
+            assistant("msg_1", session="s2", uuid="u1", ts="2026-08-13T10:00:00Z"),
+            assistant("msg_2", session="s2", uuid="u2", ts="2026-08-13T10:05:00Z"),
+            assistant("msg_3", session="s2", uuid="u3", ts="2026-08-13T11:00:00Z"),
+        ],
+    )
+
+    ingest_tree(conn, tmp_path)
+
+    parents = dict(conn.execute("SELECT id, parent_session_id FROM sessions"))
+    assert parents == {"s1": None, "s2": "s1"}
+    # Копии не задваивают расход: ход остаётся за первой сессией.
+    assert conn.execute("SELECT COUNT(*) FROM turns").fetchone()[0] == 3
+
+
+def test_resume_direction_does_not_depend_on_read_order(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """Родитель — тот, кто начался раньше, а не чей файл прочитан первым."""
+    later = tmp_path / "proj" / "s2.jsonl"
+    earlier = tmp_path / "proj" / "s1.jsonl"
+    write_transcript(
+        later,
+        [
+            assistant("msg_1", session="s2", uuid="u1", ts="2026-08-13T10:00:00Z"),
+            assistant("msg_3", session="s2", uuid="u3", ts="2026-08-13T11:00:00Z"),
+        ],
+    )
+    write_transcript(
+        earlier,
+        [assistant("msg_1", session="s1", uuid="u1", ts="2026-08-13T10:00:00Z")],
+    )
+
+    ingest_file(conn, later)  # сначала потомок
+    ingest_file(conn, earlier)
+
+    parents = dict(conn.execute("SELECT id, parent_session_id FROM sessions"))
+    assert parents["s2"] == "s1"
+    assert parents["s1"] is None
+
+
+def test_session_chain_sums_the_whole_line(conn: sqlite3.Connection, tmp_path: Path) -> None:
+    """Линия работы собирает все сессии цепочки и их суммы (задача B5)."""
+    write_transcript(
+        tmp_path / "proj" / "s1.jsonl",
+        [assistant("msg_1", session="s1", uuid="u1", ts="2026-08-13T10:00:00Z", output=100)],
+    )
+    write_transcript(
+        tmp_path / "proj" / "s2.jsonl",
+        [
+            assistant("msg_1", session="s2", uuid="u1", ts="2026-08-13T10:00:00Z", output=100),
+            assistant("msg_2", session="s2", uuid="u2", ts="2026-08-13T11:00:00Z", output=200),
+        ],
+    )
+    ingest_tree(conn, tmp_path)
+
+    chain = session_chain(conn, "s2")
+
+    assert sorted(chain["sessions"]) == ["s1", "s2"]
+    assert chain["turns"] == 2  # копия не считается дважды
 
 
 # --- неполный usage в записях хода -------------------------------------------

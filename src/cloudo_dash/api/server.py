@@ -31,6 +31,7 @@ from ..metrics import (
     overview,
     recent_sessions,
     refresh_liveness,
+    session_chain,
     session_models,
     session_summary,
     session_tools,
@@ -188,6 +189,8 @@ def create_app(
                     {"tool": tool, "calls": calls}
                     for tool, calls in session_tools(conn, session_id)
                 ],
+                # Линия работы: resume рассыпает одну работу по нескольким сессиям.
+                "chain": session_chain(conn, session_id),
             }
         finally:
             conn.close()

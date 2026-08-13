@@ -14,7 +14,13 @@ from pathlib import Path
 from . import __version__, config, paths, pricing
 from .collector.indexer import ingest_tree
 from .db import connect
-from .metrics import recent_sessions, session_models, session_summary, session_tools
+from .metrics import (
+    recent_sessions,
+    session_chain,
+    session_models,
+    session_summary,
+    session_tools,
+)
 
 NOT_IMPLEMENTED_MILESTONE = {
     "stats": "M1",
@@ -33,7 +39,10 @@ def build_parser() -> argparse.ArgumentParser:
     sessions.add_argument("-n", "--limit", type=int, default=20, help="сколько показать")
     session = sub.add_parser("session", help="детали одной сессии")
     session.add_argument("session_id", help="полный id или его начало")
-    sub.add_parser("reindex", help="дочитать транскрипты в БД")
+    reindex = sub.add_parser("reindex", help="дочитать транскрипты в БД")
+    reindex.add_argument(
+        "--full", action="store_true", help="перечитать файлы целиком, а не только хвосты"
+    )
     prices = sub.add_parser("prices", help="применить цены из конфига и пересчитать стоимость")
     prices.add_argument(
         "--init", action="store_true", help="записать в конфиг заготовку тарифов, если их нет"
@@ -68,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "reindex":
-        return _reindex()
+        return _reindex(args.full)
 
     if args.command == "prices":
         return _prices(args.init)
@@ -111,11 +120,25 @@ def _thousands(value: int) -> str:
     return f"{value:,}".replace(",", " ")
 
 
-def _reindex() -> int:
-    """Дочитать все транскрипты (задача B2)."""
+def _usd(value: float) -> str:
+    """Доллары с разрядами. Подписка ими не оплачивается — это вес расхода."""
+    return "$" + f"{value:,.2f}".replace(",", " ")
+
+
+def _reindex(full: bool = False) -> int:
+    """Дочитать все транскрипты (задача B2).
+
+    `--full` сбрасывает сохранённые offset и читает файлы целиком: нужно, когда
+    поменялась логика разбора — например, чтобы проставить связи resume-форков
+    на уже прочитанной истории. Повторные ходы гасятся по `message_id`.
+    """
     started = time.monotonic()
     with connect() as conn:
         pricing.sync_prices(conn, config.load())
+        if full:
+            with conn:  # связи resume выводятся из данных, значит собираются заново
+                conn.execute("DELETE FROM files")
+                conn.execute("UPDATE sessions SET parent_session_id = NULL")
         results = ingest_tree(conn, paths.CLAUDE_PROJECTS_DIR, on_file=_progress)
     if sys.stderr.isatty():
         print(file=sys.stderr)  # закрыть строку прогресса
@@ -159,7 +182,7 @@ def _prices(init: bool) -> int:
         )
     for row in unknown:
         print(f"без цены: {row['model']} ({_thousands(row['turns'])} ходов, считается нулём)")
-    print(f"вся история: ${total:,.2f}".replace(",", " "))
+    print(f"вся история: {_usd(total)}")
     return 0
 
 
@@ -207,6 +230,7 @@ def _session(prefix: str) -> int:
         summary = session_summary(conn, session_id)
         models = session_models(conn, session_id)
         tools = session_tools(conn, session_id)
+        chain = session_chain(conn, session_id)
     if summary is None:
         return 1
 
@@ -215,8 +239,13 @@ def _session(prefix: str) -> int:
     print(f"проект       : {summary.project or '—'} ({summary.root_path or '—'})")
     print(f"период       : {period.replace('T', ' ')}")
     print(f"первый промпт: {(summary.first_prompt or '—')[:70]}")
-    sidechain = f" (сабагентов {summary.sidechain_turns})" if summary.sidechain_turns else ""
-    print(f"ходов        : {summary.turns}{sidechain}")
+    print(f"ходов        : {summary.turns}")
+    if summary.sidechain_turns:
+        print(
+            f"сабагенты    : ходов {summary.sidechain_turns},"
+            f" токенов {_thousands(summary.sidechain_tokens)},"
+            f" {_usd(summary.sidechain_cost_usd)}"
+        )
     print(f"вход         : {_thousands(summary.input_tokens)}")
     print(f"выход        : {_thousands(summary.output_tokens)}")
     print(f"кэш чтение   : {_thousands(summary.cache_read)}")
@@ -224,8 +253,16 @@ def _session(prefix: str) -> int:
         f"кэш запись   : {_thousands(summary.cache_write)}"
         f" (5m {_thousands(summary.cache_write_5m)}, 1h {_thousands(summary.cache_write_1h)})"
     )
-    print(f"стоимость    : ${summary.cost_usd:,.2f}".replace(",", " "))
+    print(f"стоимость    : {_usd(summary.cost_usd)}")
     print(f"контекст     : {_thousands(summary.last_context)} на последнем ходе")
+    if summary.parent_session_id:
+        print(f"продолжает   : {summary.parent_session_id[:8]}")
+    if len(chain["sessions"]) > 1:
+        print(
+            f"линия работы : сессий {len(chain['sessions'])},"
+            f" ходов {_thousands(chain['turns'])},"
+            f" {_usd(chain['cost_usd'])}"
+        )
     if models:
         parts = [f"{model} {turns} ходов / {_thousands(out)}" for model, turns, out in models]
         print(f"модели       : {'; '.join(parts)}")
