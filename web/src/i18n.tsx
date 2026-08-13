@@ -90,6 +90,7 @@ const DICT: Record<string, [string, string]> = {
     "plus {auto} allowed automatically",
   ],
   "settings.otel": ["телеметрия", "telemetry"],
+  "settings.otelKeepDays": ["хранить дней", "keep days"],
   "settings.otelHint": [
     "Приём данных от Claude Code. Сама телеметрия включается его переменными окружения — их печатает команда cdash otel --env.",
     "Receiving data from Claude Code. Telemetry itself is switched on by its environment variables — run cdash otel --env to print them.",

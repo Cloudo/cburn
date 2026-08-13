@@ -134,6 +134,11 @@ export function Settings() {
             value={config.otel?.enabled ?? true}
             onChange={(value) => patch("otel", "enabled", value)}
           />
+          <Num
+            label={t("settings.otelKeepDays")}
+            value={config.otel?.keep_days ?? 30}
+            onChange={(value) => patch("otel", "keep_days", value)}
+          />
           <p className="hint">{t("settings.otelHint")}</p>
         </fieldset>
 

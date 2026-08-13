@@ -375,7 +375,7 @@ export type Config = {
     allow_snippets: boolean;
   };
   /** Может не прийти: сервер старше этого фронта. */
-  otel?: { enabled: boolean };
+  otel?: { enabled: boolean; keep_days: number };
   telegram: {
     mode: string;
     bridge_url: string;
