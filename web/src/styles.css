@@ -477,15 +477,35 @@ main.empty {
 }
 
 .leaders li {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 84px;
+  /* id — проект — объём: проект сжимается, крайние колонки держат ширину. */
+  grid-template-columns: 76px minmax(0, 1fr) 84px;
   gap: 12px;
   align-items: center;
+  padding-bottom: 6px;
   font-family: var(--mono);
   font-size: 12px;
   color: var(--text-dim);
-  position: relative;
-  padding-bottom: 6px;
+}
+
+.leaders code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.leaders-project {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-faint);
+}
+
+.leaders-tokens {
+  text-align: right;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
 }
 
 .leaders-bar {
@@ -502,30 +522,6 @@ main.empty {
   background: var(--steel);
   border-radius: 1px;
   opacity: 0.55;
-}
-
-.leaders-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text);
-}
-
-.leaders-turns {
-  text-align: right;
-  color: var(--text-faint);
-}
-
-.leaders-tokens {
-  text-align: right;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-
-@media (max-width: 860px) {
-  .leaders li {
-    grid-template-columns: minmax(0, 1fr) 76px;
-  }
 }
 
 /* --- лента ходов --- */
@@ -1299,4 +1295,244 @@ main.empty {
   margin: 4px 0 0;
   font-size: 11px;
   color: var(--text-faint);
+}
+
+/* --- сетка виджетов --- */
+
+.dashboard-bar {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: -6px;
+}
+
+.tune {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--text-dim);
+  font-family: var(--sans);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.tune:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+
+.tune-count {
+  font-family: var(--mono);
+  color: var(--amber);
+}
+
+.tune-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  width: 320px;
+  padding: 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 55%);
+}
+
+.tune-hint {
+  margin: 0 0 12px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.tune-panel ul {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tune-panel label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 8px;
+  align-items: baseline;
+  padding: 5px 6px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.tune-panel label:hover {
+  background: var(--bg-sunken);
+}
+
+.tune-panel input {
+  accent-color: var(--steel);
+  margin: 0;
+}
+
+.tune-title {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.tune-note {
+  grid-column: 2;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.tune-reset {
+  border: 1px solid var(--line);
+  background: var(--bg-sunken);
+  color: var(--text-dim);
+  font-family: var(--sans);
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.tune-reset:hover {
+  color: var(--text);
+}
+
+/* --- сами виджеты --- */
+
+.widget {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Заголовок — ручка перетаскивания, поэтому курсор и подсветка на нём. */
+.widget-grip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 18px 10px;
+  cursor: grab;
+  flex: none;
+}
+
+.widget-grip:active {
+  cursor: grabbing;
+}
+
+.widget-grip h2 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.widget-hide {
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s, background 0.15s;
+}
+
+.widget:hover .widget-hide,
+.widget-hide:focus-visible {
+  opacity: 1;
+}
+
+.widget-hide:hover {
+  color: var(--text);
+  background: var(--bg-sunken);
+}
+
+/* Содержимое скроллится внутри виджета: иначе изменение размера
+   обрезало бы данные вместо того, чтобы давать к ним доступ. */
+.widget-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 18px 16px;
+}
+
+.widget-body h2 {
+  display: none; /* заголовок теперь в шапке виджета */
+}
+
+.react-grid-item.react-grid-placeholder {
+  background: rgb(77 127 163 / 25%);
+  border-radius: var(--radius);
+  opacity: 1;
+}
+
+.react-grid-item > .react-resizable-handle::after {
+  border-right-color: var(--text-faint);
+  border-bottom-color: var(--text-faint);
+}
+
+.react-grid-item.resizing,
+.react-grid-item.react-draggable-dragging {
+  z-index: 10;
+}
+
+.empty-note {
+  margin: 60px 0;
+  text-align: center;
+  color: var(--text-dim);
+}
+
+/* --- адаптация к размеру виджета, а не окна ---
+   Виджеты тянутся мышью, поэтому вёрстка внутри реагирует на ширину самого
+   виджета: медиа-запрос по окну здесь бесполезен — окно не меняется. */
+
+.widget {
+  container-type: inline-size;
+  container-name: widget;
+}
+
+@container widget (max-width: 400px) {
+  .leaders li {
+    grid-template-columns: 72px minmax(0, 1fr) auto;
+  }
+
+  .leaders-project,
+  .turn-project,
+  .turn-tools {
+    display: none;
+  }
+
+  .turn {
+    grid-template-columns: 66px minmax(0, 1fr) 70px 62px;
+  }
+
+  .profile,
+  .legend,
+  .today,
+  .limits-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container widget (max-width: 340px) {
+  .turn-model {
+    display: none;
+  }
+
+  .turn {
+    grid-template-columns: 66px minmax(0, 1fr) 62px;
+  }
 }

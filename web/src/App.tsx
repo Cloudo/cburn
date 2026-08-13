@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+
 import { Gauge, OutputMeter, Recorder, type Slice } from "./Gauge";
 import { Idle, Models, PlanLimits, Tools } from "./Profile";
+import { Dashboard, type WidgetContent } from "./Dashboard";
 import {
   agoLabel,
   clockTime,
@@ -16,6 +18,7 @@ import {
   hideSession,
   useOverview,
   type LiveSession,
+  type Overview,
   type SessionStatus,
   type Turn,
   type Usage,
@@ -65,7 +68,12 @@ const SLICE_LABEL: Record<string, string> = {
 function slicesOf(source: Usage): Slice[] {
   return [
     { key: "cache_read", label: "чтение кэша", value: source.cache_read, color: COLORS.cacheRead },
-    { key: "cache_write", label: "запись кэша", value: source.cache_write, color: COLORS.cacheWrite },
+    {
+      key: "cache_write",
+      label: "запись кэша",
+      value: source.cache_write,
+      color: COLORS.cacheWrite,
+    },
     { key: "output", label: "выход", value: source.output_tokens, color: COLORS.output },
     { key: "input", label: "вход", value: source.input_tokens, color: COLORS.input },
   ];
@@ -73,8 +81,6 @@ function slicesOf(source: Usage): Slice[] {
 
 export default function App() {
   const { data, connection, updatedAt } = useOverview();
-  const [window, setWindow] = useState<string>("1m");
-  const [sliceWindow, setSliceWindow] = useState<string>("sync");
   const [, tick] = useState(0);
 
   useEffect(() => {
@@ -82,19 +88,6 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
-  if (!data) {
-    return (
-      <main className="empty">
-        <p>{connection === "offline" ? "нет связи с cdash serve" : "подключаюсь…"}</p>
-      </main>
-    );
-  }
-
-  const burn = data.burn[window];
-  const sliceKey = sliceWindow === "sync" ? window : sliceWindow;
-  const sliceSource = sliceKey === "today" ? data.today : data.burn[sliceKey].usage;
-  const slices = slicesOf(sliceSource);
-  const peak = Math.max(...WINDOWS.map((key) => data.burn[key].output_per_min), 500);
   const ago = updatedAt ? (Date.now() - updatedAt) / 1000 : 0;
 
   return (
@@ -105,7 +98,7 @@ export default function App() {
           <span className="brand-note">расход Claude Code на этой машине</span>
         </div>
         <div className="status">
-          {data.pending_sessions.length > 0 && (
+          {data && data.pending_sessions.length > 0 && (
             <span className="working">
               <span className="working-pulse" />
               идёт запрос
@@ -117,163 +110,173 @@ export default function App() {
         </div>
       </header>
 
-      <section className="dash">
-        <div className="panel panel-gauge">
-          <div className="windows" role="tablist" aria-label="окно усреднения">
-            {WINDOWS.map((key) => (
-              <button
-                key={key}
-                role="tab"
-                aria-selected={key === window}
-                className={key === window ? "window window-on" : "window"}
-                onClick={() => setWindow(key)}
-              >
-                {WINDOW_LABEL[key]}
-              </button>
-            ))}
-          </div>
-
-          <Gauge
-            value={burn.tokens_per_min}
-            slices={slices}
-            caption={WINDOW_CAPTION[window]}
-          />
-
-          <div className="legend-head">
-            <span className="legend-title">разбивка</span>
-            <div className="slice-windows" role="tablist" aria-label="окно разбивки">
-              {SLICE_WINDOWS.map((key) => (
-                <button
-                  key={key}
-                  role="tab"
-                  aria-selected={key === sliceWindow}
-                  className={key === sliceWindow ? "slice-window slice-window-on" : "slice-window"}
-                  onClick={() => setSliceWindow(key)}
-                >
-                  {SLICE_LABEL[key]}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <ul className="legend">
-            {slices.map((slice) => {
-              const total = slices.reduce((sum, item) => sum + item.value, 0);
-              const share = total > 0 ? (slice.value / total) * 100 : 0;
-              return (
-                <li key={slice.key}>
-                  <span className="legend-swatch" style={{ background: slice.color }} />
-                  <span className="legend-label">{slice.label}</span>
-                  <span className="legend-share">{share < 1 ? "<1" : Math.round(share)}%</span>
-                  <span className="legend-value">{compact(slice.value)}</span>
-                </li>
-              );
-            })}
-          </ul>
-
-          <OutputMeter value={burn.output_per_min} peak={peak} />
-
-          <Recorder series={data.series} bucketSeconds={data.series_bucket_seconds} />
-        </div>
-
-        <div className="side">
-          <div className="panel">
-            <h2>за сегодня</h2>
-            <dl className="today">
-              <div>
-                <dt>ходов</dt>
-                <dd>{grouped(data.today.turns)}</dd>
-              </div>
-              <div>
-                <dt>выход</dt>
-                <dd>{grouped(data.today.output_tokens)}</dd>
-              </div>
-              <div>
-                <dt>чтение кэша</dt>
-                <dd>{grouped(data.today.cache_read)}</dd>
-              </div>
-              <div>
-                <dt>запись кэша</dt>
-                <dd>{grouped(data.today.cache_write)}</dd>
-              </div>
-            </dl>
-            <p className="hint">
-              всего в базе {grouped(data.totals.turns)} ходов, {data.totals.sessions} сессий,{" "}
-              {data.totals.projects} проектов
-            </p>
-          </div>
-
-          <div className="panel">
-            <h2>сейчас в работе</h2>
-            <SessionBoard sessions={data.live_sessions} limit={data.live_limit} now={data.now} />
-          </div>
-
-          <div className="panel">
-            <h2>больше всего за сегодня</h2>
-            {data.top_sessions.length === 0 ? (
-              <p className="hint">сегодня ходов ещё не было</p>
-            ) : (
-              <ol className="leaders">
-                {data.top_sessions.map((session) => (
-                  <li key={session.id}>
-                    <div className="leaders-bar">
-                      <span
-                        className="leaders-fill"
-                        style={{ width: `${(session.tokens / data.top_sessions[0].tokens) * 100}%` }}
-                      />
-                    </div>
-                    <span className="leaders-name" title={session.first_prompt ?? undefined}>
-                      {session.title ?? session.id.slice(0, 8)}
-                    </span>
-                    <span className="leaders-tokens">{compact(session.tokens)}</span>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </div>
-        </div>
-      </section>
-
-      <section className="profile-row">
-        <div className="panel">
-          <h2>на что уходят ходы</h2>
-          <Tools profile={data.tools} />
-        </div>
-        <div className="side">
-          <div className="panel">
-            <h2>модели за сегодня</h2>
-            <Models models={data.models} />
-          </div>
-          <div className="panel">
-            <h2>холостые ходы</h2>
-            <Idle idle={data.idle} />
-          </div>
-          <div className="panel">
-            <h2>лимиты подписки</h2>
-            <PlanLimits plan={data.plan} />
-          </div>
-        </div>
-      </section>
-
-      <section className="panel feed">
-        <h2>лента ходов</h2>
-        {/* Классы те же, что у строк: на узких экранах колонки прячутся по ним,
-            иначе подписи разъехались бы относительно значений. */}
-        <div className="turn turn-head" aria-hidden="true">
-          <span>время</span>
-          <span className="turn-model">модель</span>
-          <span className="turn-project">проект</span>
-          <span className="turn-output">выход</span>
-          <span className="turn-context">контекст</span>
-          <span className="turn-tools">инструменты</span>
-        </div>
-        <ol>
-          {data.recent_turns.map((turn) => (
-            <TurnRow key={turn.message_id} turn={turn} />
-          ))}
-        </ol>
-      </section>
+      {data ? (
+        <Dashboard widgets={buildWidgets(data)} />
+      ) : (
+        <p className="empty-note">
+          {connection === "offline" ? "нет связи с cdash serve" : "подключаюсь…"}
+        </p>
+      )}
     </main>
+  );
+}
+
+/** Содержимое виджетов. Раскладку и видимость держит Dashboard. */
+function buildWidgets(data: Overview): WidgetContent[] {
+  return [
+    { id: "gauge", title: "прибор", body: <GaugeWidget data={data} /> },
+    { id: "today", title: "за сегодня", body: <TodayWidget data={data} /> },
+    {
+      id: "live",
+      title: "сейчас в работе",
+      body: <SessionBoard sessions={data.live_sessions} limit={data.live_limit} now={data.now} />,
+    },
+    { id: "plan", title: "лимиты подписки", body: <PlanLimits plan={data.plan} /> },
+    { id: "leaders", title: "больше всего за сегодня", body: <LeadersWidget data={data} /> },
+    { id: "tools", title: "на что уходят ходы", body: <Tools profile={data.tools} /> },
+    { id: "models", title: "модели за сегодня", body: <Models models={data.models} /> },
+    { id: "idle", title: "холостые ходы", body: <Idle idle={data.idle} /> },
+    { id: "feed", title: "лента ходов", body: <FeedWidget data={data} /> },
+  ];
+}
+
+function GaugeWidget({ data }: { data: Overview }) {
+  const [window, setWindow] = useState<string>("1m");
+  const [sliceWindow, setSliceWindow] = useState<string>("sync");
+
+  const burn = data.burn[window];
+  const sliceKey = sliceWindow === "sync" ? window : sliceWindow;
+  const sliceSource = sliceKey === "today" ? data.today : data.burn[sliceKey].usage;
+  const slices = slicesOf(sliceSource);
+  const peak = Math.max(...WINDOWS.map((key) => data.burn[key].output_per_min), 500);
+  const total = slices.reduce((sum, item) => sum + item.value, 0);
+
+  return (
+    <>
+      <div className="windows" role="tablist" aria-label="окно усреднения">
+        {WINDOWS.map((key) => (
+          <button
+            key={key}
+            role="tab"
+            aria-selected={key === window}
+            className={key === window ? "window window-on" : "window"}
+            onClick={() => setWindow(key)}
+          >
+            {WINDOW_LABEL[key]}
+          </button>
+        ))}
+      </div>
+
+      <Gauge value={burn.tokens_per_min} slices={slices} caption={WINDOW_CAPTION[window]} />
+
+      <div className="legend-head">
+        <span className="legend-title">разбивка</span>
+        <div className="slice-windows" role="tablist" aria-label="окно разбивки">
+          {SLICE_WINDOWS.map((key) => (
+            <button
+              key={key}
+              role="tab"
+              aria-selected={key === sliceWindow}
+              className={key === sliceWindow ? "slice-window slice-window-on" : "slice-window"}
+              onClick={() => setSliceWindow(key)}
+            >
+              {SLICE_LABEL[key]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <ul className="legend">
+        {slices.map((slice) => {
+          const share = total > 0 ? (slice.value / total) * 100 : 0;
+          return (
+            <li key={slice.key}>
+              <span className="legend-swatch" style={{ background: slice.color }} />
+              <span className="legend-label">{slice.label}</span>
+              <span className="legend-share">{share < 1 ? "<1" : Math.round(share)}%</span>
+              <span className="legend-value">{compact(slice.value)}</span>
+            </li>
+          );
+        })}
+      </ul>
+
+      <OutputMeter value={burn.output_per_min} peak={peak} />
+      <Recorder series={data.series} bucketSeconds={data.series_bucket_seconds} />
+    </>
+  );
+}
+
+function TodayWidget({ data }: { data: Overview }) {
+  return (
+    <>
+      <dl className="today">
+        <div>
+          <dt>ходов</dt>
+          <dd>{grouped(data.today.turns)}</dd>
+        </div>
+        <div>
+          <dt>выход</dt>
+          <dd>{grouped(data.today.output_tokens)}</dd>
+        </div>
+        <div>
+          <dt>чтение кэша</dt>
+          <dd>{grouped(data.today.cache_read)}</dd>
+        </div>
+        <div>
+          <dt>запись кэша</dt>
+          <dd>{grouped(data.today.cache_write)}</dd>
+        </div>
+      </dl>
+      <p className="hint">
+        всего в базе {grouped(data.totals.turns)} ходов, {data.totals.sessions} сессий,{" "}
+        {data.totals.projects} проектов
+      </p>
+    </>
+  );
+}
+
+function LeadersWidget({ data }: { data: Overview }) {
+  if (data.top_sessions.length === 0) {
+    return <p className="hint">сегодня ходов ещё не было</p>;
+  }
+  return (
+    <ol className="leaders">
+      {data.top_sessions.map((session) => (
+        <li key={session.id}>
+          <div className="leaders-bar">
+            <span
+              className="leaders-fill"
+              style={{ width: `${(session.tokens / data.top_sessions[0].tokens) * 100}%` }}
+            />
+          </div>
+          <code>{session.id.slice(0, 8)}</code>
+          <span className="leaders-project">{session.project ?? "—"}</span>
+          <span className="leaders-tokens">{compact(session.tokens)}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function FeedWidget({ data }: { data: Overview }) {
+  return (
+    <>
+      {/* Классы те же, что у строк: на узких экранах колонки прячутся по ним,
+          иначе подписи разъехались бы относительно значений. */}
+      <div className="turn turn-head" aria-hidden="true">
+        <span>время</span>
+        <span className="turn-model">модель</span>
+        <span className="turn-project">проект</span>
+        <span className="turn-output">выход</span>
+        <span className="turn-context">контекст</span>
+        <span className="turn-tools">инструменты</span>
+      </div>
+      <ol>
+        {data.recent_turns.map((turn) => (
+          <TurnRow key={turn.message_id} turn={turn} />
+        ))}
+      </ol>
+    </>
   );
 }
 
