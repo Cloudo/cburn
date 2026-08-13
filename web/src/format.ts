@@ -60,3 +60,17 @@ export function sinceLabel(iso: string | null): string {
 function stamp(iso: string): string {
   return iso.endsWith("Z") || iso.includes("+") ? iso : `${iso}Z`;
 }
+
+/** Имя инструмента для показа: `mcp__plugin_playwright_playwright__browser_click`
+ *  превращается в `playwright: browser_click`. */
+export function toolLabel(tool: string): string {
+  if (!tool.startsWith("mcp__")) return tool;
+  const parts = tool.slice("mcp__".length).split("__");
+  const name = parts.pop();
+  if (!name) return tool;
+  const words = (parts.pop() ?? "")
+    .split("_")
+    .filter((word, index, all) => all.indexOf(word) === index);
+  const server = words[words.length - 1];
+  return server ? `${server}: ${name}` : name;
+}

@@ -507,3 +507,116 @@ def test_session_statuses(transcripts: Path, db_path: Path) -> None:
         "idle": "idle",
     }
     assert data["pending_sessions"] == ["working"]
+
+
+# --- метрики ТЗ §4 (задача B3) -----------------------------------------------
+
+
+def test_tool_profile_and_bash_commands(transcripts: Path, db_path: Path) -> None:
+    """Профиль инструментов, внутри Bash — по нормализованным командам."""
+    now = datetime.now(UTC)
+    bash = [{"type": "tool_use", "id": "b1", "name": "Bash", "input": {"command": "git status"}}]
+    read = [{"type": "tool_use", "id": "r1", "name": "Read", "input": {"file_path": "/x"}}]
+    seed(
+        transcripts,
+        db_path,
+        [
+            assistant("msg_1", ts=now - timedelta(minutes=1), content=bash),
+            assistant("msg_2", uuid="u2", ts=now - timedelta(minutes=2), content=read),
+            assistant(
+                "msg_3",
+                uuid="u3",
+                ts=now - timedelta(minutes=3),
+                content=[
+                    {
+                        "type": "tool_use",
+                        "id": "b2",
+                        "name": "Bash",
+                        "input": {"command": "cd /tmp && git status"},
+                    }
+                ],
+            ),
+        ],
+    )
+    with client(db_path, transcripts) as api:
+        profile = api.get("/api/overview").json()["tools"]
+
+    assert profile["tools"][0] == {"tool": "Bash", "calls": 2}
+    assert profile["tools_total"] == 3
+    # Обе команды свелись к одной строке, несмотря на префикс `cd`.
+    assert profile["bash_commands"] == [{"command": "git status", "calls": 2}]
+
+
+def test_model_share(transcripts: Path, db_path: Path) -> None:
+    now = datetime.now(UTC)
+    lines = [assistant("msg_1", ts=now - timedelta(minutes=1), output=100)]
+    sonnet = json.loads(assistant("msg_2", uuid="u2", ts=now - timedelta(minutes=2), output=10))
+    sonnet["message"]["model"] = "claude-sonnet-5"
+    lines.append(json.dumps(sonnet))
+    seed(transcripts, db_path, lines)
+
+    with client(db_path, transcripts) as api:
+        models = api.get("/api/overview").json()["models"]
+
+    assert [row["model"] for row in models] == ["claude-opus-5", "claude-sonnet-5"]
+    assert models[0]["turns"] == 1 and models[0]["output_tokens"] == 100
+
+
+def test_idle_turns(transcripts: Path, db_path: Path) -> None:
+    """Холостой ход: ответ короче 10 токенов при контексте больше 50k."""
+    now = datetime.now(UTC)
+    seed(
+        transcripts,
+        db_path,
+        [
+            # Холостой: 3 токена ответа при контексте 60k.
+            assistant("msg_idle", ts=now - timedelta(minutes=1), output=3, cache_read=60_000),
+            # Короткий ответ, но контекст маленький — не холостой.
+            assistant(
+                "msg_small", uuid="u2", ts=now - timedelta(minutes=2), output=3, cache_read=10
+            ),
+            # Большой контекст, но и ответ большой — не холостой.
+            assistant(
+                "msg_work", uuid="u3", ts=now - timedelta(minutes=3), output=900, cache_read=60_000
+            ),
+        ],
+    )
+    with client(db_path, transcripts) as api:
+        idle = api.get("/api/overview").json()["idle"]
+
+    assert idle["turns"] == 1
+    assert idle["share"] == pytest.approx(1 / 3)
+    assert idle["cache_read"] == 60_000
+    assert (idle["max_output"], idle["min_context"]) == (10, 50_000)
+
+
+def test_limit_window_starts_after_a_long_pause(transcripts: Path, db_path: Path) -> None:
+    """Окно лимитов начинается с первого хода после паузы длиннее пяти часов."""
+    now = datetime.now(UTC)
+    seed(
+        transcripts,
+        db_path,
+        [
+            assistant("msg_old", ts=now - timedelta(hours=9), output=50),
+            assistant("msg_new", uuid="u2", ts=now - timedelta(hours=2), output=70),
+            assistant("msg_now", uuid="u3", ts=now - timedelta(minutes=5), output=30),
+        ],
+    )
+    with client(db_path, transcripts) as api:
+        limits = api.get("/api/overview").json()["limits"]
+
+    assert limits["approximate"] is True
+    assert limits["window_hours"] == 5
+    started = datetime.fromisoformat(limits["started_at"])
+    # Ход девятичасовой давности — из прошлого окна, он в счёт не идёт.
+    assert (now - started) < timedelta(hours=5)
+    assert limits["usage"]["turns"] == 2
+    assert limits["usage"]["output_tokens"] == 100
+    assert limits["week"]["turns"] == 3
+
+
+def test_limit_window_empty_when_no_turns(db_path: Path, transcripts: Path) -> None:
+    with client(db_path, transcripts) as api:
+        limits = api.get("/api/overview").json()["limits"]
+    assert limits["started_at"] is None
+    assert limits["usage"] is None

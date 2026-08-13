@@ -346,35 +346,109 @@ def _tool_detail(tool: str, tool_input: Any) -> str | None:
     return normalize_command(_str(tool_input.get("command")))
 
 
-#: Токены, после которых начинается новая команда: нормализуется только первая.
+#: Токены, после которых начинается новая команда.
 _COMMAND_SEPARATORS = ("|", "&&", "||", ";", "\n")
+
+#: Обёртки, за которыми в том же сегменте стоит настоящая команда.
+_WRAPPERS = {"sudo", "env", "time", "nohup", "exec", "command", "nice"}
+
+#: `cd` пропускается целиком вместе со своим аргументом: аргумент — это путь,
+#: а не команда. На реальной истории `cd` оказался самой частой «командой»
+#: (2 291 вызов), потому что почти всегда это `cd куда-то && то, что нужно`.
+_PATH_WRAPPERS = {"cd", "pushd"}
+
+#: Команды, у которых вторым словом идёт осмысленная подкоманда. Белый список,
+#: а не эвристика: иначе `cat README` превращается в «cat README», и имя файла
+#: утекает в базу вопреки TZ §7.
+_SUBCOMMAND_HOSTS = {
+    "git",
+    "npm",
+    "pnpm",
+    "yarn",
+    "docker",
+    "make",
+    "cargo",
+    "go",
+    "pip",
+    "pip3",
+    "uv",
+    "poetry",
+    "kubectl",
+    "systemctl",
+    "brew",
+    "gh",
+    "glab",
+    "terraform",
+    "helm",
+    "apt",
+    "apt-get",
+    "dnf",
+    "pacman",
+    "gcloud",
+    "aws",
+    "az",
+    "flatpak",
+    "bundle",
+    "rake",
+    "mvn",
+    "gradle",
+    "dotnet",
+    "composer",
+    "deno",
+    "bun",
+}
+
+#: Присваивание переменной перед командой: `S=/tmp/x python3 …`.
+_ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
 
 def normalize_command(command: str | None) -> str | None:
     """Свернуть bash-команду до «первое слово + подкоманда».
 
     `git commit -m "..."` → `git commit`, `sed -n 1,50p f.py` → `sed`,
-    `cd /x && npm run build` → `cd`. Аргументы и пути отбрасываются.
+    `cd /x && npm run build` → `npm run`. Аргументы и пути отбрасываются:
+    в БД оседает только имя команды (TZ §7).
     """
     if not command:
         return None
-    head = command.strip()
+    segments = _command_segments(command)
+    for segment in segments:
+        name = _command_name(segment)
+        if name is not None:
+            return name
+    # Осталась только смена каталога — она и есть вся команда.
+    return "cd" if segments else None
+
+
+def _command_segments(command: str) -> list[str]:
+    """Разбить строку на команды по разделителям, сохранив порядок."""
+    segments = [command.strip()]
     for separator in _COMMAND_SEPARATORS:
-        head = head.split(separator, 1)[0]
-    tokens = head.split()
+        segments = [part for segment in segments for part in segment.split(separator)]
+    return [segment.strip() for segment in segments if segment.strip()]
+
+
+def _command_name(segment: str) -> str | None:
+    """Имя команды в одном сегменте; обёртки и присваивания пропускаются."""
+    tokens = [token for token in segment.split() if not _ASSIGNMENT.match(token)]
     if not tokens:
         return None
     name = tokens[0].rsplit("/", 1)[-1]
-    if not name:
+    if not name or not name[0].isalnum():
         return None
-    if len(tokens) > 1 and _looks_like_subcommand(tokens[1]):
+    if name in _PATH_WRAPPERS:
+        return None  # аргумент — путь; настоящая команда в следующем сегменте
+    if name in _WRAPPERS:
+        rest = " ".join(tokens[1:]).lstrip()
+        return _command_name(rest) if rest else name
+    if name in _SUBCOMMAND_HOSTS and len(tokens) > 1 and _looks_like_subcommand(tokens[1]):
         return f"{name} {tokens[1]}"
     return name
 
 
 def _looks_like_subcommand(token: str) -> bool:
     return (
-        len(token) <= 20
+        2 <= len(token) <= 20
         and not token.startswith("-")
         and all(char.isalnum() or char in "-_" for char in token)
         and any(char.isalpha() for char in token)

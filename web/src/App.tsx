@@ -1,6 +1,16 @@
 import { useEffect, useState } from "react";
 import { Gauge, OutputMeter, Recorder, type Slice } from "./Gauge";
-import { agoLabel, clockTime, compact, duration, grouped, modelLabel, sinceLabel } from "./format";
+import { Idle, LimitWindow, Models, Tools } from "./Profile";
+import {
+  agoLabel,
+  clockTime,
+  compact,
+  duration,
+  grouped,
+  modelLabel,
+  sinceLabel,
+  toolLabel,
+} from "./format";
 import {
   closeSession,
   hideSession,
@@ -223,6 +233,27 @@ export default function App() {
         </div>
       </section>
 
+      <section className="profile-row">
+        <div className="panel">
+          <h2>на что уходят ходы</h2>
+          <Tools profile={data.tools} />
+        </div>
+        <div className="side">
+          <div className="panel">
+            <h2>модели за сегодня</h2>
+            <Models models={data.models} />
+          </div>
+          <div className="panel">
+            <h2>холостые ходы</h2>
+            <Idle idle={data.idle} />
+          </div>
+          <div className="panel">
+            <h2>окно лимитов</h2>
+            <LimitWindow limits={data.limits} now={data.now} />
+          </div>
+        </div>
+      </section>
+
       <section className="panel feed">
         <h2>лента ходов</h2>
         {/* Классы те же, что у строк: на узких экранах колонки прячутся по ним,
@@ -394,7 +425,7 @@ function TurnRow({ turn }: { turn: Turn }) {
       <span className="turn-output">{grouped(turn.output_tokens)}</span>
       <span className="turn-context">{compact(turn.context_estimate)}</span>
       <span className="turn-tools">
-        {tools.length === 0 ? "" : tools.slice(0, 4).join(" · ")}
+        {tools.length === 0 ? "" : tools.slice(0, 4).map(toolLabel).join(" · ")}
         {tools.length > 4 && ` +${tools.length - 4}`}
       </span>
       {turn.is_sidechain === 1 && <span className="badge">сабагент</span>}

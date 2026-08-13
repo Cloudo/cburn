@@ -214,7 +214,7 @@ def test_tool_use_blocks_are_collected() -> None:
         ("ls", "ls"),
         ("ls -la /Users/secret", "ls"),
         ("sed -n 1,50p file.py", "sed"),
-        ("cd /Users/x && npm run build", "cd"),
+        ("cd /Users/x && npm run build", "npm run"),  # `cd` — префикс, а не команда
         ("cat a.txt | grep пароль", "cat"),
         ("/usr/local/bin/python3 script.py", "python3"),  # имя файла — не подкоманда
         ("docker compose up -d", "docker compose"),
@@ -502,3 +502,39 @@ def test_title_record_without_value_is_unknown() -> None:
     record = parse_line(json.dumps({"type": "ai-title", "sessionId": "s1"}))
     assert record is not None
     assert record.kind is RecordKind.UNKNOWN
+
+
+# --- нормализация команд: обёртки и подкоманды -------------------------------
+
+
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        # `cd` в истории оказался самой частой «командой» — это префикс,
+        # а не то, что делает ход.
+        ("cd /Users/x/project && npm run build", "npm run"),
+        ("cd /a && cd /b && make test", "make test"),
+        ("cd ~/code", "cd"),  # смена каталога и есть вся команда
+        ("S=/tmp/secret python3 script.py", "python3"),  # присваивание — не команда
+        ("env FOO=1 pytest -q", "pytest"),
+        ("sudo systemctl restart nginx", "systemctl restart"),
+        ("time make build", "make build"),
+        # Подкоманда только у команд из белого списка: иначе имя файла
+        # попадает в БД вопреки требованию приватности.
+        ("cat README", "cat"),
+        ("cat a | grep b", "cat"),
+        ("git commit -m 'сообщение'", "git commit"),
+        ("docker compose up -d", "docker compose"),
+        ("glab mr view 42", "glab mr"),
+    ],
+)
+def test_normalize_command_wrappers(command: str, expected: str) -> None:
+    assert normalize_command(command) == expected
+
+
+def test_normalized_command_keeps_no_file_names() -> None:
+    """Приватность: ни путь, ни имя файла в нормализованной команде не остаются."""
+    for command in ("cat /Users/me/secrets.env", "cd /Users/me/private && ls", "vim notes.md"):
+        result = normalize_command(command) or ""
+        assert "/" not in result
+        assert "secrets" not in result and "notes" not in result

@@ -83,6 +83,32 @@ export type Turn = {
 
 export type Bucket = { at: string; turns: number; tokens: number; output_tokens: number };
 
+export type ModelShare = { model: string; turns: number; output_tokens: number; tokens: number };
+
+export type ToolProfile = {
+  tools: Array<{ tool: string; calls: number }>;
+  tools_total: number;
+  bash_commands: Array<{ command: string; calls: number }>;
+};
+
+export type IdleTurns = {
+  turns: number;
+  cache_read: number;
+  output_tokens: number;
+  share: number;
+  max_output: number;
+  min_context: number;
+};
+
+export type Limits = {
+  approximate: boolean;
+  window_hours: number;
+  started_at: string | null;
+  resets_at: string | null;
+  usage: Usage | null;
+  week: Usage;
+};
+
 export type Overview = {
   now: string;
   burn: Record<string, BurnRate>;
@@ -100,6 +126,10 @@ export type Overview = {
   totals: { sessions: number; turns: number; projects: number; last_turn_at: string | null };
   recent_turns: Turn[];
   live_limit: number;
+  models: ModelShare[];
+  tools: ToolProfile;
+  idle: IdleTurns;
+  limits: Limits;
   series: Bucket[];
   series_bucket_seconds: number;
   pending_sessions: string[];

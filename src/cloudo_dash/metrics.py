@@ -321,6 +321,10 @@ def overview(conn: sqlite3.Connection, now: datetime | None = None) -> dict:
         "live_limit": LIVE_LIMIT,
         "top_sessions": top_sessions(conn, day_start),
         "recent_turns": recent_turns(conn),
+        "models": model_share(conn, day_start),
+        "tools": tool_profile(conn, day_start),
+        "idle": idle_turns(conn, day_start),
+        "limits": limit_window(conn, moment),
         "series": burn_series(conn, moment),
         "pending_sessions": pending_sessions(conn, moment),
         "series_bucket_seconds": SERIES_BUCKET_SECONDS,
@@ -419,3 +423,142 @@ def set_hidden(conn: sqlite3.Connection, session_id: str, hidden: bool) -> bool:
             "UPDATE sessions SET hidden = ? WHERE id = ?", (int(hidden), session_id)
         )
     return cursor.rowcount > 0
+
+
+# --- метрики ТЗ §4 (задача B3) -----------------------------------------------
+
+#: Холостой ход: модель ответила почти ничего, хотя контекст уже большой —
+#: случай «жду» из отчёта (ТЗ §4). Пороги вынесены сюда, а не в конфиг:
+#: это определение метрики, а не настройка.
+IDLE_MAX_OUTPUT = 10
+IDLE_MIN_CONTEXT = 50_000
+
+#: Окно лимитов подписки: 5 часов с первого хода серии. Точку отсчёта Claude
+#: Code в транскрипт не пишет, поэтому окно восстанавливается по данным и
+#: помечается приближением (уточнение по OTel — веха E).
+LIMIT_WINDOW_HOURS = 5
+WEEK_HOURS = 24 * 7
+
+
+def model_share(conn: sqlite3.Connection, since: datetime) -> list[dict]:
+    """Доля моделей за период: ходы и токены (ТЗ §4)."""
+    return [
+        dict(row)
+        for row in conn.execute(
+            """
+            SELECT COALESCE(model, '—')                      AS model,
+                   COUNT(*)                                  AS turns,
+                   COALESCE(SUM(output_tokens), 0)           AS output_tokens,
+                   COALESCE(SUM(input_tokens + output_tokens + cache_read
+                                + cache_write_5m + cache_write_1h), 0) AS tokens
+              FROM turns WHERE ts >= ?
+             GROUP BY model ORDER BY tokens DESC
+            """,
+            (_utc_stamp(since),),
+        )
+    ]
+
+
+def tool_profile(conn: sqlite3.Connection, since: datetime, limit: int = 8) -> dict:
+    """Профиль инструментов за период; внутри Bash — по нормализованным командам."""
+    tools = [
+        dict(row)
+        for row in conn.execute(
+            """
+            SELECT c.tool, COUNT(*) AS calls
+              FROM tool_calls AS c JOIN turns AS t ON t.id = c.turn_id
+             WHERE t.ts >= ?
+             GROUP BY c.tool ORDER BY calls DESC
+            """,
+            (_utc_stamp(since),),
+        )
+    ]
+    commands = [
+        dict(row)
+        for row in conn.execute(
+            """
+            SELECT c.detail AS command, COUNT(*) AS calls
+              FROM tool_calls AS c JOIN turns AS t ON t.id = c.turn_id
+             WHERE t.ts >= ? AND c.tool = 'Bash' AND c.detail IS NOT NULL
+             GROUP BY c.detail ORDER BY calls DESC LIMIT ?
+            """,
+            (_utc_stamp(since), limit),
+        )
+    ]
+    return {
+        "tools": tools[:limit],
+        "tools_total": sum(row["calls"] for row in tools),
+        "bash_commands": commands,
+    }
+
+
+def idle_turns(conn: sqlite3.Connection, since: datetime) -> dict:
+    """Холостые ходы за период: сколько их и во что обошлись."""
+    row = conn.execute(
+        """
+        SELECT COUNT(*)                        AS turns,
+               COALESCE(SUM(cache_read), 0)    AS cache_read,
+               COALESCE(SUM(output_tokens), 0) AS output_tokens
+          FROM turns
+         WHERE ts >= ? AND output_tokens < ? AND context_estimate > ?
+        """,
+        (_utc_stamp(since), IDLE_MAX_OUTPUT, IDLE_MIN_CONTEXT),
+    ).fetchone()
+    total = conn.execute(
+        "SELECT COUNT(*) FROM turns WHERE ts >= ?", (_utc_stamp(since),)
+    ).fetchone()[0]
+    idle = dict(row)
+    idle["share"] = idle["turns"] / total if total else 0.0
+    idle["max_output"] = IDLE_MAX_OUTPUT
+    idle["min_context"] = IDLE_MIN_CONTEXT
+    return idle
+
+
+def limit_window(conn: sqlite3.Connection, now: datetime) -> dict:
+    """Оценка окна лимитов подписки — приближение (ТЗ §4).
+
+    Claude Code не пишет в транскрипт ни границ окна, ни самих лимитов, так
+    что окно восстанавливается по ходам: оно начинается с первого хода после
+    паузы длиннее пяти часов и столько же длится. Считаем расход внутри
+    текущего окна и за скользящую неделю; «сколько осталось» без лимитов
+    сказать нельзя, поэтому отдаём объём, а не проценты.
+    """
+    window_start = _current_window_start(conn, now)
+    window = window_usage(conn, window_start) if window_start else None
+    week = window_usage(conn, now - timedelta(hours=WEEK_HOURS))
+    return {
+        "approximate": True,
+        "window_hours": LIMIT_WINDOW_HOURS,
+        "started_at": window_start.isoformat() if window_start else None,
+        "resets_at": (
+            (window_start + timedelta(hours=LIMIT_WINDOW_HOURS)).isoformat()
+            if window_start
+            else None
+        ),
+        "usage": window,
+        "week": week,
+    }
+
+
+def _current_window_start(conn: sqlite3.Connection, now: datetime) -> datetime | None:
+    """Начало текущего пятичасового окна: первый ход после паузы длиннее окна."""
+    rows = conn.execute(
+        """
+        SELECT ts FROM turns
+         WHERE ts >= ? ORDER BY ts
+        """,
+        (_utc_stamp(now - timedelta(hours=LIMIT_WINDOW_HOURS * 4)),),
+    ).fetchall()
+    if not rows:
+        return None
+    span = timedelta(hours=LIMIT_WINDOW_HOURS)
+    start = _parse_stamp(rows[0]["ts"])
+    for row in rows[1:]:
+        moment = _parse_stamp(row["ts"])
+        if moment - start >= span:  # прошлое окно закрылось, началось новое
+            start = moment
+    return start
+
+
+def _parse_stamp(stamp: str) -> datetime:
+    return datetime.fromisoformat(stamp.replace("Z", "+00:00"))
