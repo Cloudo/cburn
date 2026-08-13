@@ -162,11 +162,45 @@ def test_paths_and_initdb(project: Path, capsys: pytest.CaptureFixture[str]) -> 
     assert "turns" in capsys.readouterr().out
 
 
-def test_unimplemented_command_reports_milestone(
-    project: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    assert cli.main(["stats"]) == 2
-    assert "M1" in capsys.readouterr().err
+def test_stats_reports_period_and_totals(project: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Сводка за период считает ходы, токены и стоимость (задача B7)."""
+    for fixture in FIXTURES:
+        (project / fixture.name).write_text(fixture.read_text())
+    cli.main(["reindex"])
+    capsys.readouterr()
+
+    assert cli.main(["stats", "--period", "all"]) == 0
+    out = capsys.readouterr().out
+    assert "период       : all" in out
+    assert "стоимость" in out
+
+
+def test_stats_filters_by_project(project: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Фильтр по проекту ищет подстроку в slug, а не требует его целиком."""
+    for fixture in FIXTURES:
+        (project / fixture.name).write_text(fixture.read_text())
+    cli.main(["reindex"])
+    capsys.readouterr()
+
+    assert cli.main(["stats", "--period", "all", "--project", "прое"]) == 0
+    assert "проект ~ прое" in capsys.readouterr().out
+    assert cli.main(["stats", "--period", "all", "--project", "нетакого"]) == 1
+    assert "ходов нет" in capsys.readouterr().err
+
+
+def test_period_is_parsed(project: Path) -> None:
+    """Период понимает today, часы, дни, дату и «за всю историю»."""
+    assert cli._since("all") is None
+    assert cli._since("24h") is not None
+    assert cli._since("7d") < cli._since("24h")  # type: ignore[operator]
+    assert cli._since("2026-08-01").year == 2026
+    with pytest.raises(SystemExit):
+        cli._since("позавчера")
+
+
+def test_unknown_command_is_reported(project: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit):
+        cli.main(["такого-нет"])
 
 
 def test_serve_arguments_are_parsed() -> None:

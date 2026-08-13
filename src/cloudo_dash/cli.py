@@ -9,22 +9,24 @@ from __future__ import annotations
 import argparse
 import sys
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from . import __version__, config, paths, pricing
 from .collector.indexer import ingest_tree
 from .db import connect
 from .metrics import (
+    idle_turns,
+    local_day_start,
+    model_share,
     recent_sessions,
     session_chain,
     session_models,
     session_summary,
     session_tools,
+    tool_profile,
+    window_usage,
 )
-
-NOT_IMPLEMENTED_MILESTONE = {
-    "stats": "M1",
-}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -34,15 +36,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("paths", help="показать пути конфига, БД и транскриптов")
     sub.add_parser("initdb", help="создать БД и применить схему")
-    sub.add_parser("stats", help="сводка расхода за период")
+    stats = sub.add_parser("stats", help="сводка расхода за период")
+    _add_filters(stats)
     sessions = sub.add_parser("sessions", help="список сессий")
     sessions.add_argument("-n", "--limit", type=int, default=20, help="сколько показать")
+    # Список и так ограничен -n, поэтому по умолчанию он за всю историю.
+    _add_filters(sessions, period="all")
     session = sub.add_parser("session", help="детали одной сессии")
     session.add_argument("session_id", help="полный id или его начало")
     reindex = sub.add_parser("reindex", help="дочитать транскрипты в БД")
     reindex.add_argument(
         "--full", action="store_true", help="перечитать файлы целиком, а не только хвосты"
     )
+    reindex.add_argument("--project", help="только транскрипты этого проекта (часть slug)")
     events = sub.add_parser("events", help="незнакомые типы записей транскрипта")
     events.add_argument("--show", metavar="ТИП", help="показать сохранённые примеры записи")
     prices = sub.add_parser("prices", help="применить цены из конфига и пересчитать стоимость")
@@ -54,6 +60,35 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--host", default="127.0.0.1", help="только localhost, TZ §7")
     serve.add_argument("--reload", action="store_true", help="перезапуск при правках кода")
     return parser
+
+
+def _add_filters(parser: argparse.ArgumentParser, *, period: str = "7d") -> None:
+    """Общие фильтры: проект подстрокой slug, период — `today`, `24h`, `7d`, `all`."""
+    parser.add_argument("--project", help="часть slug проекта, например cloudo-dash")
+    parser.add_argument(
+        "--period",
+        default=period,
+        help=f"today | 24h | 7d | 30d | all | дата (по умолчанию {period})",
+    )
+
+
+def _since(period: str) -> datetime | None:
+    """Начало периода. None — «за всю историю»."""
+    value = period.strip().lower()
+    now = datetime.now(UTC)
+    if value == "all":
+        return None
+    if value == "today":
+        return local_day_start(now)
+    if value.endswith(("h", "d")) and value[:-1].isdigit():
+        hours = int(value[:-1]) * (24 if value.endswith("d") else 1)
+        return now - timedelta(hours=hours)
+    try:
+        return datetime.fromisoformat(value).replace(tzinfo=UTC)
+    except ValueError as exc:
+        raise SystemExit(
+            f"не разобран период «{period}»: ждём today, 24h, 7d, all или дату"
+        ) from exc
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -79,7 +114,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "reindex":
-        return _reindex(args.full)
+        return _reindex(args.full, args.project)
 
     if args.command == "events":
         return _events(args.show)
@@ -87,8 +122,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "prices":
         return _prices(args.init)
 
+    if args.command == "stats":
+        return _stats(args.project, args.period)
+
     if args.command == "sessions":
-        return _sessions(args.limit)
+        return _sessions(args.limit, args.project, args.period)
 
     if args.command == "session":
         return _session(args.session_id)
@@ -96,8 +134,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "serve":
         return _serve(args.host, args.port, args.reload)
 
-    milestone = NOT_IMPLEMENTED_MILESTONE.get(args.command, "?")
-    print(f"команда `{args.command}` ещё не реализована (этап {milestone})", file=sys.stderr)
+    print(f"неизвестная команда `{args.command}`", file=sys.stderr)
     return 2
 
 
@@ -130,7 +167,7 @@ def _usd(value: float) -> str:
     return "$" + f"{value:,.2f}".replace(",", " ")
 
 
-def _reindex(full: bool = False) -> int:
+def _reindex(full: bool = False, project: str | None = None) -> int:
     """Дочитать все транскрипты (задача B2).
 
     `--full` сбрасывает сохранённые offset и читает файлы целиком: нужно, когда
@@ -138,6 +175,10 @@ def _reindex(full: bool = False) -> int:
     на уже прочитанной истории. Повторные ходы гасятся по `message_id`.
     """
     started = time.monotonic()
+    roots = _project_dirs(project)
+    if not roots:
+        print(f"проект «{project}» не найден в {paths.CLAUDE_PROJECTS_DIR}", file=sys.stderr)
+        return 1
     with connect() as conn:
         pricing.sync_prices(conn, config.load())
         if full:
@@ -146,7 +187,7 @@ def _reindex(full: bool = False) -> int:
                 conn.execute("DELETE FROM raw_events")
                 conn.execute("DELETE FROM raw_event_counts")
                 conn.execute("UPDATE sessions SET parent_session_id = NULL")
-        results = ingest_tree(conn, paths.CLAUDE_PROJECTS_DIR, on_file=_progress)
+        results = [stats for root in roots for stats in ingest_tree(conn, root, on_file=_progress)]
     if sys.stderr.isatty():
         print(file=sys.stderr)  # закрыть строку прогресса
     lines = sum(result.lines for result in results)
@@ -156,6 +197,14 @@ def _reindex(full: bool = False) -> int:
     print(f"файлов: {len(results)}, прочитано строк: {_thousands(lines)}, за {elapsed:.1f} с")
     print(f"новых ходов: {_thousands(turns)}, уже известных: {_thousands(known)}")
     return 0
+
+
+def _project_dirs(project: str | None) -> list[Path]:
+    """Каталоги транскриптов для обхода: весь корень или только нужный проект."""
+    root = paths.CLAUDE_PROJECTS_DIR
+    if not project:
+        return [root]
+    return sorted(path for path in root.glob("*") if path.is_dir() and project in path.name)
 
 
 def _progress(done: int, total: int, path: Path) -> None:
@@ -224,9 +273,67 @@ def _prices(init: bool) -> int:
     return 0
 
 
-def _sessions(limit: int) -> int:
+def _stats(project: str | None, period: str) -> int:
+    """Сводка расхода за период (ТЗ §4, задача B7)."""
+    since = _since(period) or datetime.fromtimestamp(0, UTC)
     with connect() as conn:
-        rows = recent_sessions(conn, limit)
+        usage = window_usage(conn, since, project=project)
+        models = model_share(conn, since, project=project)
+        profile = tool_profile(conn, since, project=project)
+        idle = idle_turns(conn, since, project=project)
+    if not usage["turns"]:
+        print("за период ходов нет", file=sys.stderr)
+        return 1
+
+    where = f", проект ~ {project}" if project else ""
+    print(f"период       : {period}{where}")
+    print(f"ходов        : {_thousands(usage['turns'])} в {usage['sessions']} сессиях")
+    print(f"вход         : {_thousands(usage['input_tokens'])}")
+    print(f"выход        : {_thousands(usage['output_tokens'])}")
+    print(f"кэш чтение   : {_thousands(usage['cache_read'])}")
+    print(
+        f"кэш запись   : {_thousands(usage['cache_write'])}"
+        f" (5m {_thousands(usage['cache_write_5m'])},"
+        f" 1h {_thousands(usage['cache_write_1h'])})"
+    )
+    print(f"стоимость    : {_usd(usage['cost_usd'])}")
+    if models:
+        parts = [f"{_model_label(row['model'])} {row['turns']}" for row in models]
+        print(f"модели       : {', '.join(parts)}")
+    if profile["tools"]:
+        parts = [f"{_tool_label(row['tool'])} {row['calls']}" for row in profile["tools"][:6]]
+        print(f"инструменты  : {', '.join(parts)} (всего {profile['tools_total']})")
+    if profile["bash_commands"]:
+        parts = [f"{row['command']} {row['calls']}" for row in profile["bash_commands"][:5]]
+        print(f"внутри Bash  : {', '.join(parts)}")
+    print(
+        f"холостые     : {idle['turns']} ходов ({idle['share'] * 100:.0f}%),"
+        f" прочитано из кэша {_thousands(idle['cache_read'])}"
+    )
+    return 0
+
+
+def _model_label(model: str) -> str:
+    """Короткое имя модели: `claude-` и дата выпуска в выводе только мешают."""
+    short = model.removeprefix("claude-")
+    head, _, tail = short.rpartition("-")
+    return head if head and tail.isdigit() and len(tail) == 8 else short
+
+
+def _tool_label(tool: str) -> str:
+    """`mcp__plugin_playwright_playwright__browser_click` → `playwright: browser_click`."""
+    if not tool.startswith("mcp__"):
+        return tool
+    parts = tool.removeprefix("mcp__").split("__")
+    name = parts.pop()
+    words = dict.fromkeys((parts.pop() if parts else "").split("_"))
+    server = list(words)[-1] if words else ""
+    return f"{server}: {name}" if server else name
+
+
+def _sessions(limit: int, project: str | None = None, period: str = "all") -> int:
+    with connect() as conn:
+        rows = recent_sessions(conn, limit, project=project, since=_since(period))
     if not rows:
         print("сессий нет — выполните `cdash reindex`", file=sys.stderr)
         return 1
@@ -302,10 +409,14 @@ def _session(prefix: str) -> int:
             f" {_usd(chain['cost_usd'])}"
         )
     if models:
-        parts = [f"{model} {turns} ходов / {_thousands(out)}" for model, turns, out in models]
+        parts = [
+            f"{_model_label(model)} {turns} ходов / {_thousands(out)}"
+            for model, turns, out in models
+        ]
         print(f"модели       : {'; '.join(parts)}")
     if tools:
-        print(f"инструменты  : {', '.join(f'{tool} {calls}' for tool, calls in tools)}")
+        parts = [f"{_tool_label(tool)} {calls}" for tool, calls in tools]
+        print(f"инструменты  : {', '.join(parts)}")
     return 0
 
 

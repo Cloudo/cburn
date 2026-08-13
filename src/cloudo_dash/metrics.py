@@ -9,6 +9,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -109,20 +110,33 @@ def session_tools(
     ]
 
 
-def recent_sessions(conn: sqlite3.Connection, limit: int = 20) -> list[sqlite3.Row]:
-    """Последние сессии по активности (фильтры по проекту и периоду — задача B7)."""
+def recent_sessions(
+    conn: sqlite3.Connection,
+    limit: int = 20,
+    project: str | None = None,
+    since: datetime | None = None,
+) -> list[sqlite3.Row]:
+    """Последние сессии по активности, с фильтрами по проекту и периоду (B7)."""
+    clause = ""
+    params: list[Any] = []
+    if project:
+        clause += " AND p.slug LIKE ?"
+        params.append(f"%{project}%")
+    if since is not None:
+        clause += " AND s.last_at >= ?"
+        params.append(_utc_stamp(since))
     return list(
         conn.execute(
-            """
+            f"""
             SELECT s.id, p.slug AS project, s.last_at, s.started_at, s.turns, s.tokens_out,
-                   s.cache_read, s.cache_write, s.last_context, s.first_prompt,
+                   s.cache_read, s.cache_write, s.cost_usd, s.last_context, s.first_prompt,
                    s.title, s.title_source
               FROM sessions AS s
               LEFT JOIN projects AS p ON p.id = s.project_id
-             WHERE s.hidden = 0
+             WHERE s.hidden = 0{clause}
              ORDER BY s.last_at DESC LIMIT ?
-            """,
-            (limit,),
+            """,  # noqa: S608
+            (*params, limit),
         )
     )
 
@@ -143,13 +157,36 @@ def _utc_stamp(moment: datetime) -> str:
     return moment.astimezone(UTC).strftime(TS_FORMAT)
 
 
-def window_usage(conn: sqlite3.Connection, since: datetime, until: datetime | None = None) -> dict:
+def project_filter(project: str | None, column: str = "session_id") -> tuple[str, list[str]]:
+    """Условие «сессия из этого проекта» и его параметры (задача B7).
+
+    Проект ищется подстрокой в slug: набирать `-Users-cloudo-code-cloudo-dash`
+    целиком незачем, хватает `cloudo-dash`.
+    """
+    if not project:
+        return "", []
+    clause = (
+        f" AND {column} IN (SELECT s.id FROM sessions AS s"
+        " JOIN projects AS p ON p.id = s.project_id WHERE p.slug LIKE ?)"
+    )
+    return clause, [f"%{project}%"]
+
+
+def window_usage(
+    conn: sqlite3.Connection,
+    since: datetime,
+    until: datetime | None = None,
+    project: str | None = None,
+) -> dict:
     """Суммы по ходам в интервале времени."""
     params: list[str] = [_utc_stamp(since)]
     clause = "ts >= ?"
     if until is not None:
         clause += " AND ts < ?"
         params.append(_utc_stamp(until))
+    project_clause, project_params = project_filter(project)
+    clause += project_clause
+    params += project_params
     row = conn.execute(
         f"""
         SELECT COUNT(*)                            AS turns,
@@ -546,49 +583,55 @@ LIMIT_WINDOW_HOURS = 5
 WEEK_HOURS = 24 * 7
 
 
-def model_share(conn: sqlite3.Connection, since: datetime) -> list[dict]:
+def model_share(
+    conn: sqlite3.Connection, since: datetime, project: str | None = None
+) -> list[dict]:
     """Доля моделей за период: ходы и токены (ТЗ §4)."""
+    clause, params = project_filter(project)
     return [
         dict(row)
         for row in conn.execute(
-            """
+            f"""
             SELECT COALESCE(model, '—')                      AS model,
                    COUNT(*)                                  AS turns,
                    COALESCE(SUM(output_tokens), 0)           AS output_tokens,
                    COALESCE(SUM(input_tokens + output_tokens + cache_read
                                 + cache_write_5m + cache_write_1h), 0) AS tokens
-              FROM turns WHERE ts >= ?
+              FROM turns WHERE ts >= ?{clause}
              GROUP BY model ORDER BY tokens DESC
-            """,
-            (_utc_stamp(since),),
+            """,  # noqa: S608
+            (_utc_stamp(since), *params),
         )
     ]
 
 
-def tool_profile(conn: sqlite3.Connection, since: datetime, limit: int = 8) -> dict:
+def tool_profile(
+    conn: sqlite3.Connection, since: datetime, limit: int = 8, project: str | None = None
+) -> dict:
     """Профиль инструментов за период; внутри Bash — по нормализованным командам."""
+    clause, params = project_filter(project, "t.session_id")
     tools = [
         dict(row)
         for row in conn.execute(
-            """
+            f"""
             SELECT c.tool, COUNT(*) AS calls
               FROM tool_calls AS c JOIN turns AS t ON t.id = c.turn_id
-             WHERE t.ts >= ?
+             WHERE t.ts >= ?{clause}
              GROUP BY c.tool ORDER BY calls DESC
-            """,
-            (_utc_stamp(since),),
+            """,  # noqa: S608
+            (_utc_stamp(since), *params),
         )
     ]
     commands = [
         dict(row)
         for row in conn.execute(
-            """
+            f"""
             SELECT c.detail AS command, COUNT(*) AS calls
               FROM tool_calls AS c JOIN turns AS t ON t.id = c.turn_id
-             WHERE t.ts >= ? AND c.tool = 'Bash' AND c.detail IS NOT NULL
+             WHERE t.ts >= ? AND c.tool = 'Bash' AND c.detail IS NOT NULL{clause}
              GROUP BY c.detail ORDER BY calls DESC LIMIT ?
-            """,
-            (_utc_stamp(since), limit),
+            """,  # noqa: S608
+            (_utc_stamp(since), *params, limit),
         )
     ]
     return {
@@ -598,20 +641,22 @@ def tool_profile(conn: sqlite3.Connection, since: datetime, limit: int = 8) -> d
     }
 
 
-def idle_turns(conn: sqlite3.Connection, since: datetime) -> dict:
+def idle_turns(conn: sqlite3.Connection, since: datetime, project: str | None = None) -> dict:
     """Холостые ходы за период: сколько их и во что обошлись."""
+    clause, params = project_filter(project)
     row = conn.execute(
-        """
+        f"""
         SELECT COUNT(*)                        AS turns,
                COALESCE(SUM(cache_read), 0)    AS cache_read,
                COALESCE(SUM(output_tokens), 0) AS output_tokens
           FROM turns
-         WHERE ts >= ? AND output_tokens < ? AND context_estimate > ?
-        """,
-        (_utc_stamp(since), IDLE_MAX_OUTPUT, IDLE_MIN_CONTEXT),
+         WHERE ts >= ? AND output_tokens < ? AND context_estimate > ?{clause}
+        """,  # noqa: S608
+        (_utc_stamp(since), IDLE_MAX_OUTPUT, IDLE_MIN_CONTEXT, *params),
     ).fetchone()
     total = conn.execute(
-        "SELECT COUNT(*) FROM turns WHERE ts >= ?", (_utc_stamp(since),)
+        f"SELECT COUNT(*) FROM turns WHERE ts >= ?{clause}",  # noqa: S608
+        (_utc_stamp(since), *params),
     ).fetchone()[0]
     idle = dict(row)
     idle["share"] = idle["turns"] / total if total else 0.0

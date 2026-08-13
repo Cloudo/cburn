@@ -24,11 +24,13 @@ python3 -m venv .venv
 ```bash
 cdash paths      # где лежат конфиг, БД и транскрипты
 cdash initdb     # создать БД и применить схему
-cdash reindex    # дочитать все транскрипты (первый запуск читает историю целиком)
+cdash reindex    # дочитать транскрипты; --full перечитывает целиком, --project сужает
 cdash prices     # применить цены из конфига; --init положит туда заготовку тарифов
-cdash stats      # M1
-cdash sessions   # M1
-cdash serve      # M2, дашборд на http://localhost:8799
+cdash events     # незнакомые типы записей; --show <тип> покажет примеры
+cdash stats      # сводка расхода; --period 7d|today|24h|30d|all|дата, --project часть slug
+cdash sessions   # список сессий, те же фильтры плюс -n
+cdash session ID # детали сессии: суммы, сабагенты, линия работы, инструменты
+cdash serve      # дашборд на http://localhost:8799
 ```
 
 ## Сколько занимает первая индексация
