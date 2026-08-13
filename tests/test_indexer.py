@@ -487,6 +487,22 @@ def test_subagent_transcript_keeps_parent_project(
     assert row["slug"] == "-Users-me-proj"
 
 
+def test_ingest_tree_reports_progress(conn: sqlite3.Connection, tmp_path: Path) -> None:
+    """Обход отдаёт прогресс по файлам — по нему CLI рисует строку (задача B2)."""
+    for name in ("a", "b", "c"):
+        write_transcript(tmp_path / f"proj-{name}" / "s.jsonl", [assistant(f"msg_{name}")])
+    seen: list[tuple[int, int, str]] = []
+
+    ingest_tree(
+        conn,
+        tmp_path,
+        on_file=lambda done, total, path: seen.append((done, total, path.parent.name)),
+    )
+
+    assert [(done, total) for done, total, _ in seen] == [(1, 3), (2, 3), (3, 3)]
+    assert [name for _, _, name in seen] == ["proj-a", "proj-b", "proj-c"]
+
+
 # --- неполный usage в записях хода -------------------------------------------
 
 

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -115,9 +115,24 @@ def ingest_file(conn: sqlite3.Connection, path: Path) -> IngestStats:
     return stats
 
 
-def ingest_tree(conn: sqlite3.Connection, root: Path) -> list[IngestStats]:
-    """Обойти каталог транскриптов целиком (полная версия — задача B2)."""
-    return [ingest_file(conn, path) for path in sorted(root.rglob("*.jsonl"))]
+def ingest_tree(
+    conn: sqlite3.Connection,
+    root: Path,
+    on_file: Callable[[int, int, Path], None] | None = None,
+) -> list[IngestStats]:
+    """Обойти каталог транскриптов целиком (задача B2).
+
+    `on_file(готово, всего, путь)` вызывается после каждого файла — CLI рисует
+    по нему прогресс. Отдельная фоновая задача не понадобилась: полный обход
+    639 МБ занимает секунды, см. README.
+    """
+    paths_to_read = sorted(root.rglob("*.jsonl"))
+    results = []
+    for index, path in enumerate(paths_to_read, start=1):
+        results.append(ingest_file(conn, path))
+        if on_file is not None:
+            on_file(index, len(paths_to_read), path)
+    return results
 
 
 # --- чтение хвоста ----------------------------------------------------------

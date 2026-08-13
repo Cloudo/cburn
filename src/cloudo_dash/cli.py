@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
+from pathlib import Path
 
 from . import __version__, config, paths, pricing
 from .collector.indexer import ingest_tree
@@ -110,16 +112,27 @@ def _thousands(value: int) -> str:
 
 
 def _reindex() -> int:
-    """Дочитать все транскрипты. Прогресс и батчи — задача B2."""
+    """Дочитать все транскрипты (задача B2)."""
+    started = time.monotonic()
     with connect() as conn:
         pricing.sync_prices(conn, config.load())
-        results = ingest_tree(conn, paths.CLAUDE_PROJECTS_DIR)
+        results = ingest_tree(conn, paths.CLAUDE_PROJECTS_DIR, on_file=_progress)
+    if sys.stderr.isatty():
+        print(file=sys.stderr)  # закрыть строку прогресса
     lines = sum(result.lines for result in results)
     turns = sum(result.turns_new for result in results)
     known = sum(result.turns_known for result in results)
-    print(f"файлов: {len(results)}, прочитано строк: {_thousands(lines)}")
+    elapsed = time.monotonic() - started
+    print(f"файлов: {len(results)}, прочитано строк: {_thousands(lines)}, за {elapsed:.1f} с")
     print(f"новых ходов: {_thousands(turns)}, уже известных: {_thousands(known)}")
     return 0
+
+
+def _progress(done: int, total: int, path: Path) -> None:
+    """Живая строка обхода. В пайп не пишется: там нужен только итог."""
+    if not sys.stderr.isatty():
+        return
+    print(f"\r{done}/{total}  {path.name[:36]:<36}", end="", file=sys.stderr, flush=True)
 
 
 def _prices(init: bool) -> int:
