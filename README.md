@@ -31,7 +31,19 @@ cdash stats      # сводка расхода; --period 7d|today|24h|30d|all|д
 cdash sessions   # список сессий, те же фильтры плюс -n
 cdash session ID # детали сессии: суммы, сабагенты, линия работы, инструменты
 cdash serve      # дашборд на http://localhost:8799
+cdash install    # автозапуск при логине (launchd), uninstall снимает, status покажет
 ```
+
+## Автозапуск
+
+`cdash install` кладёт агент пользователя в
+`~/Library/LaunchAgents/com.cloudo.cloudo-dash.plist` и сразу его запускает:
+дашборд поднимается при логине и переживает перезагрузку. Логи — в
+`~/.local/share/cloudo-dash/serve.log`, рядом с базой. `cdash status` покажет,
+что про агент думает launchd, `cdash uninstall` снимет его и удалит plist.
+
+Агент пользователя, а не демон системы: дашборд читает `~/.claude` и пишет
+в свой каталог, root ему не нужен.
 
 ## Сколько занимает первая индексация
 

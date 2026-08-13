@@ -12,7 +12,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from . import __version__, config, paths, pricing
+from . import __version__, autostart, config, paths, pricing
 from .collector.indexer import ingest_tree
 from .db import connect
 from .metrics import (
@@ -57,6 +57,10 @@ def build_parser() -> argparse.ArgumentParser:
     prices.add_argument(
         "--init", action="store_true", help="записать в конфиг заготовку тарифов, если их нет"
     )
+    install = sub.add_parser("install", help="автозапуск дашборда при логине (launchd)")
+    install.add_argument("--port", type=int, help="порт (по умолчанию из конфига)")
+    sub.add_parser("uninstall", help="убрать автозапуск")
+    sub.add_parser("status", help="что launchd думает про агент автозапуска")
     serve = sub.add_parser("serve", help="запустить API-сервер и дашборд")
     serve.add_argument("--port", type=int, help="порт (по умолчанию из конфига)")
     serve.add_argument("--host", default="127.0.0.1", help="только localhost, TZ §7")
@@ -123,6 +127,18 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "session":
         return _session(args.session_id)
+
+    if args.command == "install":
+        print(autostart.install(args.port or config.load()["server"]["port"]))
+        return 0
+
+    if args.command == "uninstall":
+        print(autostart.uninstall())
+        return 0
+
+    if args.command == "status":
+        print(autostart.status())
+        return 0
 
     if args.command == "serve":
         return _serve(args.host, args.port, args.reload)
