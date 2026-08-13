@@ -212,11 +212,11 @@ class LimitsWatcher:
         self._checked_at = 0.0
         self._wait = refresh_seconds
 
-    def current(self, now: float | None = None) -> dict[str, Any]:
+    def current(self, now: float | None = None, *, force: bool = False) -> dict[str, Any]:
         moment = time.monotonic() if now is None else now
         with self._lock:
             known = self._value
-            if known is not None and moment - self._checked_at < self._wait:
+            if not force and known is not None and moment - self._checked_at < self._wait:
                 return known.as_dict()
 
         value: PlanLimits | None = None
@@ -239,6 +239,14 @@ class LimitsWatcher:
             self._checked_at = moment
             self._wait = wait
         return value.as_dict()
+
+    def refresh(self, now: float | None = None) -> dict[str, Any]:
+        """Спросить лимиты сейчас, не дожидаясь паузы: пользователь нажал сам.
+
+        Нарваться на 429 при этом можно, и тогда останется последнее известное
+        значение, а следующая попытка отодвинется на `Retry-After`.
+        """
+        return self.current(now, force=True)
 
 
 def _retry_after(header: str) -> float:

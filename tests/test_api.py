@@ -105,8 +105,13 @@ class StubLimits:
             "limits": [],
             "error": None,
         }
+        self.refreshes = 0
 
-    def current(self, now: float | None = None) -> dict:
+    def current(self, now: float | None = None, *, force: bool = False) -> dict:
+        return self.payload
+
+    def refresh(self, now: float | None = None) -> dict:
+        self.refreshes += 1
         return self.payload
 
 
@@ -671,3 +676,14 @@ def test_plan_limits_reach_the_dashboard(transcripts: Path, db_path: Path) -> No
     seed(transcripts, db_path, [assistant("msg_1")])
     with client(db_path, transcripts, limits=StubLimits(payload)) as api:
         assert api.get("/api/overview").json()["plan"] == payload
+
+
+def test_plan_refresh_asks_limits_now(transcripts: Path, db_path: Path) -> None:
+    """Кнопка обновления в виджете лимитов ходит мимо пятиминутного кэша."""
+    seed(transcripts, db_path, [assistant("msg_1")])
+    limits = StubLimits()
+    with client(db_path, transcripts, limits=limits) as api:
+        response = api.post("/api/plan/refresh")
+        assert response.status_code == 200
+        assert response.json()["plan"] == limits.payload
+        assert limits.refreshes == 1

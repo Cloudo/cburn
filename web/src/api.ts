@@ -2,7 +2,7 @@
 // к файловой системе у фронта нет — иначе обёртка Tauri на M5 потребовала бы
 // переделки (см. CLAUDE.md, инварианты).
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type Usage = {
   turns: number;
@@ -155,12 +155,25 @@ export type Overview = {
   pending_sessions: string[];
 };
 
+/** Спросить лимиты подписки немедленно: сам обзор их кэширует на пять минут. */
+export async function refreshPlan(): Promise<void> {
+  const response = await fetch("api/plan/refresh", { method: "POST" });
+  if (!response.ok) throw new Error(`не удалось обновить лимиты: ${response.status}`);
+}
+
 export type Connection = "connecting" | "live" | "offline";
 
 const RECONNECT_DELAY = 2000;
 
+export type OverviewFeed = {
+  data: Overview | null;
+  connection: Connection;
+  updatedAt: number;
+  refresh: () => Promise<void>;
+};
+
 /** Обзор, который сам себя обновляет: первый кадр и пуши приходят по WebSocket. */
-export function useOverview(): { data: Overview | null; connection: Connection; updatedAt: number } {
+export function useOverview(): OverviewFeed {
   const [data, setData] = useState<Overview | null>(null);
   const [connection, setConnection] = useState<Connection>("connecting");
   const [updatedAt, setUpdatedAt] = useState(0);
@@ -199,5 +212,14 @@ export function useOverview(): { data: Overview | null; connection: Connection; 
     };
   }, []);
 
-  return { data, connection, updatedAt };
+  // Кнопка обновления в виджете: тикер и так шлёт обзор раз в секунду, но при
+  // разорванном сокете это единственный способ увидеть свежие числа.
+  const refresh = useCallback(async () => {
+    const response = await fetch("api/overview");
+    if (!response.ok) throw new Error(`не удалось обновить обзор: ${response.status}`);
+    setData(await response.json());
+    setUpdatedAt(Date.now());
+  }, []);
+
+  return { data, connection, updatedAt, refresh };
 }

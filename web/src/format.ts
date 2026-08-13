@@ -29,9 +29,19 @@ export function usd(value: number): string {
   return `$${text}`;
 }
 
-export function clockTime(iso: string): string {
-  const date = new Date(stamp(iso));
+export function clockTime(at: string | number): string {
+  const date = typeof at === "number" ? new Date(at) : new Date(stamp(at));
   return date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+/** Момент из ISO-строки бэкенда в миллисекундах. */
+export function timestamp(iso: string): number {
+  return new Date(stamp(iso)).getTime();
+}
+
+/** Подсказка у метки в шапке виджета: «данные на 14:32:07, только что». */
+export function freshnessLabel(at: number, now: number): string {
+  return `данные на ${clockTime(at)}, ${agoLabel(Math.max(now - at, 0) / 1000)}`;
 }
 
 export function agoLabel(seconds: number): string {

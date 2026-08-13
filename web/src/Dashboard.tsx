@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import GridLayout, { type Layout } from "react-grid-layout";
 
+import { clockTime, freshnessLabel } from "./format";
 import {
   COLUMNS,
   MARGIN,
@@ -15,7 +16,19 @@ import {
   type WidgetId,
 } from "./layout";
 
-export type WidgetContent = { id: WidgetId; title: string; body: React.ReactNode };
+export type WidgetContent = {
+  id: WidgetId;
+  title: string;
+  body: React.ReactNode;
+  /** На какой момент данные виджета (мс); null — данных ещё нет. */
+  at: number | null;
+  /** Обновить именно эти данные, не дожидаясь такта. */
+  refresh: () => Promise<void>;
+};
+
+//: Порог, после которого метка времени подсвечивается: у обзора такт секундный,
+//: столько живут только лимиты подписки со своим пятиминутным кэшем.
+const STALE_SECONDS = 120;
 
 /** Ширина сетки в пикселях: react-grid-layout не умеет считать её сам. */
 function useWidth(): [number, (node: HTMLDivElement | null) => void] {
@@ -107,27 +120,98 @@ export function Dashboard({ widgets }: { widgets: WidgetContent[] }) {
           margin={MARGIN}
           width={width}
           draggableHandle=".widget-grip"
+          draggableCancel=".widget-tools"
           onLayoutChange={onLayoutChange}
           resizeHandles={["se"]}
           compactType="vertical"
         >
           {visible.map((widget) => (
             <section key={widget.id} className="panel widget">
-              <header className="widget-grip">
-                <h2>{widget.title}</h2>
-                <button
-                  className="widget-hide"
-                  aria-label={`скрыть виджет «${widget.title}»`}
-                  onClick={() => toggle(widget.id)}
-                >
-                  ×
-                </button>
-              </header>
+              <WidgetHead widget={widget} onHide={() => toggle(widget.id)} />
               <div className="widget-body">{widget.body}</div>
             </section>
           ))}
         </GridLayout>
       </div>
     </>
+  );
+}
+
+/** Шапка виджета: имя, на какое время данные и обновление по наведению. */
+function WidgetHead({ widget, onHide }: { widget: WidgetContent; onHide: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const now = Date.now();
+  const stale = widget.at !== null && now - widget.at > STALE_SECONDS * 1000;
+
+  const refresh = async () => {
+    if (busy) return;
+    setBusy(true);
+    setFailed(false);
+    try {
+      await widget.refresh();
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <header className="widget-grip">
+      <h2>{widget.title}</h2>
+      <div className="widget-tools">
+        {widget.at === null ? (
+          <span className="widget-at widget-at-none" title="данные ещё не получены">
+            —
+          </span>
+        ) : (
+          <time
+            className={stale ? "widget-at widget-at-stale" : "widget-at"}
+            dateTime={new Date(widget.at).toISOString()}
+            title={freshnessLabel(widget.at, now)}
+          >
+            {clockTime(widget.at)}
+          </time>
+        )}
+        <button
+          className={busy ? "widget-refresh widget-refresh-busy" : "widget-refresh"}
+          aria-label={`обновить виджет «${widget.title}»`}
+          title={failed ? "обновить (прошлая попытка не удалась)" : "обновить"}
+          onClick={refresh}
+        >
+          <RefreshIcon />
+        </button>
+        <button
+          className="widget-hide"
+          aria-label={`скрыть виджет «${widget.title}»`}
+          onClick={onHide}
+        >
+          ×
+        </button>
+      </div>
+    </header>
+  );
+}
+
+function RefreshIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" focusable="false">
+      <path
+        d="M13.2 8a5.2 5.2 0 1 1-1.6-3.75"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+      <path
+        d="M13.2 1.9v3.2H10"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }

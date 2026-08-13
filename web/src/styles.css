@@ -1440,8 +1440,48 @@ main.empty {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-faint);
+  /* Метка и кнопки важнее длинного имени: на узком виджете оно урезается. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+/* Метка актуальности и кнопки: перетаскивание с них снято draggableCancel. */
+.widget-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  cursor: default;
+}
+
+/* На какое время данные виджета. Обзор пересчитывается раз в секунду, лимиты
+   подписки — раз в пять минут, поэтому метка у каждого виджета своя. */
+.widget-at {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0;
+  color: var(--text-faint);
+  opacity: 0.6;
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+.widget:hover .widget-at {
+  opacity: 1;
+}
+
+.widget-at-stale {
+  color: var(--amber);
+  opacity: 1;
+}
+
+.widget-at-none {
+  font-family: var(--mono);
+}
+
+.widget-refresh,
 .widget-hide {
   border: 0;
   background: transparent;
@@ -1455,14 +1495,45 @@ main.empty {
   transition: opacity 0.15s, color 0.15s, background 0.15s;
 }
 
+.widget-refresh {
+  display: flex;
+  align-items: center;
+  padding: 3px 5px;
+}
+
+.widget:hover .widget-refresh,
 .widget:hover .widget-hide,
+.widget-refresh:focus-visible,
 .widget-hide:focus-visible {
   opacity: 1;
 }
 
+.widget-refresh:hover,
 .widget-hide:hover {
   color: var(--text);
   background: var(--bg-sunken);
+}
+
+/* Пока запрос в пути, значок крутится — иначе клик выглядит как ничего. */
+.widget-refresh-busy {
+  opacity: 1;
+  color: var(--text);
+}
+
+.widget-refresh-busy svg {
+  animation: widget-spin 0.8s linear infinite;
+}
+
+@keyframes widget-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .widget-refresh-busy svg {
+    animation: none;
+  }
 }
 
 /* Содержимое скроллится внутри виджета: иначе изменение размера
@@ -1507,6 +1578,12 @@ main.empty {
 .widget {
   container-type: inline-size;
   container-name: widget;
+}
+
+@container widget (max-width: 260px) {
+  .widget-at {
+    display: none;
+  }
 }
 
 @container widget (max-width: 400px) {

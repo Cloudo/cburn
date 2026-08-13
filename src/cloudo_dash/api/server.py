@@ -146,6 +146,11 @@ def create_app(
     async def api_overview() -> dict[str, Any]:
         return await collect_overview()
 
+    @app.post("/api/plan/refresh")
+    async def api_plan_refresh() -> dict[str, Any]:
+        """Спросить лимиты немедленно: обычный такт — раз в пять минут."""
+        return {"plan": await asyncio.to_thread(plan_limits.refresh)}
+
     @app.get("/api/sessions")
     async def api_sessions(limit: int = 50) -> dict[str, Any]:
         conn = open_db()
@@ -273,5 +278,5 @@ def _mount_frontend(app: FastAPI) -> None:
         return {
             "cloudo-dash": "фронт ещё не собран",
             "как собрать": "cd web && npm install && npm run build",
-            "api": ["/api/overview", "/api/sessions", "/api/health", "/ws"],
+            "api": ["/api/overview", "/api/sessions", "/api/plan/refresh", "/api/health", "/ws"],
         }

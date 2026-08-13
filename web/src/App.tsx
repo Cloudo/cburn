@@ -11,12 +11,14 @@ import {
   grouped,
   modelLabel,
   sinceLabel,
+  timestamp,
   toolLabel,
   usd,
 } from "./format";
 import {
   closeSession,
   hideSession,
+  refreshPlan,
   useOverview,
   type LiveSession,
   type Overview,
@@ -81,7 +83,7 @@ function slicesOf(source: Usage): Slice[] {
 }
 
 export default function App() {
-  const { data, connection, updatedAt } = useOverview();
+  const { data, connection, updatedAt, refresh } = useOverview();
   const [, tick] = useState(0);
 
   useEffect(() => {
@@ -112,7 +114,7 @@ export default function App() {
       </header>
 
       {data ? (
-        <Dashboard widgets={buildWidgets(data)} />
+        <Dashboard widgets={buildWidgets(data, refresh)} />
       ) : (
         <p className="empty-note">
           {connection === "offline" ? "нет связи с cdash serve" : "подключаюсь…"}
@@ -122,22 +124,52 @@ export default function App() {
   );
 }
 
-/** Содержимое виджетов. Раскладку и видимость держит Dashboard. */
-function buildWidgets(data: Overview): WidgetContent[] {
+/** Содержимое виджетов. Раскладку и видимость держит Dashboard.
+ *
+ * Время актуальности почти везде одно — момент сбора обзора; особняком лимиты
+ * подписки: их Anthropic отдаёт не чаще раза в пять минут, и обновляются они
+ * своим запросом. */
+function buildWidgets(data: Overview, refresh: () => Promise<void>): WidgetContent[] {
+  const at = timestamp(data.now);
+  const planAt = data.plan.fetched_at === null ? null : data.plan.fetched_at * 1000;
+  const refreshPlanLimits = async () => {
+    await refreshPlan();
+    await refresh();
+  };
   return [
-    { id: "gauge", title: "прибор", body: <GaugeWidget data={data} /> },
-    { id: "today", title: "за сегодня", body: <TodayWidget data={data} /> },
+    { id: "gauge", title: "прибор", body: <GaugeWidget data={data} />, at, refresh },
+    { id: "today", title: "за сегодня", body: <TodayWidget data={data} />, at, refresh },
     {
       id: "live",
       title: "сейчас в работе",
       body: <SessionBoard sessions={data.live_sessions} limit={data.live_limit} now={data.now} />,
+      at,
+      refresh,
     },
-    { id: "plan", title: "лимиты подписки", body: <PlanLimits plan={data.plan} /> },
-    { id: "leaders", title: "больше всего за сегодня", body: <LeadersWidget data={data} /> },
-    { id: "tools", title: "на что уходят ходы", body: <Tools profile={data.tools} /> },
-    { id: "models", title: "модели за сегодня", body: <Models models={data.models} /> },
-    { id: "idle", title: "холостые ходы", body: <Idle idle={data.idle} /> },
-    { id: "feed", title: "лента ходов", body: <FeedWidget data={data} /> },
+    {
+      id: "plan",
+      title: "лимиты подписки",
+      body: <PlanLimits plan={data.plan} />,
+      at: planAt,
+      refresh: refreshPlanLimits,
+    },
+    {
+      id: "leaders",
+      title: "больше всего за сегодня",
+      body: <LeadersWidget data={data} />,
+      at,
+      refresh,
+    },
+    { id: "tools", title: "на что уходят ходы", body: <Tools profile={data.tools} />, at, refresh },
+    {
+      id: "models",
+      title: "модели за сегодня",
+      body: <Models models={data.models} />,
+      at,
+      refresh,
+    },
+    { id: "idle", title: "холостые ходы", body: <Idle idle={data.idle} />, at, refresh },
+    { id: "feed", title: "лента ходов", body: <FeedWidget data={data} />, at, refresh },
   ];
 }
 

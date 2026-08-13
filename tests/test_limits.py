@@ -157,3 +157,22 @@ def test_watcher_without_api_uses_cache_only(monkeypatch: pytest.MonkeyPatch) ->
         limits_module, "read_from_cache", lambda: PlanLimits("cache", 0.0, None, None, [])
     )
     assert LimitsWatcher(use_api=False).current(now=0.0)["source"] == "cache"
+
+
+def test_watcher_refresh_ignores_pause(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Кнопка в виджете спрашивает лимиты сразу, не дожидаясь паузы."""
+    calls: list[int] = []
+
+    def fetch() -> PlanLimits:
+        calls.append(1)
+        return PlanLimits("api", float(len(calls)), "max", None, [{"kind": "session"}])
+
+    monkeypatch.setattr(limits_module, "fetch_from_api", fetch)
+    watcher = LimitsWatcher(refresh_seconds=300)
+
+    watcher.current(now=1000.0)
+    watcher.current(now=1010.0)  # пауза не вышла — запроса нет
+    assert len(calls) == 1
+
+    assert watcher.refresh(now=1020.0)["fetched_at"] == 2.0
+    assert len(calls) == 2
