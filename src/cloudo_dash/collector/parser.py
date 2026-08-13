@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
@@ -209,6 +210,23 @@ def _is_tool_result(content: Any) -> bool:
     return any(isinstance(block, dict) and block.get("type") == "tool_result" for block in content)
 
 
+#: Служебные блоки, которые Claude Code подмешивает к промпту человека:
+#: контекст IDE, напоминания системы, предупреждения слэш-команд. Для подписи
+#: сессии они бесполезны — настоящий вопрос стоит после них.
+_SERVICE_BLOCK = re.compile(r"<([a-z][\w-]*)>.*?</\1>", re.DOTALL | re.IGNORECASE)
+_SERVICE_OPEN = re.compile(r"^\s*<[a-z][\w-]*>", re.IGNORECASE)
+
+
+def _strip_service_blocks(text: str) -> str:
+    """Убрать служебные обёртки, если после них остаётся живой текст."""
+    stripped = _SERVICE_BLOCK.sub(" ", text).strip()
+    if stripped:
+        return stripped
+    # Незакрытый служебный блок (обрезанный контекст IDE): оставляем как есть,
+    # пустая подпись сессии хуже некрасивой.
+    return text.strip()
+
+
 def _prompt_text(content: Any) -> str | None:
     """Текст промпта, обрезанный до `PROMPT_LIMIT`. Вложения пропускаются."""
     if isinstance(content, str):
@@ -225,7 +243,9 @@ def _prompt_text(content: Any) -> str | None:
     text = text.strip()
     if not text:
         return None
-    return text[:PROMPT_LIMIT]
+    if _SERVICE_OPEN.match(text):
+        text = _strip_service_blocks(text)
+    return text[:PROMPT_LIMIT] or None
 
 
 def _parse_usage(usage: Any) -> Usage | None:

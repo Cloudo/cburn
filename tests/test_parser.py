@@ -427,3 +427,44 @@ def test_usage_merge_combines_partial_records() -> None:
 
     merged = Usage(output_tokens=10, cache_read=5).merge(Usage(input_tokens=3, cache_write_1h=7))
     assert merged == Usage(input_tokens=3, output_tokens=10, cache_read=5, cache_write_1h=7)
+
+
+# --- служебные обёртки в промптах --------------------------------------------
+
+
+def test_service_blocks_are_stripped_from_prompt() -> None:
+    """Подпись сессии — вопрос человека, а не контекст IDE вокруг него."""
+    content = (
+        "<ide_opened_file>The user opened the file /Users/x/ROADMAP.md</ide_opened_file>"
+        "что у нас дальше по плану?"
+    )
+    record = parse_line(json.dumps({"type": "user", "message": {"content": content}}))
+    assert record is not None
+    assert record.prompt_text == "что у нас дальше по плану?"
+
+
+def test_several_service_blocks_are_stripped() -> None:
+    content = (
+        "<system-reminder>напоминание</system-reminder>\n"
+        "<local-command-caveat>предупреждение</local-command-caveat>\n"
+        "почини тесты"
+    )
+    record = parse_line(json.dumps({"type": "user", "message": {"content": content}}))
+    assert record is not None
+    assert record.prompt_text == "почини тесты"
+
+
+def test_prompt_of_only_service_blocks_is_kept() -> None:
+    """Если кроме обёрток ничего нет, пустая подпись хуже некрасивой."""
+    content = "<ide_opened_file>The user opened a file</ide_opened_file>"
+    record = parse_line(json.dumps({"type": "user", "message": {"content": content}}))
+    assert record is not None
+    assert record.prompt_text == content
+
+
+def test_angle_brackets_inside_normal_prompt_survive() -> None:
+    """Обычный текст с угловыми скобками не считается служебным блоком."""
+    content = "почему `a <b> c` не парсится?"
+    record = parse_line(json.dumps({"type": "user", "message": {"content": content}}))
+    assert record is not None
+    assert record.prompt_text == content
