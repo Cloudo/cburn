@@ -34,14 +34,17 @@ export function clockTime(at: string | number): string {
   return date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
-/** Момент из ISO-строки бэкенда в миллисекундах. */
-export function timestamp(iso: string): number {
-  return new Date(stamp(iso)).getTime();
+/** Момент из ISO-строки бэкенда в миллисекундах; null — событий не было. */
+export function timestamp(iso: string | null): number | null {
+  return iso === null ? null : new Date(stamp(iso)).getTime();
 }
 
-/** Подсказка у метки в шапке виджета: «данные на 14:32:07, только что». */
-export function freshnessLabel(at: number, now: number): string {
-  return `данные на ${clockTime(at)}, ${agoLabel(Math.max(now - at, 0) / 1000)}`;
+/** Подсказка у метки в шапке виджета: когда произошло последнее событие
+ *  и когда обзор в последний раз пересчитывали. */
+export function freshnessLabel(at: number | null, checkedAt: number, now: number): string {
+  const checked = `пересчитано ${clockTime(checkedAt)}`;
+  if (at === null) return `данных за период нет, ${checked}`;
+  return `последние данные ${clockTime(at)}, ${agoLabel(Math.max(now - at, 0) / 1000)}; ${checked}`;
 }
 
 export function agoLabel(seconds: number): string {

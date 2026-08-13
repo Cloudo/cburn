@@ -20,15 +20,16 @@ export type WidgetContent = {
   id: WidgetId;
   title: string;
   body: React.ReactNode;
-  /** На какой момент данные виджета (мс); null — данных ещё нет. */
+  /** Время последнего события в данных виджета (мс); null — событий не было. */
   at: number | null;
+  /** Когда эти данные в последний раз пересчитывали (мс). */
+  checkedAt: number;
+  /** Через сколько секунд молчания метка считается несвежей. Ставится только
+   *  там, где паузу объясняет не тишина в работе, а неудачное обновление. */
+  staleAfter?: number;
   /** Обновить именно эти данные, не дожидаясь такта. */
   refresh: () => Promise<void>;
 };
-
-//: Порог, после которого метка времени подсвечивается: у обзора такт секундный,
-//: столько живут только лимиты подписки со своим пятиминутным кэшем.
-const STALE_SECONDS = 120;
 
 /** Ширина сетки в пикселях: react-grid-layout не умеет считать её сам. */
 function useWidth(): [number, (node: HTMLDivElement | null) => void] {
@@ -142,7 +143,10 @@ function WidgetHead({ widget, onHide }: { widget: WidgetContent; onHide: () => v
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const now = Date.now();
-  const stale = widget.at !== null && now - widget.at > STALE_SECONDS * 1000;
+  const stale =
+    widget.staleAfter !== undefined &&
+    widget.at !== null &&
+    now - widget.at > widget.staleAfter * 1000;
 
   const refresh = async () => {
     if (busy) return;
@@ -162,14 +166,17 @@ function WidgetHead({ widget, onHide }: { widget: WidgetContent; onHide: () => v
       <h2>{widget.title}</h2>
       <div className="widget-tools">
         {widget.at === null ? (
-          <span className="widget-at widget-at-none" title="данные ещё не получены">
+          <span
+            className="widget-at widget-at-none"
+            title={freshnessLabel(null, widget.checkedAt, now)}
+          >
             —
           </span>
         ) : (
           <time
             className={stale ? "widget-at widget-at-stale" : "widget-at"}
             dateTime={new Date(widget.at).toISOString()}
-            title={freshnessLabel(widget.at, now)}
+            title={freshnessLabel(widget.at, widget.checkedAt, now)}
           >
             {clockTime(widget.at)}
           </time>

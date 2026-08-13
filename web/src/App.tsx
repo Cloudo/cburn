@@ -23,6 +23,7 @@ import {
   type LiveSession,
   type Overview,
   type SessionStatus,
+  type Stamps,
   type Turn,
   type Usage,
 } from "./api";
@@ -47,6 +48,7 @@ const STATUSES: Array<{ key: SessionStatus; label: string }> = [
   { key: "working", label: "работает" },
   { key: "answered", label: "ждёт вас" },
   { key: "idle", label: "простаивает" },
+  { key: "done", label: "закончилась" },
 ];
 
 const COLORS = {
@@ -124,26 +126,61 @@ export default function App() {
   );
 }
 
+//: Обзор от сервера, который не знает про штампы времени: в паре «фронт из
+//: web/dist + давно запущенный процесс» такое бывает, и падать из-за этого
+//: всему дашборду нельзя.
+const NO_STAMPS: Stamps = {
+  last_turn: null,
+  today_turn: null,
+  tool_call: null,
+  idle_turn: null,
+};
+
+//: Сколько лимиты подписки могут молчать, прежде чем метка станет тревожной.
+//: Обычный такт — пять минут, так что вдвое больший разрыв означает не тишину
+//: в работе, а неудачные запросы к Anthropic.
+const PLAN_STALE_SECONDS = 600;
+
 /** Содержимое виджетов. Раскладку и видимость держит Dashboard.
  *
- * Время актуальности почти везде одно — момент сбора обзора; особняком лимиты
- * подписки: их Anthropic отдаёт не чаще раза в пять минут, и обновляются они
- * своим запросом. */
+ * У каждого виджета своё время последних данных: обзор пересчитывается каждую
+ * секунду, но события в нём появляются, только когда что-то происходит. Дневные
+ * виджеты стоят на последнем ходе с полуночи, лента — на последнем ходе вообще,
+ * лимиты подписки — на ответе Anthropic. */
 function buildWidgets(data: Overview, refresh: () => Promise<void>): WidgetContent[] {
-  const at = timestamp(data.now);
+  const checkedAt = timestamp(data.now) ?? Date.now();
+  const stamps = data.stamps ?? NO_STAMPS;
+  const lastTurn = timestamp(stamps.last_turn);
+  const todayTurn = timestamp(stamps.today_turn);
   const planAt = data.plan.fetched_at === null ? null : data.plan.fetched_at * 1000;
+  const liveAt = timestamp(data.live_sessions[0]?.last_at ?? null);
   const refreshPlanLimits = async () => {
     await refreshPlan();
     await refresh();
   };
   return [
-    { id: "gauge", title: "прибор", body: <GaugeWidget data={data} />, at, refresh },
-    { id: "today", title: "за сегодня", body: <TodayWidget data={data} />, at, refresh },
+    {
+      id: "gauge",
+      title: "прибор",
+      body: <GaugeWidget data={data} />,
+      at: lastTurn,
+      checkedAt,
+      refresh,
+    },
+    {
+      id: "today",
+      title: "за сегодня",
+      body: <TodayWidget data={data} />,
+      at: todayTurn,
+      checkedAt,
+      refresh,
+    },
     {
       id: "live",
       title: "сейчас в работе",
       body: <SessionBoard sessions={data.live_sessions} limit={data.live_limit} now={data.now} />,
-      at,
+      at: liveAt,
+      checkedAt,
       refresh,
     },
     {
@@ -151,25 +188,50 @@ function buildWidgets(data: Overview, refresh: () => Promise<void>): WidgetConte
       title: "лимиты подписки",
       body: <PlanLimits plan={data.plan} />,
       at: planAt,
+      checkedAt,
+      staleAfter: PLAN_STALE_SECONDS,
       refresh: refreshPlanLimits,
     },
     {
       id: "leaders",
       title: "больше всего за сегодня",
       body: <LeadersWidget data={data} />,
-      at,
+      at: todayTurn,
+      checkedAt,
       refresh,
     },
-    { id: "tools", title: "на что уходят ходы", body: <Tools profile={data.tools} />, at, refresh },
+    {
+      id: "tools",
+      title: "на что уходят ходы",
+      body: <Tools profile={data.tools} />,
+      at: timestamp(stamps.tool_call),
+      checkedAt,
+      refresh,
+    },
     {
       id: "models",
       title: "модели за сегодня",
       body: <Models models={data.models} />,
-      at,
+      at: todayTurn,
+      checkedAt,
       refresh,
     },
-    { id: "idle", title: "холостые ходы", body: <Idle idle={data.idle} />, at, refresh },
-    { id: "feed", title: "лента ходов", body: <FeedWidget data={data} />, at, refresh },
+    {
+      id: "idle",
+      title: "холостые ходы",
+      body: <Idle idle={data.idle} />,
+      at: timestamp(stamps.idle_turn),
+      checkedAt,
+      refresh,
+    },
+    {
+      id: "feed",
+      title: "лента ходов",
+      body: <FeedWidget data={data} />,
+      at: timestamp(data.recent_turns[0]?.ts ?? null),
+      checkedAt,
+      refresh,
+    },
   ];
 }
 
@@ -284,7 +346,9 @@ function LeadersWidget({ data }: { data: Overview }) {
           <div className="leaders-bar">
             <span
               className="leaders-fill"
-              style={{ width: `${(session.tokens / data.top_sessions[0].tokens) * 100}%` }}
+              style={{
+                width: `${(session.tokens / data.top_sessions[0].tokens) * 100}%`,
+              }}
             />
           </div>
           <code>{session.id.slice(0, 8)}</code>
@@ -381,6 +445,7 @@ const STATUS_NOTE: Record<SessionStatus, string> = {
   working: "работает",
   answered: "ждёт вас",
   idle: "простаивает",
+  done: "закончилась",
 };
 
 function SessionCard({ session, now }: { session: LiveSession; now: string }) {

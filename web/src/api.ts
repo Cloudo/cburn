@@ -44,7 +44,7 @@ export type LiveSession = {
   output_recent: number;
 };
 
-export type SessionStatus = "working" | "permission" | "answered" | "idle";
+export type SessionStatus = "working" | "permission" | "answered" | "idle" | "done";
 
 export type CloseResult = {
   session_id: string;
@@ -127,6 +127,15 @@ export type Plan = {
   error: string | null;
 };
 
+/** Время самых свежих данных по срезам: обзор пересчитывается каждую секунду,
+ *  а вот события в нём появляются, только когда что-то происходит. */
+export type Stamps = {
+  last_turn: string | null;
+  today_turn: string | null;
+  tool_call: string | null;
+  idle_turn: string | null;
+};
+
 export type Overview = {
   now: string;
   burn: Record<string, BurnRate>;
@@ -152,6 +161,8 @@ export type Overview = {
   plan: Plan;
   series: Bucket[];
   series_bucket_seconds: number;
+  /** Может не прийти: собранный фронт обновляется отдельно от процесса сервера. */
+  stamps?: Stamps;
   pending_sessions: string[];
 };
 
