@@ -217,7 +217,7 @@ def create_app(
                 return scheduler.run_tick(
                     conn,
                     settings,
-                    scheduler.Tick(scheduler.HOURLY, since, settings["analyzer"]["model"]),
+                    scheduler.Tick(scheduler.MANUAL, since, settings["analyzer"]["model"]),
                     runner=advisor_run,
                 )
             finally:

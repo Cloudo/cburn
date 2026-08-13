@@ -125,6 +125,7 @@ def client(
     watch: bool = False,
     limits: object | None = None,
     liveness: Callable[[], dict[str, datetime | None] | None] = lambda: None,
+    advisor_run: object | None = None,
 ) -> TestClient:
     """Тестовое приложение. По умолчанию живость «неизвестна», а советчик
     падает при попытке его позвать: тесты не должны запускать ни
@@ -139,7 +140,7 @@ def client(
         watch=watch,
         limits=limits or StubLimits(),  # type: ignore[arg-type]
         liveness=liveness,
-        advisor_run=no_advisor,
+        advisor_run=advisor_run or no_advisor,
     )
     return TestClient(app)
 
@@ -880,6 +881,35 @@ def test_advice_status_is_saved(transcripts: Path, db_path: Path) -> None:
     assert runs[0]["items"][0]["status"] == "rejected"
     assert bad_status.status_code == 400
     assert missing.status_code == 404
+
+
+def test_manual_run_is_labelled_manual(transcripts: Path, db_path: Path) -> None:
+    """Разбор с кнопки подписывается «вручную», а не «часовой»."""
+    now = datetime.now(UTC)
+    seed(transcripts, db_path, [assistant("msg_1", ts=now - timedelta(minutes=5))])
+    envelope = {
+        "is_error": False,
+        "total_cost_usd": 0.07,
+        "structured_output": {
+            "advice": [
+                {
+                    "title": "Закрыть линию работы",
+                    "severity": "warn",
+                    "detail": "",
+                    "action": "",
+                    "evidence": "chains[0].sessions = 19",
+                }
+            ]
+        },
+        "modelUsage": {"claude-haiku-4-5": {}},
+    }
+
+    with client(db_path, transcripts, advisor_run=lambda *args: envelope) as api:
+        assert api.post("/api/advice/run?period=24h").status_code == 200
+        runs = api.get("/api/advice").json()["runs"]
+
+    assert runs[0]["kind"] == "manual"
+    assert runs[0]["cost_usd"] == pytest.approx(0.07)
 
 
 # --- метрики ТЗ §4 (задача B3) -----------------------------------------------
