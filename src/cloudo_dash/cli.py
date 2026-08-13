@@ -1,6 +1,6 @@
 """CLI `cdash` (TZ §10).
 
-Реализовано: `paths`, `initdb`, `reindex`, `prices`, `sessions`, `session`, `serve`.
+Реализовано: `paths`, `initdb`, `reindex`, `prices`, `sessions`, `session`, `serve`, `otel`.
 Фильтры по проекту и периоду и команда `stats` — задача B7.
 """
 
@@ -15,6 +15,7 @@ from pathlib import Path
 
 from . import __version__, autostart, config, paths, pricing
 from .analyzer import advisor, digest
+from .collector import otlp
 from .collector.indexer import ingest_tree
 from .db import connect
 from .metrics import (
@@ -72,6 +73,12 @@ def build_parser() -> argparse.ArgumentParser:
     install.add_argument("--port", type=int, help="порт (по умолчанию из конфига)")
     sub.add_parser("uninstall", help="убрать автозапуск")
     sub.add_parser("status", help="что launchd думает про агент автозапуска")
+    otel = sub.add_parser("otel", help="телеметрия Claude Code: что дошло и как включить")
+    otel.add_argument("--env", action="store_true", help="строки export для профиля шелла")
+    otel.add_argument(
+        "--settings", action="store_true", help="фрагмент env для ~/.claude/settings.json"
+    )
+    otel.add_argument("--port", type=int, help="порт дашборда (по умолчанию из конфига)")
     serve = sub.add_parser("serve", help="запустить API-сервер и дашборд")
     serve.add_argument("--port", type=int, help="порт (по умолчанию из конфига)")
     serve.add_argument("--host", default="127.0.0.1", help="только localhost, TZ §7")
@@ -157,11 +164,74 @@ def main(argv: list[str] | None = None) -> int:
         print(autostart.status())
         return 0
 
+    if args.command == "otel":
+        return _otel(args.env, args.settings, args.port)
+
     if args.command == "serve":
         return _serve(args.host, args.port, args.reload)
 
     print(f"неизвестная команда `{args.command}`", file=sys.stderr)
     return 2
+
+
+def _otel_env(port: int) -> dict[str, str]:
+    """Переменные окружения, которыми Claude Code включает телеметрию (веха E).
+
+    Кодировка `http/json`: приёмник разбирает её штатным json и живёт на том же
+    порту, что дашборд. Интервалы короче стандартных (60 и 5 секунд), потому
+    что телеметрия здесь идёт на живой прибор, а не в хранилище на потом.
+    """
+    return {
+        "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+        "OTEL_METRICS_EXPORTER": "otlp",
+        "OTEL_LOGS_EXPORTER": "otlp",
+        "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": f"http://127.0.0.1:{port}/otlp",
+        "OTEL_METRIC_EXPORT_INTERVAL": "10000",
+        "OTEL_LOGS_EXPORT_INTERVAL": "5000",
+    }
+
+
+def _otel(show_env: bool, show_settings: bool, port: int | None) -> int:
+    """Состояние приёма телеметрии и способ её включить.
+
+    Сами переменные окружения приложение не прописывает: `~/.claude` открыт
+    только на чтение, а трогать профиль шелла за человека — не его дело.
+    """
+    bind_port = port or int(config.load()["server"]["port"])
+    env = _otel_env(bind_port)
+    if show_env:
+        for name, value in env.items():
+            print(f"export {name}={value}")
+        return 0
+    if show_settings:
+        print(json.dumps({"env": env}, ensure_ascii=False, indent=2))
+        return 0
+
+    with connect() as conn:
+        state = otlp.status(conn)
+    print(
+        f"приёмник : http://127.0.0.1:{bind_port}/otlp (в конфиге: "
+        f"{'включён' if config.load()['otel']['enabled'] else 'выключен'})"
+    )
+    if not state["signals"]:
+        print("посылок не было — телеметрия в Claude Code ещё не включена")
+    for signal, row in state["signals"].items():
+        print(
+            f"{signal:8}: посылок {row['batches']}, записей {row['stored']}, "
+            f"потеряно {row['dropped']}, последняя {row['last_at']}"
+        )
+    for row in state["metrics"]:
+        print(f"  {row['name']:34} точек {row['points']:6}  сумма {row['total']:,.2f}")
+    for row in state["events"]:
+        print(f"  событие {row['name']:26} {row['records']:6}")
+    if not state["signals"]:
+        print()
+        print("включить (в профиль шелла или в env-секцию ~/.claude/settings.json):")
+        print("  cdash otel --env        # строки export")
+        print("  cdash otel --settings   # фрагмент для settings.json")
+        print("после правки Claude Code надо перезапустить — окружение читается на старте")
+    return 0
 
 
 def _serve(host: str, port: int | None, reload: bool) -> int:

@@ -38,6 +38,9 @@ DEFAULTS: dict[str, Any] = {
         "daily_summary_at": "21:00",
     },
     "server": {"port": 8799},
+    # Приём официальной телеметрии Claude Code (веха E). Сам по себе флаг
+    # ничего не включает: телеметрию задаёт окружение Claude Code, см. `cdash otel`.
+    "otel": {"enabled": True},
     "prices": {},
 }
 
@@ -113,6 +116,10 @@ def validate(config: dict[str, Any]) -> list[str]:
     daily = telegram.get("daily_summary_at")
     if daily is not None and not _is_time(daily):
         errors.append("telegram.daily_summary_at: ждём время вида 21:00")
+
+    enabled = (config.get("otel") or {}).get("enabled")
+    if enabled is not None and not isinstance(enabled, bool):
+        errors.append("otel.enabled: ждём true или false")
 
     for model, price in (config.get("prices") or {}).items():
         if not isinstance(price, dict):

@@ -19,13 +19,14 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 from starlette.types import Scope
 
 from .. import config, paths, pricing
 from ..analyzer import scheduler
+from ..collector import otlp
 from ..collector.indexer import IngestStats
 from ..collector.watcher import TranscriptWatcher
 from ..db import connect
@@ -345,6 +346,52 @@ def create_app(
             "pid": process.pid if process is not None else None,
             "note": None if stopped else "процесс уже не запущен — сессия убрана с дашборда",
         }
+
+    @app.post("/otlp/v1/{signal}")
+    async def otlp_export(signal: str, request: Request) -> Response:
+        """Приёмник официальной телеметрии Claude Code (веха E, ТЗ §2).
+
+        Claude Code шлёт сюда посылки OTLP/JSON, когда в его окружении задан
+        `OTEL_EXPORTER_OTLP_ENDPOINT` на этот адрес (`cdash otel` печатает
+        нужные переменные). Порт свой сервер не занимает: телеметрия приходит
+        на тот же localhost:8799, что и дашборд.
+
+        Ответ всегда пустой JSON — так по протоколу выглядит успешный экспорт.
+        Выключенный в конфиге приёмник тоже подтверждает посылку: 4xx заставил
+        бы экспортёр копить повторы и жаловаться в лог Claude Code.
+        """
+        if signal not in otlp.SIGNALS:
+            raise HTTPException(status_code=404, detail="неизвестный сигнал OTLP")
+        if not config.load().get("otel", {}).get("enabled", True):
+            return JSONResponse({})
+        body = await request.body()
+        try:
+            payload = otlp.decode(body, request.headers.get("content-encoding"))
+        except Exception:
+            log.warning("посылка OTLP (%s) не разобрана: %s байт", signal, len(body))
+            return JSONResponse({})
+
+        def write() -> dict[str, int]:
+            # Соединение SQLite принадлежит потоку, в котором создано.
+            conn = connect(db_path, apply_schema=False)
+            try:
+                return otlp.ingest(conn, signal, payload)
+            finally:
+                conn.close()
+
+        stats = await asyncio.to_thread(write)
+        if stats["dropped"]:
+            log.info("OTLP (%s): не разобрано кусков — %s", signal, stats["dropped"])
+        return JSONResponse({})
+
+    @app.get("/api/otel")
+    async def api_otel() -> dict[str, Any]:
+        """Что дошло по телеметрии: приёмы, метрики и события (веха E)."""
+        conn = open_db()
+        try:
+            return otlp.status(conn) | {"enabled": config.load().get("otel", {}).get("enabled")}
+        finally:
+            conn.close()
 
     @app.get("/api/health")
     async def api_health() -> dict[str, Any]:

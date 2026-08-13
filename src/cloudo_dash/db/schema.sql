@@ -168,3 +168,47 @@ CREATE TABLE IF NOT EXISTS raw_event_counts (
     last_at  TEXT,
     PRIMARY KEY (type, version)
 );
+
+-- Второй канал данных: официальная телеметрия Claude Code по OTLP (ТЗ §2, веха E).
+-- Кладётся рядом с данными парсера, а не поверх них: канал в бете, при
+-- расхождении верить надо транскриптам. `key` — отпечаток точки: экспортёр
+-- повторяет неподтверждённую посылку, и без него ретрай удваивал бы цифры.
+CREATE TABLE IF NOT EXISTS otel_metrics (
+    id         INTEGER PRIMARY KEY,
+    key        TEXT NOT NULL UNIQUE,
+    name       TEXT NOT NULL,   -- claude_code.token.usage, claude_code.cost.usage, ...
+    ts         TEXT NOT NULL,   -- конец окна точки
+    start_ts   TEXT,            -- начало окна: у delta-точек своё на каждый экспорт
+    session_id TEXT,
+    model      TEXT,
+    kind       TEXT,            -- атрибут type: input | output | cacheRead | cacheCreation | added | ...
+    value      REAL NOT NULL,
+    attrs      TEXT NOT NULL DEFAULT '{}'  -- остальные атрибуты точки и ресурса
+);
+CREATE INDEX IF NOT EXISTS idx_otel_metrics_ts      ON otel_metrics(ts);
+CREATE INDEX IF NOT EXISTS idx_otel_metrics_session ON otel_metrics(session_id, name);
+CREATE INDEX IF NOT EXISTS idx_otel_metrics_name    ON otel_metrics(name, ts);
+
+-- События телеметрии (OTLP logs): api_request с точной ценой и длительностью,
+-- tool_decision с решениями по разрешениям — того и другого в транскрипте нет.
+CREATE TABLE IF NOT EXISTS otel_events (
+    id         INTEGER PRIMARY KEY,
+    key        TEXT NOT NULL UNIQUE,
+    name       TEXT NOT NULL,   -- api_request, tool_decision, tool_result, api_error, ...
+    ts         TEXT NOT NULL,
+    session_id TEXT,
+    attrs      TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_otel_events_ts      ON otel_events(ts);
+CREATE INDEX IF NOT EXISTS idx_otel_events_session ON otel_events(session_id, ts);
+CREATE INDEX IF NOT EXISTS idx_otel_events_name    ON otel_events(name, ts);
+
+-- Учёт самого приёма: по нему видно, доходит ли телеметрия вообще и сколько
+-- кусков посылки приёмник не понял (`cdash otel`, сверка E3).
+CREATE TABLE IF NOT EXISTS otel_ingest (
+    signal  TEXT PRIMARY KEY,   -- metrics | logs | traces
+    last_at TEXT,
+    batches INTEGER NOT NULL DEFAULT 0,
+    stored  INTEGER NOT NULL DEFAULT 0,
+    dropped INTEGER NOT NULL DEFAULT 0
+);
