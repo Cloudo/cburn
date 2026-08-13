@@ -19,11 +19,13 @@ from __future__ import annotations
 
 import collections
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
-from cloudo_dash import paths
+from cloudo_dash import config, paths, pricing
+from cloudo_dash.analyzer import digest
 from cloudo_dash.collector.indexer import ingest_tree
 from cloudo_dash.collector.parser import RecordKind, parse_line
 from cloudo_dash.db import connect
@@ -105,3 +107,33 @@ def test_full_ingest_survives_history(history: Path, tmp_path: Path) -> None:
         "SELECT COUNT(*) FROM turns WHERE session_id NOT IN (SELECT id FROM sessions)"
     ).fetchone()[0]
     assert orphans == 0
+
+
+def test_digest_finds_the_signals_the_report_found(history: Path, tmp_path: Path) -> None:
+    """Приёмка M3 (задача D7): дайджест видит то же, что нашлось руками.
+
+    Прототипный отчёт по navuik/core держался на трёх вещах: разросшаяся
+    мега-сессия, холостые ходы и один и тот же скрипт, прогнанный через heredoc
+    десятки раз. Сам вызов модели сюда не входит — он стоит денег и делается
+    руками; проверяется, что советчику есть на что опереться.
+    """
+    conn = connect(tmp_path / "acceptance.db")
+    ingest_tree(conn, history)
+    # Цены берём из пользовательского конфига: без них стоимость нулевая, а
+    # «тяжёлые сессии» — вопрос про деньги.
+    pricing.recalculate(conn, config.load())
+    payload = digest.build(conn, datetime.now(UTC) - timedelta(days=30), config=config.load())
+
+    heavy = max(payload["sessions"], key=lambda row: row["cost_usd"])
+    print(
+        f"\nмега-сессия {heavy['id'][:8]}: ходов {heavy['turns']}, "
+        f"${heavy['cost_usd']:.2f}, за порогом {heavy['over_context_limit']}"
+    )
+    print(f"холостые ходы: {payload['idle']['turns']} ({payload['idle']['share']:.1%})")
+    print(f"heredoc: {payload['tools']['heredoc_calls']} вызовов")
+
+    assert heavy["turns"] > 500, "мега-сессия должна быть видна"
+    assert heavy["over_context_limit"], "и должна быть помечена как переросшая порог"
+    assert payload["idle"]["turns"] > 0, "холостые ходы должны считаться"
+    assert payload["tools"]["heredoc_calls"] > 0, "повторные heredoc должны быть видны"
+    assert payload["size"]["within_limit"], "дайджест обязан влезать в лимит"

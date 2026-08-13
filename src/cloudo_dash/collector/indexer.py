@@ -440,7 +440,12 @@ def _insert_turns(conn: sqlite3.Connection, turns: dict[str, _Turn], stats: Inge
         return
     tools_before = _count(conn, "tool_calls")
     conn.executemany(
-        "INSERT OR IGNORE INTO tool_calls (turn_id, tool_use_id, tool, detail) VALUES (?, ?, ?, ?)",
+        """
+        INSERT INTO tool_calls (turn_id, tool_use_id, tool, detail) VALUES (?, ?, ?, ?)
+        -- Нормализация команды выводится из данных, а её правила меняются:
+        -- при повторном чтении файла деталь обновляется, а не застревает старой.
+        ON CONFLICT(tool_use_id) DO UPDATE SET detail = excluded.detail
+        """,
         rows,
     )
     stats.tools_new = _count(conn, "tool_calls") - tools_before

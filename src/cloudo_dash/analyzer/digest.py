@@ -115,7 +115,9 @@ def _heavy_sessions(
           JOIN turns AS t ON t.session_id = s.id AND t.ts >= ?
          WHERE s.hidden = 0{clause}
          GROUP BY s.id
-         ORDER BY cost_usd DESC
+         -- Без цен стоимость у всех нулевая, и один порядок по ней дал бы
+         -- случайный список: тогда сортируем по объёму.
+         ORDER BY cost_usd DESC, (SUM(t.cache_read) + SUM(t.output_tokens)) DESC
          LIMIT ?
         """,  # noqa: S608
         (metrics._utc_stamp(since), *params, TOP_SESSIONS),
