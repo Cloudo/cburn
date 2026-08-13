@@ -37,10 +37,14 @@ export type LiveSession = {
   tokens_out: number;
   last_context: number;
   first_prompt: string | null;
+  last_prompt: string | null;
   title: string | null;
   title_source: string | null;
+  status: SessionStatus;
   output_recent: number;
 };
+
+export type SessionStatus = "working" | "permission" | "answered" | "idle";
 
 export type CloseResult = {
   session_id: string;
@@ -95,6 +99,7 @@ export type Overview = {
   }>;
   totals: { sessions: number; turns: number; projects: number; last_turn_at: string | null };
   recent_turns: Turn[];
+  live_limit: number;
   series: Bucket[];
   series_bucket_seconds: number;
   pending_sessions: string[];

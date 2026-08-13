@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     started_at        TEXT,
     last_at           TEXT,
     first_prompt      TEXT,              -- обрезан до 200 символов
+    last_prompt       TEXT,              -- из записи last-prompt, обрезан так же
     title             TEXT,              -- из записей ai-title / custom-title
     title_source      TEXT,              -- ai | custom (своё название важнее)
     hidden            INTEGER NOT NULL DEFAULT 0,  -- убрана с дашборда вручную
@@ -43,6 +44,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     -- tool_result без ответа означают, что запрос сейчас выполняется.
     last_record_kind  TEXT,
     last_record_at    TEXT,
+    last_stop_reason  TEXT,              -- stop_reason последнего хода: end_turn | tool_use | …
     is_live           INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id, last_at);

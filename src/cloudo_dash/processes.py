@@ -1,17 +1,21 @@
-"""Поиск процессов Claude Code (задача A8, «закрыть сессию»).
+"""Поиск процессов Claude Code (кнопка «закрыть сессию»).
 
-Сопоставить сессию с процессом точно нечем: `sessionId` не попадает ни в
-аргументы командной строки, ни в открытые дескрипторы — транскрипт
-дописывается и сразу закрывается. Единственная связка — рабочий каталог:
-у процесса он берётся через `lsof`, у сессии это `cwd` из транскрипта.
+Точную связку `sessionId` → pid даёт сам Claude Code: `claude agents --json`
+печатает активные сессии, включая интерактивные. В самом процессе `sessionId`
+не найти — его нет ни в аргументах, ни в открытых дескрипторах: транскрипт
+дописывается и сразу закрывается.
 
-Отсюда правило: завершать можно, только когда каталогу отвечает ровно один
-процесс. Иначе дашборд честно говорит, что не знает, кого закрывать, — убить
-чужую работающую сессию хуже, чем не закрыть ничего.
+Про завершение. Своего обработчика сигналов у Claude Code нет: зарегистри-
+рованные `SIGINT`/`SIGHUP`/`SIGTERM` вызывают немедленный `process.exit()`,
+тогда как хуки `SessionEnd` выполняются асинхронно на штатном выходе (`/exit`,
+Ctrl+D, `/clear`, logout). Поэтому SIGTERM закрывает сессию, но хуки
+`SessionEnd` при этом, скорее всего, не отработают — об этом честно
+предупреждает дашборд. Команды «закрыть чужую сессию» в CLI нет.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import signal
@@ -20,66 +24,63 @@ from dataclasses import dataclass
 
 log = logging.getLogger(__name__)
 
-#: По этой подстроке процесс опознаётся как Claude Code.
-CLAUDE_BINARY_MARK = "native-binary/claude"
+#: Запуск бинаря небыстрый, но вызывается он только при закрытии сессии.
+TIMEOUT = 30.0
 
-#: Сколько ждать внешние команды: они локальные и должны отвечать мгновенно.
-TIMEOUT = 5.0
+CLAUDE_BINARY = "claude"
 
 
 @dataclass(frozen=True)
-class ClaudeProcess:
+class ClaudeSession:
+    """Активная сессия Claude Code, как её видит сам Claude Code."""
+
     pid: int
-    cwd: str
+    session_id: str
+    cwd: str | None = None
+    kind: str | None = None
+    name: str | None = None
 
 
-def _run(args: list[str]) -> str:
+def active_sessions() -> list[ClaudeSession]:
+    """Спросить у Claude Code список его сессий."""
     try:
-        result = subprocess.run(args, capture_output=True, text=True, timeout=TIMEOUT)
+        result = subprocess.run(
+            [CLAUDE_BINARY, "agents", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT,
+        )
     except (OSError, subprocess.SubprocessError) as exc:
-        log.warning("не удалось выполнить %s: %s", args[0], exc)
-        return ""
-    return result.stdout
+        log.warning("не удалось получить список сессий Claude Code: %s", exc)
+        return []
+    try:
+        rows = json.loads(result.stdout or "[]")
+    except json.JSONDecodeError as exc:
+        log.warning("список сессий Claude Code не разобран: %s", exc)
+        return []
+    sessions = []
+    for row in rows if isinstance(rows, list) else []:
+        pid, session_id = row.get("pid"), row.get("sessionId")
+        if isinstance(pid, int) and isinstance(session_id, str):
+            sessions.append(
+                ClaudeSession(
+                    pid=pid,
+                    session_id=session_id,
+                    cwd=row.get("cwd"),
+                    kind=row.get("kind"),
+                    name=row.get("name"),
+                )
+            )
+    return sessions
 
 
-def process_cwd(pid: int) -> str | None:
-    """Рабочий каталог процесса."""
-    for line in _run(["lsof", "-a", "-d", "cwd", "-p", str(pid), "-Fn"]).splitlines():
-        if line.startswith("n"):
-            return line[1:]
-    return None
-
-
-def claude_processes() -> list[ClaudeProcess]:
-    """Все процессы Claude Code с их рабочими каталогами."""
-    found: list[ClaudeProcess] = []
-    for line in _run(["ps", "-eo", "pid=,command="]).splitlines():
-        line = line.strip()
-        if CLAUDE_BINARY_MARK not in line:
-            continue
-        pid_text, _, command = line.partition(" ")
-        if "--claude-in-chrome-mcp" in command:  # вспомогательный процесс, не сессия
-            continue
-        try:
-            pid = int(pid_text)
-        except ValueError:
-            continue
-        cwd = process_cwd(pid)
-        if cwd:
-            found.append(ClaudeProcess(pid=pid, cwd=cwd))
-    return found
-
-
-def process_for_cwd(cwd: str | None) -> ClaudeProcess | None:
-    """Процесс сессии — только если каталогу отвечает ровно один процесс."""
-    if not cwd:
-        return None
-    matches = [process for process in claude_processes() if process.cwd == cwd]
-    return matches[0] if len(matches) == 1 else None
+def process_for_session(session_id: str) -> ClaudeSession | None:
+    """Процесс сессии по её идентификатору."""
+    return next((s for s in active_sessions() if s.session_id == session_id), None)
 
 
 def terminate(pid: int) -> bool:
-    """Попросить процесс завершиться (SIGTERM). Убивать насильно не будем."""
+    """Попросить процесс завершиться (SIGTERM). Насильно не убиваем."""
     try:
         os.kill(pid, signal.SIGTERM)
     except (ProcessLookupError, PermissionError) as exc:

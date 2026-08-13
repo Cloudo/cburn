@@ -191,21 +191,70 @@ def burn_rates(conn: sqlite3.Connection, now: datetime) -> dict[str, dict]:
 #: Сколько живых сессий показывать на дашборде.
 LIVE_LIMIT = 5
 
+#: Окно, в котором сессия ещё считается недавней и попадает на дашборд.
+LIVE_WINDOW_SECONDS = 3600
+
+#: После этой паузы сессия перестаёт быть «сейчас» и уходит в простой.
+IDLE_AFTER_SECONDS = 120
+
+#: Столько ждём ответа инструмента, прежде чем решить, что висит запрос
+#: разрешения: обычный инструмент отвечает быстрее.
+PERMISSION_AFTER_SECONDS = 25
+
+#: Статусы сессии — по тому, кого она в этот момент ждёт.
+STATUS_WORKING = "working"  # ход не завершён: модель думает или гоняет инструменты
+STATUS_PERMISSION = "permission"  # инструмент запрошен, ответа нет — висит разрешение
+STATUS_ANSWERED = "answered"  # модель ответила и ждёт человека
+STATUS_IDLE = "idle"  # тишина дольше IDLE_AFTER_SECONDS
+
+
+def session_status(row: dict, now: datetime) -> str:
+    """Кого сессия ждёт прямо сейчас.
+
+    Ход не завершён — работает модель: и когда она думает над промптом, и когда
+    крутит инструменты. Завершённый ход означает обратное: ждут человека.
+    Отдельный случай — инструмент запрошен, а результата нет: почти всегда это
+    висящий запрос разрешения.
+    """
+    quiet = _seconds_since(row.get("last_record_at") or row.get("last_at"), now)
+    kind = row.get("last_record_kind")
+
+    if kind == "assistant" and row.get("last_stop_reason") == "tool_use":
+        if quiet >= PERMISSION_AFTER_SECONDS:
+            return STATUS_PERMISSION
+        return STATUS_WORKING
+    if quiet >= IDLE_AFTER_SECONDS:
+        return STATUS_IDLE
+    if kind in {"prompt", "tool_result"}:
+        return STATUS_WORKING
+    return STATUS_ANSWERED
+
+
+def _seconds_since(stamp: str | None, now: datetime) -> float:
+    if not stamp:
+        return float("inf")
+    moment = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    return (now - moment).total_seconds()
+
 
 def live_sessions(
-    conn: sqlite3.Connection, now: datetime, seconds: int = 120, limit: int = LIVE_LIMIT
+    conn: sqlite3.Connection,
+    now: datetime,
+    seconds: int = LIVE_WINDOW_SECONDS,
+    limit: int = 40,
 ) -> list[dict]:
-    """Сессии, в которых был ход за последние `seconds` (уточнение — задача B4).
+    """Недавние сессии с их статусами (уточнение живости — задача B4).
 
     Скрытые вручную не показываются, порядок — по последней активности.
     """
-    return [
+    rows = [
         dict(row)
         for row in conn.execute(
             """
             SELECT s.id, p.slug AS project, p.root_path, s.last_at, s.started_at,
-                   s.turns, s.tokens_out, s.last_context, s.first_prompt,
-                   s.title, s.title_source,
+                   s.turns, s.tokens_out, s.last_context, s.first_prompt, s.last_prompt,
+                   s.title, s.title_source, s.last_record_kind, s.last_record_at,
+                   s.last_stop_reason,
                    (SELECT COALESCE(SUM(t.output_tokens), 0) FROM turns AS t
                      WHERE t.session_id = s.id AND t.ts >= ?) AS output_recent
               FROM sessions AS s
@@ -214,9 +263,13 @@ def live_sessions(
              ORDER BY s.last_at DESC
              LIMIT ?
             """,
-            (_utc_stamp(now - timedelta(seconds=seconds)),) * 2 + (limit,),
+            (_utc_stamp(now - timedelta(seconds=IDLE_AFTER_SECONDS)),)
+            + (_utc_stamp(now - timedelta(seconds=seconds)), limit),
         )
     ]
+    for row in rows:
+        row["status"] = session_status(row, now)
+    return rows
 
 
 def top_sessions(conn: sqlite3.Connection, since: datetime, limit: int = 5) -> list[dict]:
@@ -265,6 +318,7 @@ def overview(conn: sqlite3.Connection, now: datetime | None = None) -> dict:
         "burn": burn_rates(conn, moment),
         "today": window_usage(conn, day_start),
         "live_sessions": live_sessions(conn, moment),
+        "live_limit": LIVE_LIMIT,
         "top_sessions": top_sessions(conn, day_start),
         "recent_turns": recent_turns(conn),
         "series": burn_series(conn, moment),
@@ -348,22 +402,13 @@ def burn_series(
 
 
 def pending_sessions(conn: sqlite3.Connection, now: datetime, minutes: int = 10) -> list[str]:
-    """Сессии, где запрос уже отправлен, а ответ ещё не дописан (ТЗ §4).
+    """Сессии, в которых модель работает прямо сейчас (ТЗ §4).
 
-    Признак — последняя запись сессии не ход ассистента: промпт или результат
-    инструмента лежит без ответа. Токены такого запроса ещё неизвестны: они
-    появятся в транскрипте только вместе с завершённым ходом.
+    Токены такого запроса ещё неизвестны: они появятся в транскрипте только
+    вместе с завершённым ходом.
     """
     return [
-        str(row["id"])
-        for row in conn.execute(
-            """
-            SELECT id FROM sessions
-             WHERE last_record_kind IN ('prompt', 'tool_result')
-               AND last_record_at >= ?
-            """,
-            (_utc_stamp(now - timedelta(minutes=minutes)),),
-        )
+        session["id"] for session in live_sessions(conn, now) if session["status"] == STATUS_WORKING
     ]
 
 
@@ -374,16 +419,3 @@ def set_hidden(conn: sqlite3.Connection, session_id: str, hidden: bool) -> bool:
             "UPDATE sessions SET hidden = ? WHERE id = ?", (int(hidden), session_id)
         )
     return cursor.rowcount > 0
-
-
-def session_cwd(conn: sqlite3.Connection, session_id: str) -> str | None:
-    """Рабочий каталог сессии — по нему ищется её процесс."""
-    row = conn.execute(
-        """
-        SELECT p.root_path FROM sessions AS s
-          LEFT JOIN projects AS p ON p.id = s.project_id
-         WHERE s.id = ?
-        """,
-        (session_id,),
-    ).fetchone()
-    return str(row["root_path"]) if row and row["root_path"] else None

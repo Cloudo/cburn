@@ -6,6 +6,7 @@ import {
   hideSession,
   useOverview,
   type LiveSession,
+  type SessionStatus,
   type Turn,
   type Usage,
 } from "./api";
@@ -23,6 +24,14 @@ const WINDOW_CAPTION: Record<string, string> = {
   "5m": "за последние 5 минут",
   "60m": "за последний час",
 };
+
+//: Статусы в порядке важности: первым открывается таб, где что-то происходит.
+const STATUSES: Array<{ key: SessionStatus; label: string }> = [
+  { key: "permission", label: "ждёт разрешения" },
+  { key: "working", label: "работает" },
+  { key: "answered", label: "ждёт вас" },
+  { key: "idle", label: "простаивает" },
+];
 
 const COLORS = {
   cacheRead: "#4d7fa3",
@@ -185,26 +194,8 @@ export default function App() {
           </div>
 
           <div className="panel">
-            <h2>
-              сейчас в работе
-              {data.live_sessions.length > 0 && (
-                <span className="count">{data.live_sessions.length}</span>
-              )}
-            </h2>
-            {data.live_sessions.length === 0 ? (
-              <p className="hint">ни одной сессии за последние две минуты</p>
-            ) : (
-              <ul className="sessions">
-                {data.live_sessions.map((session) => (
-                  <SessionCard
-                    key={session.id}
-                    session={session}
-                    pending={data.pending_sessions.includes(session.id)}
-                    now={data.now}
-                  />
-                ))}
-              </ul>
-            )}
+            <h2>сейчас в работе</h2>
+            <SessionBoard sessions={data.live_sessions} limit={data.live_limit} now={data.now} />
           </div>
 
           <div className="panel">
@@ -254,15 +245,72 @@ export default function App() {
   );
 }
 
-function SessionCard({
-  session,
-  pending,
+function SessionBoard({
+  sessions,
+  limit,
   now,
 }: {
-  session: LiveSession;
-  pending: boolean;
+  sessions: LiveSession[];
+  limit: number;
   now: string;
 }) {
+  const [chosen, setChosen] = useState<SessionStatus | null>(null);
+  const counts = STATUSES.map((status) => ({
+    ...status,
+    items: sessions.filter((session) => session.status === status.key),
+  }));
+
+  // Пока вкладку не выбрали руками, открыта первая, где что-то есть: смотреть
+  // на пустой список «ждёт разрешения» смысла нет.
+  const active = chosen ?? counts.find((status) => status.items.length > 0)?.key ?? "working";
+  const shown = counts.find((status) => status.key === active)?.items ?? [];
+
+  if (sessions.length === 0) {
+    return <p className="hint">ни одной сессии за последний час</p>;
+  }
+
+  return (
+    <>
+      <div className="tabs" role="tablist" aria-label="статус сессий">
+        {counts.map((status) => (
+          <button
+            key={status.key}
+            role="tab"
+            aria-selected={status.key === active}
+            disabled={status.items.length === 0}
+            className={status.key === active ? "tab tab-on" : "tab"}
+            onClick={() => setChosen(status.key)}
+          >
+            {status.label}
+            <span className={`tab-count tab-count-${status.key}`}>{status.items.length}</span>
+          </button>
+        ))}
+      </div>
+
+      {shown.length === 0 ? (
+        <p className="hint">в этом состоянии сессий нет</p>
+      ) : (
+        <ul className="sessions">
+          {shown.slice(0, limit).map((session) => (
+            <SessionCard key={session.id} session={session} now={now} />
+          ))}
+        </ul>
+      )}
+      {shown.length > limit && (
+        <p className="hint">и ещё {shown.length - limit} — показаны самые свежие</p>
+      )}
+    </>
+  );
+}
+
+const STATUS_NOTE: Record<SessionStatus, string> = {
+  permission: "ждёт разрешения",
+  working: "работает",
+  answered: "ждёт вас",
+  idle: "простаивает",
+};
+
+function SessionCard({ session, now }: { session: LiveSession; now: string }) {
   const [asking, setAsking] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
@@ -286,10 +334,12 @@ function SessionCard({
   };
 
   return (
-    <li className={pending ? "session-working" : ""}>
+    <li className={`session-${session.status}`}>
       <div className="session-head">
         <span className="session-name">{session.title ?? session.id.slice(0, 8)}</span>
-        {pending && <span className="session-badge">ждёт ответа</span>}
+        <span className={`session-badge session-badge-${session.status}`}>
+          {STATUS_NOTE[session.status]}
+        </span>
         <div className="session-close">
           <button
             className="session-close-button"
@@ -302,6 +352,9 @@ function SessionCard({
           {asking && (
             <div className="popover" role="dialog" aria-label="закрыть сессию">
               <p>Завершить процесс Claude Code и убрать сессию с дашборда?</p>
+              <p className="popover-warning">
+                Процесс получит SIGTERM: хуки SessionEnd при этом могут не отработать.
+              </p>
               <div className="popover-actions">
                 <button className="popover-danger" onClick={close}>
                   Закрыть сессию
@@ -313,7 +366,9 @@ function SessionCard({
           )}
         </div>
       </div>
-      <p className="session-prompt">{session.first_prompt ?? "без промпта"}</p>
+      <p className="session-prompt">
+        {session.last_prompt ?? session.first_prompt ?? "без промпта"}
+      </p>
       <div className="session-meta">
         <code>{session.id.slice(0, 8)}</code>
         <span className="session-project">{session.project ?? "—"}</span>

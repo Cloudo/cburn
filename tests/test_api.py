@@ -24,6 +24,8 @@ def assistant(
     ts: datetime | None = None,
     output: int = 100,
     cache_read: int = 1000,
+    content: list[dict] | None = None,
+    stop_reason: str = "end_turn",
 ) -> str:
     moment = ts or datetime.now(UTC)
     return json.dumps(
@@ -36,7 +38,9 @@ def assistant(
             "message": {
                 "id": message_id,
                 "model": "claude-opus-5",
-                "content": [
+                "stop_reason": stop_reason,
+                "content": content
+                or [
                     {
                         "type": "tool_use",
                         "id": f"t-{message_id}",
@@ -279,8 +283,10 @@ def test_series_has_bucket_per_step(transcripts: Path, db_path: Path) -> None:
         transcripts,
         db_path,
         [
+            # Оба хода с одной меткой времени: иначе они попадают в соседние
+            # корзины, когда замер приходится на границу пятисекундного шага.
             assistant("msg_1", ts=now - timedelta(seconds=8), output=100, cache_read=0),
-            assistant("msg_2", uuid="u2", ts=now - timedelta(seconds=7), output=50, cache_read=0),
+            assistant("msg_2", uuid="u2", ts=now - timedelta(seconds=8), output=50, cache_read=0),
             assistant("msg_3", uuid="u3", ts=now - timedelta(minutes=2), output=10, cache_read=0),
         ],
     )
@@ -403,17 +409,17 @@ def test_hide_unknown_session_is_404(db_path: Path, transcripts: Path) -> None:
         assert api.post("/api/sessions/нет-такой/hide").status_code == 404
 
 
-def test_close_terminates_the_only_matching_process(
+def test_close_terminates_the_session_process(
     transcripts: Path, db_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Процесс ищется по рабочему каталогу сессии и получает SIGTERM."""
+    """Процесс берётся по sessionId из списка Claude Code и получает SIGTERM."""
     from cloudo_dash.api import server
-    from cloudo_dash.processes import ClaudeProcess
+    from cloudo_dash.processes import ClaudeSession
 
     seed(transcripts, db_path, [assistant("msg_1")])
     killed: list[int] = []
     monkeypatch.setattr(
-        server, "process_for_cwd", lambda cwd: ClaudeProcess(pid=4242, cwd=cwd or "")
+        server, "process_for_session", lambda sid: ClaudeSession(pid=4242, session_id=sid)
     )
     monkeypatch.setattr(server, "terminate", lambda pid: killed.append(pid) is None)
 
@@ -425,41 +431,79 @@ def test_close_terminates_the_only_matching_process(
         assert api.get("/api/overview").json()["live_sessions"] == []
 
 
-def test_close_without_certain_process_only_hides(
+def test_close_of_finished_session_only_hides(
     transcripts: Path, db_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Каталогу отвечает несколько процессов — не убиваем ни одного."""
+    """Сессии уже нет среди запущенных — просто убираем карточку."""
     from cloudo_dash.api import server
 
     seed(transcripts, db_path, [assistant("msg_1")])
-    monkeypatch.setattr(server, "process_for_cwd", lambda cwd: None)
+    monkeypatch.setattr(server, "process_for_session", lambda sid: None)
 
     with client(db_path, transcripts) as api:
         result = api.post("/api/sessions/s1/close").json()
         assert result["stopped"] is False
         assert result["pid"] is None
-        assert "не определён" in result["note"]
+        assert "уже не запущен" in result["note"]
         assert api.get("/api/overview").json()["live_sessions"] == []
 
 
-def test_live_sessions_are_capped_and_sorted(transcripts: Path, db_path: Path) -> None:
-    """Не больше пяти сессий, самая свежая сверху."""
+def test_live_sessions_are_sorted_by_activity(transcripts: Path, db_path: Path) -> None:
+    """Самая свежая сессия сверху; сколько показывать — решает дашборд."""
     now = datetime.now(UTC)
-    lines = []
-    for index in range(7):
-        lines.append(
-            assistant(
-                f"msg_{index}",
-                session=f"s{index}",
-                uuid=f"u{index}",
-                ts=now - timedelta(seconds=index * 5),
-            )
+    lines = [
+        assistant(
+            f"msg_{index}",
+            session=f"s{index}",
+            uuid=f"u{index}",
+            ts=now - timedelta(seconds=index * 5),
         )
+        for index in range(7)
+    ]
     seed(transcripts, db_path, lines)
 
     with client(db_path, transcripts) as api:
-        live = api.get("/api/overview").json()["live_sessions"]
+        data = api.get("/api/overview").json()
 
-    assert len(live) == 5
-    assert [row["id"] for row in live] == ["s0", "s1", "s2", "s3", "s4"]
-    assert live == sorted(live, key=lambda row: row["last_at"], reverse=True)
+    live = data["live_sessions"]
+    assert [row["id"] for row in live] == [f"s{index}" for index in range(7)]
+    assert data["live_limit"] == 5
+
+
+def test_session_statuses(transcripts: Path, db_path: Path) -> None:
+    """Статус отвечает на вопрос, кого сессия ждёт."""
+    now = datetime.now(UTC)
+    tool_use = [{"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "ls"}}]
+    seed(
+        transcripts,
+        db_path,
+        [
+            # Модель работает: последняя запись — промпт без ответа.
+            assistant("msg_a", session="working", ts=now - timedelta(seconds=40)),
+            prompt("считай дальше", session="working", ts=now - timedelta(seconds=20)),
+            # Модель ответила и ждёт человека.
+            assistant("msg_b", session="answered", uuid="u2", ts=now - timedelta(seconds=30)),
+            # Инструмент запрошен, результата нет — висит разрешение.
+            assistant(
+                "msg_c",
+                session="permission",
+                uuid="u3",
+                ts=now - timedelta(seconds=60),
+                content=tool_use,
+                stop_reason="tool_use",
+            ),
+            # Тишина дольше двух минут.
+            assistant("msg_d", session="idle", uuid="u4", ts=now - timedelta(minutes=20)),
+        ],
+    )
+    with client(db_path, transcripts) as api:
+        data = api.get("/api/overview").json()
+
+    statuses = {row["id"]: row["status"] for row in data["live_sessions"]}
+    assert statuses == {
+        "working": "working",
+        "answered": "answered",
+        "permission": "permission",
+        "idle": "idle",
+    }
+    assert data["pending_sessions"] == ["working"]

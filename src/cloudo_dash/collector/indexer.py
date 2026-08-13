@@ -72,6 +72,9 @@ class _Session:
     last_record_at: str | None = None
     title: str | None = None
     title_source: str | None = None
+    last_prompt: str | None = None
+    last_stop_reason: str | None = None
+    last_turn_at: str | None = None  # время хода, чей stop_reason запомнен
 
 
 def ingest_file(conn: sqlite3.Connection, path: Path) -> IngestStats:
@@ -156,6 +159,11 @@ def _collect(
     sessions: dict[str, _Session],
     stats: IngestStats,
 ) -> None:
+    if record.kind is RecordKind.LAST_PROMPT and record.session_id:
+        # У записи нет времени: она всегда описывает текущее состояние сессии.
+        session = sessions.setdefault(record.session_id, _Session(session_id=record.session_id))
+        session.last_prompt = record.prompt_text
+        return
     if record.kind is RecordKind.TITLE and record.session_id:
         # У записей названия нет ни времени, ни uuid — только sessionId.
         session = sessions.setdefault(record.session_id, _Session(session_id=record.session_id))
@@ -178,6 +186,11 @@ def _collect(
         return
     if record.model == SYNTHETIC_MODEL:
         return
+
+    known = sessions.get(record.session_id)
+    if known is not None and (known.last_turn_at is None or record.ts >= known.last_turn_at):
+        known.last_turn_at = record.ts
+        known.last_stop_reason = record.stop_reason
 
     turn = turns.get(record.message_id)
     if turn is not None:
@@ -257,9 +270,11 @@ def _upsert_sessions(
     conn.executemany(
         """
         INSERT INTO sessions (id, project_id, started_at, last_at, first_prompt,
-                              last_record_kind, last_record_at, title, title_source)
+                              last_record_kind, last_record_at, title, title_source,
+                              last_prompt, last_stop_reason)
         VALUES (:id, :project_id, :started_at, :last_at, :first_prompt,
-                :last_record_kind, :last_record_at, :title, :title_source)
+                :last_record_kind, :last_record_at, :title, :title_source,
+                :last_prompt, :last_stop_reason)
         ON CONFLICT(id) DO UPDATE SET
             project_id   = COALESCE(sessions.project_id, excluded.project_id),
             started_at   = MIN(COALESCE(sessions.started_at, excluded.started_at),
@@ -278,7 +293,9 @@ def _upsert_sessions(
             title_source = CASE
                 WHEN excluded.title_source IS NULL THEN sessions.title_source
                 WHEN sessions.title_source = 'custom' AND excluded.title_source <> 'custom'
-                THEN sessions.title_source ELSE excluded.title_source END
+                THEN sessions.title_source ELSE excluded.title_source END,
+            last_prompt = COALESCE(excluded.last_prompt, sessions.last_prompt),
+            last_stop_reason = COALESCE(excluded.last_stop_reason, sessions.last_stop_reason)
         """,
         [
             {
@@ -291,6 +308,8 @@ def _upsert_sessions(
                 "last_record_at": session.last_record_at,
                 "title": session.title,
                 "title_source": session.title_source,
+                "last_prompt": session.last_prompt,
+                "last_stop_reason": session.last_stop_reason,
             }
             for session in sessions.values()
         ],

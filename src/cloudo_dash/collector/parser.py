@@ -39,6 +39,10 @@ _USER = "user"
 #: `ai-title`; у обеих записей нет ни timestamp, ни uuid — только sessionId.
 _TITLE_FIELDS = {"ai-title": "aiTitle", "custom-title": "customTitle"}
 
+#: Последний промпт сессии Claude Code пишет отдельной записью — искать его
+#: перебором user-записей не нужно.
+_LAST_PROMPT = "last-prompt"
+
 #: Ограничение на текст промпта: в БД он нужен только как подпись сессии.
 PROMPT_LIMIT = 200
 
@@ -50,6 +54,7 @@ class RecordKind(StrEnum):
     PROMPT = "prompt"  # настоящий промпт пользователя
     TOOL_RESULT = "tool_result"  # результат инструмента, приходит записью user
     TITLE = "title"  # название сессии: ai-title или custom-title
+    LAST_PROMPT = "last_prompt"  # последний промпт сессии, отдельной записью
     UNKNOWN = "unknown"  # всё прочее — в raw_events
 
 
@@ -173,6 +178,14 @@ def _parse_record(record: dict[str, Any]) -> ParsedRecord:
         return _parse_assistant(record, message, common)
     if raw_type == _USER:
         return _parse_user(record, message, common)
+    if raw_type == _LAST_PROMPT:
+        text = _str(record.get("lastPrompt"))
+        if text:
+            return ParsedRecord(
+                kind=RecordKind.LAST_PROMPT,
+                prompt_text=_clean_prompt(text),
+                **common,
+            )
     if raw_type in _TITLE_FIELDS:
         title = _str(record.get(_TITLE_FIELDS[raw_type]))
         if title:
@@ -253,6 +266,14 @@ def _strip_service_blocks(text: str) -> str:
     return ""
 
 
+def _clean_prompt(text: str) -> str | None:
+    """Обрезать промпт и убрать служебные обёртки."""
+    text = text.strip()
+    if _SERVICE_OPEN.match(text):
+        text = _strip_service_blocks(text)
+    return text[:PROMPT_LIMIT] or None
+
+
 def _prompt_text(content: Any) -> str | None:
     """Текст промпта, обрезанный до `PROMPT_LIMIT`. Вложения пропускаются."""
     if isinstance(content, str):
@@ -266,12 +287,7 @@ def _prompt_text(content: Any) -> str | None:
         text = "\n".join(part for part in parts if part)
     else:
         return None
-    text = text.strip()
-    if not text:
-        return None
-    if _SERVICE_OPEN.match(text):
-        text = _strip_service_blocks(text)
-    return text[:PROMPT_LIMIT] or None
+    return _clean_prompt(text)
 
 
 def _parse_usage(usage: Any) -> Usage | None:

@@ -915,6 +915,11 @@ main.empty {
   white-space: normal;
 }
 
+.popover-warning {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
 .popover-actions {
   display: flex;
   flex-wrap: wrap;
@@ -946,4 +951,108 @@ main.empty {
 .popover-danger:hover {
   color: #e79a9a;
   border-color: #d98080;
+}
+
+/* --- вкладки статусов --- */
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: var(--bg-sunken);
+  color: var(--text-faint);
+  font-family: var(--sans);
+  font-size: 11px;
+  padding: 4px 8px 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.tab:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.tab:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.tab-on {
+  background: rgb(77 127 163 / 18%);
+  color: var(--text);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 2px;
+}
+
+.tab-count {
+  font-family: var(--mono);
+  font-size: 10px;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 6%);
+  color: inherit;
+  text-align: center;
+}
+
+.tab-count-permission {
+  color: var(--amber);
+}
+
+.tab-count-working {
+  color: var(--mint);
+}
+
+/* --- цвет карточки по статусу --- */
+
+.sessions li {
+  border-left-color: var(--line);
+}
+
+.session-working {
+  border-left-color: var(--mint);
+}
+
+.session-permission {
+  border-left-color: var(--amber);
+}
+
+.session-answered {
+  border-left-color: var(--steel);
+}
+
+.session-idle {
+  border-left-color: var(--line);
+}
+
+.session-badge-working {
+  color: var(--mint);
+  background: rgb(94 171 134 / 12%);
+}
+
+.session-badge-permission {
+  color: var(--amber);
+  background: rgb(232 163 61 / 12%);
+}
+
+.session-badge-answered {
+  color: var(--steel);
+  background: rgb(77 127 163 / 14%);
+}
+
+.session-badge-idle {
+  color: var(--text-faint);
+  background: rgb(255 255 255 / 5%);
 }
