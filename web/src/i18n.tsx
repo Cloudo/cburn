@@ -72,6 +72,23 @@ const DICT: Record<string, [string, string]> = {
   "widget.idle.note": ["ответ короче 10 токенов", "reply under 10 tokens"],
   "widget.feed": ["лента ходов", "turn feed"],
   "widget.feed.note": ["последние ходы", "latest turns"],
+  "widget.otel": ["мимо транскриптов", "off the transcript"],
+  "widget.otel.note": ["данные телеметрии Claude Code", "Claude Code telemetry"],
+
+  "otel.off": [
+    "Телеметрия Claude Code выключена. С ней видно расход, которого нет в файлах истории, и сколько раз работа вставала ради подтверждения разрешения. Переменные окружения печатает команда:",
+    "Claude Code telemetry is off. With it you see spending absent from the history files, and how often work stopped for a permission prompt. This command prints the environment variables:",
+  ],
+  "otel.hidden": ["расхода мимо истории", "spending off the record"],
+  "otel.hidden.note": [
+    "{tokens} токенов служебных запросов — {percent}% от всего расхода за сегодня",
+    "{tokens} tokens of service requests — {percent}% of everything spent today",
+  ],
+  "otel.manual": ["подтверждений руками", "manual confirmations"],
+  "otel.manual.note": [
+    "и ещё {auto} разрешено автоматически",
+    "plus {auto} allowed automatically",
+  ],
 
   "dash.widgets": ["виджеты", "widgets"],
   "dash.tune": ["настройка дашборда", "dashboard settings"],

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { Gauge, OutputMeter, Recorder, type Slice } from "./Gauge";
-import { Idle, Models, PlanLimits, Tools } from "./Profile";
+import { Idle, Models, PlanLimits, Telemetry, Tools } from "./Profile";
 import { Dashboard, type WidgetContent } from "./Dashboard";
 import { Advice } from "./Advice";
 import { Session } from "./Session";
@@ -291,6 +291,14 @@ function buildWidgets(
       title: t("widget.idle"),
       body: <Idle idle={data.idle} />,
       at: timestamp(stamps.idle_turn),
+      checkedAt,
+      refresh,
+    },
+    {
+      id: "otel",
+      title: t("widget.otel"),
+      body: <Telemetry otel={data.otel} />,
+      at: timestamp(data.otel?.last_at ?? null),
       checkedAt,
       refresh,
     },

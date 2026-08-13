@@ -1,8 +1,8 @@
 // «На что уходят ходы»: метрики ТЗ §4 — профиль инструментов, доля моделей,
 // холостые ходы и оценка окна лимитов подписки.
 
-import { agoLabel, compact, grouped, modelLabel, toolLabel } from "./format";
-import type { IdleTurns, Limits, ModelShare, Plan, ToolProfile } from "./api";
+import { agoLabel, compact, grouped, modelLabel, toolLabel, usd } from "./format";
+import type { IdleTurns, Limits, ModelShare, Otel, Plan, ToolProfile } from "./api";
 import { translate, useLang, type Lang } from "./i18n";
 
 /** Список с полосками доли — одна форма для инструментов и bash-команд. */
@@ -82,6 +82,62 @@ export function Idle({ idle }: { idle: IdleTurns }) {
         {t("idle.explain", { output: idle.max_output, context: compact(idle.min_context) })}
         {idle.turns > 0 && <> {t("idle.cost", { tokens: compact(idle.cache_read) })}</>}
       </p>
+    </div>
+  );
+}
+
+/** Телеметрия Claude Code: то, чего в транскриптах нет (веха E).
+ *
+ *  Служебные запросы модель делает сама (например, придумывает название
+ *  сессии) — в файлы истории они не попадают, поэтому остальные цифры
+ *  дашборда на эту величину занижены. Подтверждения разрешений там же:
+ *  каждое ручное останавливает работу до ответа человека. */
+export function Telemetry({ otel }: { otel?: Otel }) {
+  const { t } = useLang();
+  if (!otel?.active) {
+    return (
+      <div className="telemetry-off">
+        <p className="hint">{t("otel.off")}</p>
+        <code>cdash otel --env</code>
+      </div>
+    );
+  }
+  const { off_transcript: extra, permissions } = otel;
+  return (
+    <div className="telemetry">
+      <div className="telemetry-pair">
+        <div className="telemetry-cell">
+          <span className="telemetry-value">{usd(extra.cost_usd)}</span>
+          <span className="telemetry-label">{t("otel.hidden")}</span>
+          <span className="telemetry-note">
+            {t("otel.hidden.note", {
+              tokens: compact(extra.tokens),
+              percent: (extra.share * 100).toFixed(1),
+            })}
+          </span>
+        </div>
+        <div className="telemetry-cell">
+          <span className="telemetry-value">{grouped(permissions.manual)}</span>
+          <span className="telemetry-label">{t("otel.manual")}</span>
+          <span className="telemetry-note">
+            {t("otel.manual.note", { auto: grouped(permissions.auto) })}
+          </span>
+        </div>
+      </div>
+      {permissions.by_tool.length > 0 && (
+        <ol className="ranked">
+          {permissions.by_tool.slice(0, 5).map((row) => (
+            <li key={row.tool}>
+              <span
+                className="ranked-bar"
+                style={{ width: `${(row.decisions / permissions.manual) * 100}%` }}
+              />
+              <span className="ranked-name">{toolLabel(row.tool)}</span>
+              <span className="ranked-calls">{grouped(row.decisions)}</span>
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }

@@ -136,6 +136,30 @@ export type Stamps = {
   idle_turn: string | null;
 };
 
+/** Срез телеметрии Claude Code: то, чего не видно в транскриптах (веха E).
+ *  `active: false` — телеметрия не включена, виджет объясняет как включить. */
+export type Otel = {
+  active: boolean;
+  last_at: string | null;
+  off_transcript: {
+    tokens: number;
+    input_tokens: number;
+    output_tokens: number;
+    cache_read: number;
+    cache_write: number;
+    cost_usd: number;
+    share: number;
+    request_kinds: Array<{ source: string | null; requests: number; cost_usd: number }>;
+  };
+  permissions: {
+    decisions: number;
+    manual: number;
+    auto: number;
+    rejected: number;
+    by_tool: Array<{ tool: string; decisions: number }>;
+  };
+};
+
 export type Overview = {
   now: string;
   burn: Record<string, BurnRate>;
@@ -163,6 +187,8 @@ export type Overview = {
   series_bucket_seconds: number;
   /** Может не прийти: собранный фронт обновляется отдельно от процесса сервера. */
   stamps?: Stamps;
+  /** Тоже может не прийти — сервер старше этого фронта. */
+  otel?: Otel;
   pending_sessions: string[];
 };
 

@@ -40,10 +40,14 @@ function trim(value: number): string {
   return text.includes(point) ? text.replace(/[.,]?0+$/, "") : text;
 }
 
-/** Деньги подписчику не счёт, а вес: точность до цента, разряды как у чисел. */
+/** Деньги подписчику не счёт, а вес: точность до цента, разряды как у чисел.
+ *
+ *  Мелочь дешевле цента показывается точнее: «$0,00» читается как ноль, а речь
+ *  о живом расходе — например, о служебных запросах телеметрии. */
 export function usd(value: number): string {
+  const digits = value !== 0 && Math.abs(value) < 0.01 ? 4 : 2;
   const text = value
-    .toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    .toLocaleString(locale, { minimumFractionDigits: digits, maximumFractionDigits: digits })
     .replace(/\s/g, SPACE);
   return `$${text}`;
 }
