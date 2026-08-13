@@ -23,6 +23,8 @@ export type BurnRate = {
   cost_per_hour: number;
   turns: number;
   sessions: number;
+  window_seconds: number;
+  usage: Usage;
 };
 
 export type LiveSession = {

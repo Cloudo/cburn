@@ -360,3 +360,23 @@ def test_ten_second_window_reacts_immediately(transcripts: Path, db_path: Path) 
     # Шесть секунд работы в десятисекундном окне — это 360 токенов в минуту.
     assert burn["10s"]["output_per_min"] == pytest.approx(360)
     assert burn["1m"]["output_per_min"] == pytest.approx(60)
+
+
+def test_burn_window_carries_its_own_usage(transcripts: Path, db_path: Path) -> None:
+    """Разбивка по составляющим доступна для каждого окна, не только за сегодня."""
+    now = datetime.now(UTC)
+    seed(
+        transcripts,
+        db_path,
+        [
+            assistant("msg_1", ts=now - timedelta(seconds=3), output=60, cache_read=900),
+            assistant("msg_2", uuid="u2", ts=now - timedelta(minutes=3), output=10, cache_read=100),
+        ],
+    )
+    with client(db_path, transcripts) as api:
+        burn = api.get("/api/overview").json()["burn"]
+
+    assert burn["10s"]["usage"]["cache_read"] == 900  # только свежий ход
+    assert burn["10s"]["usage"]["output_tokens"] == 60
+    assert burn["5m"]["usage"]["cache_read"] == 1000  # оба хода
+    assert burn["5m"]["usage"]["cache_write"] == 100  # по 50 на ход

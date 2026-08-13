@@ -286,7 +286,7 @@ main.empty {
 
 .legend {
   list-style: none;
-  margin: 18px 0 0;
+  margin: 0;
   padding: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -792,4 +792,53 @@ main.empty {
   font-weight: 500;
   color: var(--text);
   font-variant-numeric: tabular-nums;
+}
+
+/* --- окно разбивки --- */
+
+.legend-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 18px 0 10px;
+  flex-wrap: wrap;
+}
+
+.legend-title {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.slice-windows {
+  display: flex;
+  gap: 2px;
+}
+
+.slice-window {
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  font-family: var(--sans);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.slice-window:hover {
+  color: var(--text);
+}
+
+.slice-window-on {
+  background: rgb(77 127 163 / 18%);
+  color: var(--steel);
+}
+
+.slice-window:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 2px;
 }

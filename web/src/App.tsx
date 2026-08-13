@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Gauge, OutputMeter, Recorder, type Slice } from "./Gauge";
 import { agoLabel, clockTime, compact, grouped, modelLabel } from "./format";
-import { useOverview, type Overview, type Turn } from "./api";
+import { useOverview, type Turn, type Usage } from "./api";
 
 const WINDOWS = ["10s", "1m", "5m", "60m"] as const;
 const WINDOW_LABEL: Record<string, string> = {
@@ -24,10 +24,19 @@ const COLORS = {
   input: "#5eab86",
 };
 
-function slicesOf(data: Overview): Slice[] {
-  // Разбивка берётся из расхода за сегодня: в минутном окне ходов бывает
-  // два-три, и доли скакали бы при каждом пуше.
-  const source = data.today;
+//: Окно разбивки: «как прибор» держит её в такт со стрелкой, остальные
+//: значения отвязывают её — например, чтобы смотреть долю кэша за сутки.
+const SLICE_WINDOWS = ["sync", "10s", "1m", "5m", "60m", "today"] as const;
+const SLICE_LABEL: Record<string, string> = {
+  sync: "как прибор",
+  "10s": "10 с",
+  "1m": "мин",
+  "5m": "5 мин",
+  "60m": "час",
+  today: "сегодня",
+};
+
+function slicesOf(source: Usage): Slice[] {
   return [
     { key: "cache_read", label: "чтение кэша", value: source.cache_read, color: COLORS.cacheRead },
     { key: "cache_write", label: "запись кэша", value: source.cache_write, color: COLORS.cacheWrite },
@@ -39,6 +48,7 @@ function slicesOf(data: Overview): Slice[] {
 export default function App() {
   const { data, connection, updatedAt } = useOverview();
   const [window, setWindow] = useState<string>("1m");
+  const [sliceWindow, setSliceWindow] = useState<string>("sync");
   const [, tick] = useState(0);
 
   useEffect(() => {
@@ -55,7 +65,9 @@ export default function App() {
   }
 
   const burn = data.burn[window];
-  const slices = slicesOf(data);
+  const sliceKey = sliceWindow === "sync" ? window : sliceWindow;
+  const sliceSource = sliceKey === "today" ? data.today : data.burn[sliceKey].usage;
+  const slices = slicesOf(sliceSource);
   const peak = Math.max(...WINDOWS.map((key) => data.burn[key].output_per_min), 500);
   const ago = updatedAt ? (Date.now() - updatedAt) / 1000 : 0;
 
@@ -100,6 +112,23 @@ export default function App() {
             slices={slices}
             caption={WINDOW_CAPTION[window]}
           />
+
+          <div className="legend-head">
+            <span className="legend-title">разбивка</span>
+            <div className="slice-windows" role="tablist" aria-label="окно разбивки">
+              {SLICE_WINDOWS.map((key) => (
+                <button
+                  key={key}
+                  role="tab"
+                  aria-selected={key === sliceWindow}
+                  className={key === sliceWindow ? "slice-window slice-window-on" : "slice-window"}
+                  onClick={() => setSliceWindow(key)}
+                >
+                  {SLICE_LABEL[key]}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <ul className="legend">
             {slices.map((slice) => {

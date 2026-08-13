@@ -177,6 +177,9 @@ def burn_rates(conn: sqlite3.Connection, now: datetime) -> dict[str, dict]:
             "turns": usage["turns"],
             "sessions": usage["sessions"],
             "window_seconds": seconds,
+            # Абсолютные суммы за окно: из них считается разбивка по
+            # составляющим, и она должна уметь показывать любое окно.
+            "usage": usage,
         }
     return rates
 
