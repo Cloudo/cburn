@@ -68,6 +68,8 @@ def build(
         "chains": _chains(conn, since, project),
         "mechanical_opus": _mechanical_opus(conn, since, project),
         "mcp": _mcp(conn, since, project),
+        "permissions": _permissions(conn, since, until, project),
+        "off_transcript": _off_transcript(conn, since, until, project),
         "instructions": _instructions(),
     }
     digest["size"] = _size(digest)
@@ -219,6 +221,42 @@ def _mcp(conn: sqlite3.Connection, since: datetime, project: str | None) -> dict
             for name, calls in sorted(servers.items(), key=lambda item: -item[1])
         ],
         "calls": sum(servers.values()),
+    }
+
+
+def _permissions(
+    conn: sqlite3.Connection, since: datetime, until: datetime | None, project: str | None
+) -> dict:
+    """Подтверждения разрешений: сколько раз работа останавливалась ради ответа.
+
+    Считается по телеметрии — в транскрипт Claude Code не пишет ни вопрос
+    «разрешить?», ни ответ на него (веха E). Без телеметрии секция помечена
+    `available: false`, иначе советчик прочтёт ноль подтверждений как факт.
+    """
+    stats = metrics.otel_permissions(conn, since, until, project)
+    if not stats["decisions"]:
+        return {"available": False, "note": "телеметрия OTel не включена — данных нет"}
+    return {"available": True, **stats}
+
+
+def _off_transcript(
+    conn: sqlite3.Connection, since: datetime, until: datetime | None, project: str | None
+) -> dict:
+    """Расход служебных запросов, которых нет в транскриптах (веха E).
+
+    Советчику это нужно, чтобы не объяснять расхождение цифр случайностью:
+    остальные разделы дайджеста считаны по транскриптам и на эту величину
+    занижены.
+    """
+    usage = metrics.otel_usage(conn, since, until, project)
+    if not usage["tokens"] and not usage["cost_usd"]:
+        return {"available": False, "note": "телеметрия OTel не включена — данных нет"}
+    return {
+        "available": True,
+        "tokens": usage["tokens"],
+        "cost_usd": usage["cost_usd"],
+        "share_of_cost": round(usage["share"], 4),
+        "kinds": usage["request_kinds"],
     }
 
 

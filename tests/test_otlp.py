@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import gzip
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +17,8 @@ import orjson
 import pytest
 from fastapi.testclient import TestClient
 
-from cloudo_dash import config, paths
+from cloudo_dash import config, metrics, paths
+from cloudo_dash.analyzer import digest
 from cloudo_dash.api.server import create_app
 from cloudo_dash.collector import otlp
 from cloudo_dash.db import connect
@@ -303,3 +305,132 @@ def test_status_endpoint_shows_what_arrived(client: TestClient) -> None:
     assert state["signals"]["metrics"]["stored"] == 1
     assert [row["name"] for row in state["metrics"]] == ["claude_code.token.usage"]
     assert [row["name"] for row in state["events"]] == ["api_request"]
+
+
+# --- что телеметрия даёт дашборду и советчику -------------------------------
+
+
+def test_off_transcript_usage_is_counted_apart(conn: Any) -> None:
+    """Служебные запросы считаются отдельно: в транскрипте их нет вовсе."""
+    otlp.ingest(
+        conn,
+        "metrics",
+        metrics_payload(
+            point(517, type="input", query_source="auxiliary"),
+            point(18, type="output", query_source="auxiliary"),
+            point(22846, type="cacheCreation", query_source="main"),
+        ),
+    )
+    otlp.ingest(
+        conn,
+        "metrics",
+        metrics_payload(
+            point(1, query_source="auxiliary"),
+            point(1, query_source="main"),
+            name="claude_code.cost.usage",
+        ),
+    )
+    otlp.ingest(
+        conn, "logs", logs_payload(event("api_request", 1, query_source="generate_session_title"))
+    )
+
+    usage = metrics.otel_usage(conn, datetime(2026, 8, 14, tzinfo=UTC))
+    assert usage["tokens"] == 535
+    assert usage["input_tokens"] == 517
+    assert usage["cost_usd"] == 1.0
+    assert usage["share"] == 0.5  # половина того, что телеметрия видела за период
+    assert usage["request_kinds"][0]["source"] == "generate_session_title"
+
+
+def test_permission_decisions_are_split_by_source(conn: Any) -> None:
+    """Ручное подтверждение останавливает работу, автоматическое — нет."""
+    otlp.ingest(
+        conn,
+        "logs",
+        logs_payload(
+            event("tool_decision", 1, tool_name="Bash", decision="accept", source="user_permanent"),
+            event("tool_decision", 2, tool_name="Bash", decision="accept", source="user_temporary"),
+            event("tool_decision", 3, tool_name="Edit", decision="reject", source="user_reject"),
+            event("tool_decision", 4, tool_name="Read", decision="accept", source="config"),
+        ),
+    )
+    stats = metrics.otel_permissions(conn, datetime(2026, 8, 14, tzinfo=UTC))
+    assert (stats["decisions"], stats["manual"], stats["auto"]) == (4, 3, 1)
+    assert stats["rejected"] == 1
+    assert stats["by_tool"][0] == {"tool": "Bash", "decisions": 2}
+
+
+def test_digest_marks_missing_telemetry(conn: Any) -> None:
+    """Без телеметрии секции помечены прочерком: ноль подтверждений — не факт."""
+    built = digest.build(conn, datetime(2026, 8, 14, tzinfo=UTC))
+    assert built["permissions"]["available"] is False
+    assert built["off_transcript"]["available"] is False
+
+
+def test_digest_carries_permissions_when_telemetry_works(conn: Any) -> None:
+    otlp.ingest(
+        conn,
+        "logs",
+        logs_payload(
+            event("tool_decision", 1, tool_name="Bash", decision="accept", source="user_permanent")
+        ),
+    )
+    built = digest.build(conn, datetime(2026, 8, 14, tzinfo=UTC))
+    assert built["permissions"] == {
+        "available": True,
+        "decisions": 1,
+        "manual": 1,
+        "auto": 0,
+        "rejected": 0,
+        "by_tool": [{"tool": "Bash", "decisions": 1}],
+    }
+
+
+# --- занятость сессии по событиям -------------------------------------------
+
+#: Сессия попросила инструмент в 07:00:00, смотрим на неё через полминуты.
+NOW = datetime(2026, 8, 14, 7, 0, 30, tzinfo=UTC)
+
+
+def moment(second: int) -> str:
+    return datetime(2026, 8, 14, 7, 0, second, tzinfo=UTC).strftime(metrics.TS_FORMAT)
+
+
+def waiting_row(**extra: Any) -> dict[str, Any]:
+    """Сессия, которая попросила инструмент и с тех пор молчит."""
+    return {
+        "last_record_kind": "assistant",
+        "last_stop_reason": "tool_use",
+        "last_record_at": moment(0),
+        "is_live": 1,
+        "busy_since": None,
+    } | extra
+
+
+def test_decision_event_means_the_tool_is_running() -> None:
+    """Решение по разрешению есть — сессия работает, а не ждёт человека."""
+    row = waiting_row(otel_seen_at=moment(2), tool_decided_at=moment(2))
+    assert metrics.session_status(row, NOW) == metrics.STATUS_WORKING
+
+
+def test_silent_telemetry_means_waiting_for_a_human() -> None:
+    """Телеметрия работает, решения нет — это висящий запрос разрешения.
+
+    Раньше здесь смотрели на потомков процесса, и инструменты без своего
+    процесса (MCP-вызовы, `WebFetch`) выглядели ожиданием ошибочно.
+    """
+    row = waiting_row(otel_seen_at=moment(1), busy_since=moment(1))
+    assert metrics.session_status(row, NOW) == metrics.STATUS_PERMISSION
+
+
+def test_without_telemetry_processes_still_decide() -> None:
+    """Без телеметрии остаётся прежнее правило — по дереву процессов."""
+    assert metrics.session_status(waiting_row(busy_since=moment(1)), NOW) == metrics.STATUS_WORKING
+    assert metrics.session_status(waiting_row(), NOW) == metrics.STATUS_PERMISSION
+
+
+def test_stale_telemetry_is_not_trusted() -> None:
+    """Телеметрию выключили посреди работы — молчание перестаёт быть ответом."""
+    stale = datetime(2026, 8, 14, 6, 0, tzinfo=UTC).strftime(metrics.TS_FORMAT)
+    row = waiting_row(otel_seen_at=stale, busy_since=moment(1))
+    assert metrics.session_status(row, NOW) == metrics.STATUS_WORKING

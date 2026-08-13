@@ -335,6 +335,18 @@ def set_advice_status(conn: sqlite3.Connection, item_id: int, status: str) -> bo
 SPARK_POINTS = 24
 
 
+#: Что телеметрия знает о сессии: когда по ней было последнее событие вообще и
+#: когда — последнее решение по разрешению. Оба списка сессий берут эти колонки,
+#: чтобы статус считался одним правилом (веха E).
+OTEL_SESSION_COLUMNS = """
+                   (SELECT MAX(e.ts) FROM otel_events AS e
+                     WHERE e.session_id = s.id)                        AS otel_seen_at,
+                   (SELECT MAX(e.ts) FROM otel_events AS e
+                     WHERE e.session_id = s.id
+                       AND e.name = 'tool_decision')                   AS tool_decided_at,
+"""
+
+
 def sessions_page(
     conn: sqlite3.Connection,
     *,
@@ -368,6 +380,7 @@ def sessions_page(
                    s.turns, s.tokens_out, s.cache_read, s.cache_write, s.cost_usd,
                    s.last_context, s.parent_session_id, s.is_live, s.busy_since,
                    s.last_record_kind, s.last_record_at, s.last_stop_reason,
+                   {OTEL_SESSION_COLUMNS}
                    (SELECT COUNT(*) FROM sessions AS child
                      WHERE child.parent_session_id = s.id)             AS children,
                    (SELECT COALESCE(SUM(t.is_sidechain), 0) FROM turns AS t
@@ -537,6 +550,15 @@ PERMISSION_AFTER_SECONDS = 25
 #: транскрипт дописывается порциями раз в 2-6 с и отстаёт от запуска процесса.
 CHILD_LAG_SECONDS = 10
 
+#: То же ожидание, когда работает телеметрия: решение по разрешению приходит
+#: событием, и ждать четверть минуты незачем — событий хватает через секунды.
+#: Порог всё же не нулевой: логи экспортируются пачкой раз в несколько секунд.
+OTEL_PERMISSION_AFTER_SECONDS = 10
+
+#: Насколько события могут отстать от хода, прежде чем телеметрия считается
+#: замолчавшей (её могли выключить, перезапустив Claude Code без переменных).
+OTEL_STALE_SECONDS = 60
+
 #: Статусы сессии — по тому, кого она в этот момент ждёт.
 STATUS_WORKING = "working"  # ход не завершён: модель думает или гоняет инструменты
 STATUS_PERMISSION = "permission"  # инструмент запрошен, ответа нет — висит разрешение
@@ -559,12 +581,23 @@ def session_status(row: dict, now: datetime) -> str:
     процессов Claude Code (задача B4). Отсутствие процесса засчитывается только
     после `IDLE_AFTER_SECONDS`: флаг обновляется не мгновенно, и живая сессия
     не должна мигать «закончилась» между опросами.
+
+    Где включена телеметрия, догадка по процессам не нужна вовсе: решение по
+    разрешению приходит событием `tool_decision` (веха E). Тогда «инструмент
+    работает» — это факт, а не вывод из дерева процессов, и инструменты без
+    своего процесса (MCP-вызовы, `WebFetch`) больше не выглядят ожиданием.
     """
     quiet = _seconds_since(row.get("last_record_at") or row.get("last_at"), now)
     kind = row.get("last_record_kind")
 
     if kind == "assistant" and row.get("last_stop_reason") == "tool_use":
-        if quiet < PERMISSION_AFTER_SECONDS or _tool_is_running(row):
+        if _tool_is_allowed(row):
+            return STATUS_WORKING
+        if quiet < _permission_delay(row):
+            return STATUS_WORKING
+        if _otel_active(row):  # телеметрия молчит о решении — значит его и нет
+            return STATUS_PERMISSION
+        if _tool_is_running(row):
             return STATUS_WORKING
         return STATUS_PERMISSION
     if quiet >= IDLE_AFTER_SECONDS:
@@ -572,6 +605,39 @@ def session_status(row: dict, now: datetime) -> str:
     if kind in {"prompt", "tool_result"}:
         return STATUS_WORKING
     return STATUS_ANSWERED
+
+
+def _permission_delay(row: dict) -> float:
+    """Сколько ждать ответа инструмента, прежде чем считать это разрешением."""
+    return OTEL_PERMISSION_AFTER_SECONDS if _otel_active(row) else PERMISSION_AFTER_SECONDS
+
+
+def _otel_active(row: dict) -> bool:
+    """Шлёт ли эта сессия телеметрию прямо сейчас.
+
+    Одних старых событий мало: телеметрию могли выключить посреди работы, и
+    тогда молчание значило бы не «решения нет», а «данных нет». События идут
+    на каждый ход, поэтому свежесть проверяется по последнему ходу.
+    """
+    seen = _moment(row.get("otel_seen_at"))
+    if seen is None:
+        return False
+    asked = _moment(row.get("last_record_at") or row.get("last_at"))
+    return asked is None or seen >= asked - timedelta(seconds=OTEL_STALE_SECONDS)
+
+
+def _tool_is_allowed(row: dict) -> bool:
+    """Разрешён ли уже инструмент, о котором просит модель (веха E).
+
+    Событие `tool_decision` приходит и на автоматическое разрешение, и на
+    ответ человека, поэтому решение позже запроса означает одно: сессия не
+    ждёт, а работает. Отставание то же, что у процессов: транскрипт пишется
+    порциями, а события уезжают пачкой раз в несколько секунд.
+    """
+    decided, asked = _moment(row.get("tool_decided_at")), _moment(row.get("last_record_at"))
+    if decided is None or asked is None:
+        return False
+    return decided >= asked - timedelta(seconds=CHILD_LAG_SECONDS)
 
 
 def _tool_is_running(row: dict) -> bool:
@@ -617,12 +683,13 @@ def live_sessions(
     rows = [
         dict(row)
         for row in conn.execute(
-            """
+            f"""
             SELECT s.id, COALESCE(p.display_name, p.slug) AS project, p.root_path,
                    s.last_at, s.started_at,
                    s.turns, s.tokens_out, s.last_context, s.first_prompt, s.last_prompt,
                    s.title, s.title_source, s.last_record_kind, s.last_record_at,
                    s.last_stop_reason, s.is_live, s.busy_since,
+                   {OTEL_SESSION_COLUMNS}
                    (SELECT COALESCE(SUM(t.output_tokens), 0) FROM turns AS t
                      WHERE t.session_id = s.id AND t.ts >= ?) AS output_recent
               FROM sessions AS s
@@ -630,7 +697,7 @@ def live_sessions(
              WHERE s.last_at >= ? AND s.hidden = 0
              ORDER BY s.last_at DESC
              LIMIT ?
-            """,
+            """,  # noqa: S608
             (_utc_stamp(now - timedelta(seconds=IDLE_AFTER_SECONDS)),)
             + (_utc_stamp(now - timedelta(seconds=seconds)), limit),
         )
@@ -742,6 +809,154 @@ def local_day_start(now: datetime) -> datetime:
     return local.replace(hour=0, minute=0, second=0, microsecond=0)
 
 
+#: Чем телеметрия помечает служебные запросы Claude Code. Основная работа идёт
+#: как `main`, сабагенты — как `subagent`, и те и другие видны в транскрипте.
+#: `auxiliary` не виден там вовсе: это, например, генерация названия сессии.
+OTEL_OFF_TRANSCRIPT = "auxiliary"
+
+#: Источники решения по разрешению, означающие ответ человека, — остальные
+#: (`config`, `hook`) отработали сами и внимания не требуют.
+OTEL_MANUAL_SOURCES = ("user_permanent", "user_temporary", "user_abort", "user_reject")
+
+
+def otel_usage(
+    conn: sqlite3.Connection,
+    since: datetime,
+    until: datetime | None = None,
+    project: str | None = None,
+) -> dict:
+    """Расход, которого нет в транскриптах (веха E).
+
+    Служебные запросы Claude Code — отдельные вызовы модели, и в JSONL от них
+    не остаётся ничего: расход по ним дашборд занижает ровно на эту величину.
+    Считается только по телеметрии; без неё все цифры нулевые.
+    """
+    clause = "ts >= ?"
+    params: list[Any] = [_utc_stamp(since)]
+    if until is not None:
+        clause += " AND ts < ?"
+        params.append(_utc_stamp(until))
+    project_clause, project_params = project_filter(project)
+    clause += project_clause
+    params += project_params
+    source = " AND json_extract(attrs, '$.query_source') = ?"
+
+    tokens = {
+        row["kind"]: row["value"]
+        for row in conn.execute(
+            f"SELECT kind, COALESCE(SUM(value), 0) AS value FROM otel_metrics"
+            f" WHERE name = 'claude_code.token.usage' AND {clause}{source}"
+            f" GROUP BY kind",  # noqa: S608
+            (*params, OTEL_OFF_TRANSCRIPT),
+        )
+    }
+    cost = conn.execute(
+        f"SELECT COALESCE(SUM(value), 0) FROM otel_metrics"
+        f" WHERE name = 'claude_code.cost.usage' AND {clause}{source}",  # noqa: S608
+        (*params, OTEL_OFF_TRANSCRIPT),
+    ).fetchone()[0]
+    main_cost = conn.execute(
+        f"SELECT COALESCE(SUM(value), 0) FROM otel_metrics"
+        f" WHERE name = 'claude_code.cost.usage' AND {clause}"  # noqa: S608
+        f" AND json_extract(attrs, '$.query_source') <> ?",
+        (*params, OTEL_OFF_TRANSCRIPT),
+    ).fetchone()[0]
+    # Виды служебных запросов известны только событиям: в метриках все они
+    # свалены в `auxiliary`, а `api_request` называет каждый по имени.
+    kinds = [
+        dict(row)
+        for row in conn.execute(
+            f"SELECT json_extract(attrs, '$.query_source') AS source, COUNT(*) AS requests,"
+            f"       COALESCE(SUM(json_extract(attrs, '$.cost_usd')), 0) AS cost_usd"
+            f"  FROM otel_events WHERE name = 'api_request' AND {clause}"  # noqa: S608
+            f" GROUP BY source ORDER BY cost_usd DESC",
+            params,
+        )
+    ]
+    return {
+        "tokens": sum(tokens.values()),
+        "input_tokens": tokens.get("input", 0),
+        "output_tokens": tokens.get("output", 0),
+        "cache_read": tokens.get("cacheRead", 0),
+        "cache_write": tokens.get("cacheCreation", 0),
+        "cost_usd": cost,
+        # Доля служебного в том, что телеметрия видела за тот же период.
+        "share": cost / (cost + main_cost) if cost + main_cost else 0.0,
+        "request_kinds": kinds,
+    }
+
+
+def otel_permissions(
+    conn: sqlite3.Connection,
+    since: datetime,
+    until: datetime | None = None,
+    project: str | None = None,
+) -> dict:
+    """Решения по запросам разрешений (веха E).
+
+    В транскрипт Claude Code не пишет ни запрос «разрешить?», ни ответ на него,
+    поэтому до телеметрии этой цифры не было вовсе. Ручные подтверждения —
+    прямой повод поправить `permissions` в настройках: каждое из них
+    останавливает работу и ждёт человека.
+    """
+    clause = "ts >= ?"
+    params: list[Any] = [_utc_stamp(since)]
+    if until is not None:
+        clause += " AND ts < ?"
+        params.append(_utc_stamp(until))
+    project_clause, project_params = project_filter(project)
+    clause += project_clause
+    params += project_params
+    rows = [
+        dict(row)
+        for row in conn.execute(
+            f"SELECT json_extract(attrs, '$.tool_name') AS tool,"
+            f"       json_extract(attrs, '$.source')    AS source,"
+            f"       json_extract(attrs, '$.decision')  AS decision,"
+            f"       COUNT(*) AS decisions"
+            f"  FROM otel_events WHERE name = 'tool_decision' AND {clause}"  # noqa: S608
+            f" GROUP BY tool, source, decision",
+            params,
+        )
+    ]
+    manual: dict[str, int] = {}
+    total = 0
+    manual_total = 0
+    rejected = 0
+    for row in rows:
+        total += row["decisions"]
+        if row["decision"] == "reject":
+            rejected += row["decisions"]
+        if row["source"] in OTEL_MANUAL_SOURCES:
+            manual_total += row["decisions"]
+            tool = row["tool"] or "—"
+            manual[tool] = manual.get(tool, 0) + row["decisions"]
+    return {
+        "decisions": total,
+        "manual": manual_total,
+        "auto": total - manual_total,
+        "rejected": rejected,
+        "by_tool": [
+            {"tool": tool, "decisions": count}
+            for tool, count in sorted(manual.items(), key=lambda item: -item[1])
+        ],
+    }
+
+
+def otel_state(conn: sqlite3.Connection, since: datetime) -> dict:
+    """Срез телеметрии для обзора: работает ли она и что видит (веха E)."""
+    last_at = conn.execute(
+        "SELECT MAX(last) FROM (SELECT MAX(ts) AS last FROM otel_metrics"
+        " UNION ALL SELECT MAX(ts) FROM otel_events)"
+    ).fetchone()[0]
+    return {
+        "active": last_at is not None,
+        "last_at": last_at,
+        "off_transcript": otel_usage(conn, since),
+        "permissions": otel_permissions(conn, since),
+    }
+
+
 def overview(conn: sqlite3.Connection, now: datetime | None = None) -> dict:
     """Сводка для главного экрана (ТЗ §5, «Обзор»)."""
     moment = now or datetime.now(UTC)
@@ -769,6 +984,7 @@ def overview(conn: sqlite3.Connection, now: datetime | None = None) -> dict:
         "series": burn_series(conn, moment),
         "stamps": data_stamps(conn, moment),
         "pending_sessions": pending_sessions(conn, moment),
+        "otel": otel_state(conn, day_start),
         "series_bucket_seconds": SERIES_BUCKET_SECONDS,
         "totals": dict(totals),
     }
