@@ -7,12 +7,14 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
 
 from . import __version__, autostart, config, paths, pricing
+from .analyzer import digest
 from .collector.indexer import ingest_tree
 from .db import connect
 from .metrics import (
@@ -51,6 +53,9 @@ def build_parser() -> argparse.ArgumentParser:
     reindex.add_argument(
         "--project", help="только транскрипты этого проекта (часть имени или пути)"
     )
+    digest_cmd = sub.add_parser("digest", help="выжимка периода для советчика (JSON)")
+    _add_filters(digest_cmd, period="24h")
+    digest_cmd.add_argument("--out", metavar="ФАЙЛ", help="записать в файл вместо вывода")
     events = sub.add_parser("events", help="незнакомые типы записей транскрипта")
     events.add_argument("--show", metavar="ТИП", help="показать сохранённые примеры записи")
     prices = sub.add_parser("prices", help="применить цены из конфига и пересчитать стоимость")
@@ -112,6 +117,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "reindex":
         return _reindex(args.full, args.project)
+
+    if args.command == "digest":
+        return _digest(args.project, args.period, args.out)
 
     if args.command == "events":
         return _events(args.show)
@@ -221,6 +229,21 @@ def _progress(done: int, total: int, path: Path) -> None:
     if not sys.stderr.isatty():
         return
     print(f"\r{done}/{total}  {path.name[:36]:<36}", end="", file=sys.stderr, flush=True)
+
+
+def _digest(project: str | None, period: str, out: str | None) -> int:
+    """Собрать дайджест периода — вход советчика (задача D1)."""
+    since = _since(period) or datetime.fromtimestamp(0, UTC)
+    with connect() as conn:
+        payload = digest.build(conn, since, config=config.load(), project=project)
+    text = json.dumps(payload, ensure_ascii=False, indent=2)
+    if out:
+        Path(out).write_text(text, encoding="utf-8")
+        size = payload["size"]
+        print(f"дайджест записан в {out}: ~{size['tokens_approx']} токенов из {size['limit']}")
+    else:
+        print(text)
+    return 0 if payload["size"]["within_limit"] else 1
 
 
 def _events(show: str | None) -> int:

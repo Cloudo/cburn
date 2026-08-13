@@ -408,16 +408,21 @@ def normalize_command(command: str | None) -> str | None:
     `git commit -m "..."` → `git commit`, `sed -n 1,50p f.py` → `sed`,
     `cd /x && npm run build` → `npm run`. Аргументы и пути отбрасываются:
     в БД оседает только имя команды (TZ §7).
+
+    Heredoc помечается отдельно (`python3 <<`): скрипт, который гоняют одним
+    и тем же куском по десять раз, — это заметный расход, а по имени команды
+    он неотличим от обычного вызова. Текст скрипта при этом не сохраняется.
     """
     if not command:
         return None
+    heredoc = " <<" if "<<" in command else ""
     segments = _command_segments(command)
     for segment in segments:
         name = _command_name(segment)
         if name is not None:
-            return name
+            return name + heredoc
     # Осталась только смена каталога — она и есть вся команда.
-    return "cd" if segments else None
+    return "cd" + heredoc if segments else None
 
 
 def _command_segments(command: str) -> list[str]:

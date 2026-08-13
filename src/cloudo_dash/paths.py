@@ -6,8 +6,11 @@ import os
 from pathlib import Path
 
 #: Каталог транскриптов Claude Code. Открывается ТОЛЬКО на чтение (TZ §2).
-_CLAUDE_DIR = Path(os.environ.get("CLAUDE_CONFIG_DIR", Path.home() / ".claude"))
-CLAUDE_PROJECTS_DIR = _CLAUDE_DIR / "projects"
+CLAUDE_DIR = Path(os.environ.get("CLAUDE_CONFIG_DIR", Path.home() / ".claude"))
+CLAUDE_PROJECTS_DIR = CLAUDE_DIR / "projects"
+
+#: Постоянные инструкции: едут в каждый запрос, поэтому их объём — метрика.
+CLAUDE_MD = CLAUDE_DIR / "CLAUDE.md"
 
 CONFIG_PATH = Path.home() / ".config" / "cloudo-dash" / "config.toml"
 DATA_DIR = Path.home() / ".local" / "share" / "cloudo-dash"
