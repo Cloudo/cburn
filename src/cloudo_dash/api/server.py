@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime, timedelta
@@ -34,6 +35,8 @@ from ..limits import LimitsWatcher
 from ..metrics import (
     advice_history,
     known_projects,
+    local_day_start,
+    otel_state,
     overview,
     period_start,
     refresh_liveness,
@@ -63,6 +66,11 @@ TICK_SECONDS = 1.0
 #: она меняется на каждой команде. Дорогой `claude agents --json` при этом
 #: кэшируется внутри `processes`, наружу каждый раз ходит только `ps`.
 LIVENESS_SECONDS = 5.0
+
+#: Насколько живёт готовый срез телеметрии. Экспортёр шлёт посылки раз в
+#: 5-10 секунд, чаще пересчитывать нечего, а стоит он на порядок дороже
+#: остального обзора (`tools/otel_bench.py`).
+OTEL_CACHE_SECONDS = 5.0
 
 #: Опрос живости: живые сессии и момент запуска их самого молодого потомка.
 #: None — спросить не удалось (см. `processes.live_state`).
@@ -169,10 +177,22 @@ def create_app(
 
     app = FastAPI(title="cloudo-dash", lifespan=lifespan)
 
+    #: Готовый срез телеметрии и время его расчёта: обзор уходит подписчикам
+    #: каждую секунду, а телеметрия за день считается по десяткам тысяч событий
+    #: и меняется не чаще, чем экспортёр шлёт посылки.
+    otel_cache: dict[str, Any] = {"at": 0.0, "value": None}
+
+    def collect_otel(conn: Any, moment: datetime) -> dict[str, Any]:
+        age = time.monotonic() - otel_cache["at"]
+        if otel_cache["value"] is None or age >= OTEL_CACHE_SECONDS:
+            otel_cache["value"] = otel_state(conn, local_day_start(moment))
+            otel_cache["at"] = time.monotonic()
+        return dict(otel_cache["value"])
+
     async def collect_overview() -> dict[str, Any]:
         conn = open_db()
         try:
-            payload = overview(conn)
+            payload = overview(conn, otel=collect_otel(conn, datetime.now(UTC)))
         finally:
             conn.close()
         # Запрос к Anthropic блокирующий и раз в пять минут — в поток.

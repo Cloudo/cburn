@@ -12,6 +12,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 import orjson
 import pytest
@@ -19,6 +20,7 @@ from fastapi.testclient import TestClient
 
 from cloudo_dash import config, metrics, paths
 from cloudo_dash.analyzer import digest
+from cloudo_dash.api import server
 from cloudo_dash.api.server import create_app
 from cloudo_dash.collector import otlp
 from cloudo_dash.db import connect
@@ -613,6 +615,21 @@ def test_overview_carries_telemetry(client: TestClient) -> None:
     otel = client.get("/api/overview").json()["otel"]
     assert otel["active"] is True
     assert otel["permissions"]["manual"] == 1
+
+
+def test_overview_reuses_the_telemetry_slice(client: TestClient) -> None:
+    """Обзор уходит подписчикам каждую секунду, а срез телеметрии считается по
+    десяткам тысяч событий — пересчитывать его на каждый тик незачем."""
+    client.post("/otlp/v1/logs", json=logs_payload(event("api_request", 1)))
+    first = client.get("/api/overview").json()["otel"]
+    assert first["active"] is True
+
+    # Новое событие в ту же секунду ещё не видно: срез свежий.
+    client.post("/otlp/v1/logs", json=logs_payload(event("api_error", 2, status_code="429")))
+    assert client.get("/api/overview").json()["otel"]["api"]["errors"] == 0
+
+    with mock.patch.object(server, "OTEL_CACHE_SECONDS", 0):
+        assert client.get("/api/overview").json()["otel"]["api"]["errors"] == 1
 
 
 def test_overview_without_telemetry_says_so(client: TestClient) -> None:

@@ -1044,8 +1044,15 @@ def otel_state(conn: sqlite3.Connection, since: datetime) -> dict:
     }
 
 
-def overview(conn: sqlite3.Connection, now: datetime | None = None) -> dict:
-    """Сводка для главного экрана (ТЗ §5, «Обзор»)."""
+def overview(
+    conn: sqlite3.Connection, now: datetime | None = None, *, otel: dict | None = None
+) -> dict:
+    """Сводка для главного экрана (ТЗ §5, «Обзор»).
+
+    Готовый срез телеметрии можно передать снаружи: он считается по десяткам
+    тысяч событий и стоит около 20 мс против 2 мс у всего остального обзора,
+    а обновляется не чаще, чем экспортёр шлёт посылки (`tools/otel_bench.py`).
+    """
     moment = now or datetime.now(UTC)
     day_start = local_day_start(moment)
     totals = conn.execute(
@@ -1071,7 +1078,7 @@ def overview(conn: sqlite3.Connection, now: datetime | None = None) -> dict:
         "series": burn_series(conn, moment),
         "stamps": data_stamps(conn, moment),
         "pending_sessions": pending_sessions(conn, moment),
-        "otel": otel_state(conn, day_start),
+        "otel": otel if otel is not None else otel_state(conn, day_start),
         "series_bucket_seconds": SERIES_BUCKET_SECONDS,
         "totals": dict(totals),
     }
