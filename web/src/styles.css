@@ -2514,3 +2514,48 @@ main.empty {
 .advice-session-project {
   color: var(--text-faint);
 }
+
+/* Группы советов по важности: сперва то, что горит. */
+.advice-group {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.screen .advice-group-head {
+  margin: 0;
+  padding: 8px 14px;
+  background: var(--bg-sunken);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.advice-group-crit {
+  color: var(--amber);
+}
+
+.advice-group-warn {
+  color: var(--steel);
+}
+
+.advice-group-info {
+  color: var(--text-faint);
+}
+
+.advice-item h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Откуда совет: разбор подписан на карточке, раз группируем не по разборам. */
+.advice-origin {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-faint);
+  font-family: var(--mono);
+  white-space: nowrap;
+}

@@ -70,36 +70,43 @@ export function Advice() {
       {error && <p className="hint">{t("app.noConnection")}</p>}
       {!runs.length && !error && <p className="hint">{t("advice.empty")}</p>}
 
-      {runs.map((run) => (
-        <Run key={run.id} run={run} onChange={reload} />
-      ))}
+      {/* Порядок — по важности, а не по разборам: сперва то, что горит.
+          Разбор, которому совет принадлежит, подписан на самой карточке. */}
+      {SEVERITY_ORDER.map((severity) => {
+        const group = flatten(runs).filter((item) => item.severity === severity);
+        if (!group.length) return null;
+        return (
+          <div key={severity} className="advice-group">
+            <h3 className={`advice-group-head advice-group-${severity}`}>
+              {t(`advice.group.${severity}`)} <span className="hint">{group.length}</span>
+            </h3>
+            {group.map((item) => (
+              <Item key={item.id} item={item} onChange={reload} />
+            ))}
+          </div>
+        );
+      })}
     </section>
   );
 }
 
-function Run({ run, onChange }: { run: AdviceRun; onChange: () => Promise<void> }) {
-  const { t } = useLang();
-  const items = [...run.items].sort(
-    (a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity),
-  );
-
-  return (
-    <div className="advice-run">
-      <div className="advice-run-head">
-        <span className="advice-when">{clockTime(run.ts)}</span>
-        <span className="advice-kind">{t(`advice.kind.${run.kind}`)}</span>
-        <span className="hint">{run.model}</span>
-        <span className="advice-cost">{usd(run.cost_usd)}</span>
-      </div>
-      {!items.length && <p className="hint">{t("advice.noneInRun")}</p>}
-      {items.map((item) => (
-        <Item key={item.id} item={item} onChange={onChange} />
-      ))}
-    </div>
+/** Все советы всех разборов одним списком: у каждого при себе его разбор.
+ *  Отклонённые опускаются вниз своей группы — решение уже принято. */
+function flatten(runs: AdviceRun[]): Array<AdviceItem & { run: AdviceRun }> {
+  const items = runs.flatMap((run) => run.items.map((item) => ({ ...item, run })));
+  const sunk = (item: AdviceItem) => (item.status === "rejected" ? 1 : 0);
+  return items.sort(
+    (a, b) => sunk(a) - sunk(b) || b.run.ts.localeCompare(a.run.ts) || a.id - b.id,
   );
 }
 
-function Item({ item, onChange }: { item: AdviceItem; onChange: () => Promise<void> }) {
+function Item({
+  item,
+  onChange,
+}: {
+  item: AdviceItem & { run: AdviceRun };
+  onChange: () => Promise<void>;
+}) {
   const { t } = useLang();
   const [busy, setBusy] = useState(false);
 
@@ -116,10 +123,10 @@ function Item({ item, onChange }: { item: AdviceItem; onChange: () => Promise<vo
   return (
     <article className={`advice-item advice-item-${item.status}`}>
       <div className="advice-item-head">
-        <span className={`advice-badge advice-badge-${item.severity}`}>
-          {t(`advice.severity.${item.severity}`)}
+        <h4>{item.title}</h4>
+        <span className="advice-origin">
+          {clockTime(item.run.ts)} · {t(`advice.kind.${item.run.kind}`)} · {usd(item.run.cost_usd)}
         </span>
-        <h3>{item.title}</h3>
       </div>
       {item.sessions.length > 0 && (
         <p className="advice-sessions">
