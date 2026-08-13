@@ -5,6 +5,7 @@ import { Idle, Models, PlanLimits, Tools } from "./Profile";
 import { Dashboard, type WidgetContent } from "./Dashboard";
 import { Session } from "./Session";
 import { Sessions } from "./Sessions";
+import { Settings } from "./Settings";
 import {
   agoLabel,
   clockTime,
@@ -98,6 +99,7 @@ function useScreen(): string {
 const SCREENS: Array<{ key: string; label: string }> = [
   { key: "", label: "обзор" },
   { key: "sessions", label: "сессии" },
+  { key: "settings", label: "настройки" },
 ];
 
 export default function App() {
@@ -143,7 +145,9 @@ export default function App() {
         </div>
       </header>
 
-      {screen.startsWith("session/") ? (
+      {screen === "settings" ? (
+        <Settings />
+      ) : screen.startsWith("session/") ? (
         <Session id={screen.slice("session/".length)} />
       ) : screen === "sessions" ? (
         <Sessions />

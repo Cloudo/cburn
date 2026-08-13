@@ -2117,3 +2117,159 @@ main.empty {
   white-space: nowrap;
   color: var(--text-faint);
 }
+
+/* --- экран настроек (задача C3) --- */
+
+.settings-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+  margin-top: 16px;
+}
+
+.settings-group {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 14px 14px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-group legend {
+  color: var(--text-faint);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  padding: 0 4px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.field-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.field input,
+.field select {
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 5px 8px;
+}
+
+.field input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  accent-color: var(--steel);
+}
+
+.field input:focus,
+.field select:focus,
+.prices input:focus {
+  outline: 1px solid var(--steel);
+}
+
+/* --- таблица цен --- */
+
+.prices {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.prices-head,
+.prices-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) repeat(5, minmax(70px, 1fr));
+  gap: 10px;
+  align-items: center;
+  padding: 6px 14px;
+  font-size: 12px;
+}
+
+.prices-head {
+  background: var(--bg-sunken);
+  color: var(--text-faint);
+}
+
+.prices-row {
+  border-top: 1px solid var(--line);
+}
+
+.prices-model {
+  font-family: var(--mono);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.prices-number {
+  text-align: right;
+}
+
+.prices input {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 3px 6px;
+  width: 100%;
+  text-align: right;
+}
+
+.prices input:hover {
+  border-color: var(--line);
+}
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 18px 0 0;
+}
+
+.settings-save {
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 16px;
+  cursor: pointer;
+}
+
+.settings-save:hover:not(:disabled) {
+  border-color: var(--steel);
+}
+
+.settings-save:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+
+.settings-note {
+  color: var(--mint);
+  font-size: 12px;
+}
+
+.settings-error {
+  color: var(--amber);
+  font-size: 12px;
+}

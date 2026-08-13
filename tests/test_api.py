@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from cloudo_dash import paths
 from cloudo_dash.api.server import create_app
 from cloudo_dash.collector.indexer import ingest_tree
 from cloudo_dash.db import connect
@@ -708,6 +709,66 @@ def test_session_details_carry_turns_and_marks(transcripts: Path, db_path: Path)
     assert [turn["message_id"] for turn in turns] == ["msg_1", "msg_2"]
     assert [bool(turn["is_idle"]) for turn in turns] == [False, True]
     assert [event["kind"] for event in data["events"]] == ["compact"]
+
+
+# --- экран «Настройки» (задача C3) -------------------------------------------
+
+
+def test_config_is_read_and_written(
+    transcripts: Path, db_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Настройки читаются, пишутся в файл и сразу применяют цены."""
+    config_path = tmp_path / "config.toml"
+    monkeypatch.setattr(paths, "CONFIG_PATH", config_path)
+    now = datetime.now(UTC)
+    seed(
+        transcripts, db_path, [assistant("msg_1", ts=now - timedelta(minutes=1), output=1_000_000)]
+    )
+
+    with client(db_path, transcripts) as api:
+        current = api.get("/api/config").json()["config"]
+        current["thresholds"]["context_warn"] = 90_000
+        current["prices"] = {
+            "claude-opus-5": {
+                "input": 5.0,
+                "output": 25.0,
+                "cache_write_5m": 6.25,
+                "cache_write_1h": 10.0,
+                "cache_read": 0.5,
+            }
+        }
+        saved = api.put("/api/config", json={"config": current})
+        again = api.get("/api/config").json()["config"]
+
+    assert saved.status_code == 200
+    assert again["thresholds"]["context_warn"] == 90_000
+    assert config_path.exists(), "конфиг должен лечь в файл, а не остаться в памяти"
+    conn = connect(db_path, apply_schema=False)
+    try:
+        cost = conn.execute("SELECT cost_usd FROM turns WHERE message_id = 'msg_1'").fetchone()[0]
+    finally:
+        conn.close()
+    assert cost > 0, "цены должны примениться сразу, без reindex"
+
+
+def test_config_rejects_broken_values(
+    transcripts: Path, db_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Негодные значения не доезжают до файла, а объясняются человеку."""
+    config_path = tmp_path / "config.toml"
+    monkeypatch.setattr(paths, "CONFIG_PATH", config_path)
+    seed(transcripts, db_path, [assistant("msg_1")])
+
+    with client(db_path, transcripts) as api:
+        current = api.get("/api/config").json()["config"]
+        current["thresholds"]["context_warn"] = 200_000  # жёлтая позже красной
+        current["telegram"]["daily_summary_at"] = "вечером"
+        response = api.put("/api/config", json={"config": current})
+
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert "жёлтая зона" in detail and "daily_summary_at" in detail
+    assert not config_path.exists()
 
 
 # --- метрики ТЗ §4 (задача B3) -----------------------------------------------

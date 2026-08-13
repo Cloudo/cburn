@@ -315,6 +315,60 @@ export function useSession(id: string): {
   return { data, error, reload };
 }
 
+export type ModelPrice = {
+  input: number;
+  output: number;
+  cache_write_5m: number;
+  cache_write_1h: number;
+  cache_read: number;
+};
+
+export type Config = {
+  watch: { include: string[]; exclude: string[] };
+  thresholds: {
+    context_warn: number;
+    context_crit: number;
+    idle_run: number;
+    burn_rate_warn_per_min: number;
+  };
+  analyzer: {
+    enabled: boolean;
+    interval_minutes: number;
+    model: string;
+    weekly_deep_model: string;
+    allow_snippets: boolean;
+  };
+  telegram: {
+    mode: string;
+    bridge_url: string;
+    bot_token: string;
+    chat_id: string;
+    daily_summary_at: string;
+  };
+  server: { port: number };
+  prices: Record<string, ModelPrice>;
+};
+
+/** Настройки как они лежат в файле (экран «Настройки», задача C3). */
+export async function loadConfig(): Promise<{ config: Config; path: string }> {
+  const response = await fetch("api/config");
+  if (!response.ok) throw new Error(`не удалось прочитать настройки: ${response.status}`);
+  return response.json();
+}
+
+/** Записать настройки. Ошибки проверки приходят текстом от бэкенда: он владеет
+ *  файлом, и повторять правила на фронте значит завести вторую их версию. */
+export async function saveConfig(config: Config): Promise<{ config: Config }> {
+  const response = await fetch("api/config", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ config }),
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(payload?.detail ?? `ошибка ${response.status}`);
+  return payload;
+}
+
 /** Обзор, который сам себя обновляет: первый кадр и пуши приходят по WebSocket. */
 export function useOverview(): OverviewFeed {
   const [data, setData] = useState<Overview | null>(null);

@@ -165,6 +165,34 @@ def create_app(
     async def api_overview() -> dict[str, Any]:
         return await collect_overview()
 
+    @app.get("/api/config")
+    async def api_config() -> dict[str, Any]:
+        """Настройки как они лежат в файле (экран «Настройки», задача C3)."""
+        return {"config": config.load(), "path": str(paths.CONFIG_PATH)}
+
+    @app.put("/api/config")
+    async def api_config_save(payload: dict[str, Any]) -> dict[str, Any]:
+        """Записать настройки. Цены применяются сразу: пересчёт стоит секунды."""
+        incoming = payload.get("config")
+        if not isinstance(incoming, dict):
+            raise HTTPException(status_code=400, detail="ждём объект config")
+        errors = config.validate(incoming)
+        if errors:
+            raise HTTPException(status_code=400, detail="; ".join(errors))
+        config.save(incoming)
+
+        def apply_prices() -> None:
+            # Соединение открывается здесь же: объект SQLite принадлежит потоку,
+            # в котором создан, а пересчёт уходит в отдельный.
+            conn = connect(db_path, apply_schema=False)
+            try:
+                pricing.recalculate(conn, incoming)
+            finally:
+                conn.close()
+
+        await asyncio.to_thread(apply_prices)
+        return {"config": config.load()}
+
     @app.post("/api/plan/refresh")
     async def api_plan_refresh() -> dict[str, Any]:
         """Спросить лимиты немедленно: обычный такт — раз в пять минут."""
