@@ -36,6 +36,15 @@ const WINDOW_LABEL: Record<string, string> = {
   "5m": "5 минут",
   "60m": "час",
 };
+//: Подписи для шапки виджета: там переключатель стоит рядом с часами, и
+//: «10 секунд» вытеснило бы саму метку времени.
+const WINDOW_SHORT: Record<string, string> = {
+  "10s": "10 с",
+  "1m": "мин",
+  "5m": "5 мин",
+  "60m": "час",
+};
+
 const WINDOW_CAPTION: Record<string, string> = {
   "10s": "за последние 10 секунд",
   "1m": "за последнюю минуту",
@@ -93,6 +102,7 @@ const SCREENS: Array<{ key: string; label: string }> = [
 export default function App() {
   const { data, connection, updatedAt, refresh } = useOverview();
   const [, tick] = useState(0);
+  const [burnWindow, setBurnWindow] = useState<string>("1m");
   const screen = useScreen();
 
   useEffect(() => {
@@ -135,7 +145,7 @@ export default function App() {
       {screen === "sessions" ? (
         <Sessions />
       ) : data ? (
-        <Dashboard widgets={buildWidgets(data, refresh)} />
+        <Dashboard widgets={buildWidgets(data, refresh, burnWindow, setBurnWindow)} />
       ) : (
         <p className="empty-note">
           {connection === "offline" ? "нет связи с cdash serve" : "подключаюсь…"}
@@ -166,7 +176,12 @@ const PLAN_STALE_SECONDS = 600;
  * секунду, но события в нём появляются, только когда что-то происходит. Дневные
  * виджеты стоят на последнем ходе с полуночи, лента — на последнем ходе вообще,
  * лимиты подписки — на ответе Anthropic. */
-function buildWidgets(data: Overview, refresh: () => Promise<void>): WidgetContent[] {
+function buildWidgets(
+  data: Overview,
+  refresh: () => Promise<void>,
+  burnWindow: string,
+  setBurnWindow: (key: string) => void,
+): WidgetContent[] {
   const checkedAt = timestamp(data.now) ?? Date.now();
   const stamps = data.stamps ?? NO_STAMPS;
   const lastTurn = timestamp(stamps.last_turn);
@@ -181,7 +196,8 @@ function buildWidgets(data: Overview, refresh: () => Promise<void>): WidgetConte
     {
       id: "gauge",
       title: "прибор",
-      body: <GaugeWidget data={data} />,
+      body: <GaugeWidget data={data} window={burnWindow} />,
+      tools: <WindowPicker value={burnWindow} onChange={setBurnWindow} />,
       at: lastTurn,
       checkedAt,
       refresh,
@@ -254,9 +270,28 @@ function buildWidgets(data: Overview, refresh: () => Promise<void>): WidgetConte
   ];
 }
 
-function GaugeWidget({ data }: { data: Overview }) {
-  const [window, setWindow] = useState<string>("1m");
+/** Окно усреднения — в шапке виджета, в одной гамме с часами: меняют его
+ *  редко, а места в теле прибора он занимал целую строку. */
+function WindowPicker({ value, onChange }: { value: string; onChange: (key: string) => void }) {
+  return (
+    <div className="window-picker" role="tablist" aria-label="окно усреднения">
+      {WINDOWS.map((key) => (
+        <button
+          key={key}
+          role="tab"
+          aria-selected={key === value}
+          title={WINDOW_LABEL[key]}
+          className={key === value ? "window window-on" : "window"}
+          onClick={() => onChange(key)}
+        >
+          {WINDOW_SHORT[key]}
+        </button>
+      ))}
+    </div>
+  );
+}
 
+function GaugeWidget({ data, window }: { data: Overview; window: string }) {
   const burn = data.burn[window];
   // Разбивка всегда за то же окно, что и стрелка: два разных периода рядом
   // читались как одно целое и путали.
@@ -266,20 +301,6 @@ function GaugeWidget({ data }: { data: Overview }) {
 
   return (
     <>
-      <div className="windows" role="tablist" aria-label="окно усреднения">
-        {WINDOWS.map((key) => (
-          <button
-            key={key}
-            role="tab"
-            aria-selected={key === window}
-            className={key === window ? "window window-on" : "window"}
-            onClick={() => setWindow(key)}
-          >
-            {WINDOW_LABEL[key]}
-          </button>
-        ))}
-      </div>
-
       {/* Разбивка — сбоку от прибора: по бокам полукруга остаётся пустое поле,
           а список из четырёх строк как раз в него укладывается. */}
       <div className="gauge-row">

@@ -29,6 +29,8 @@ export type WidgetContent = {
   staleAfter?: number;
   /** Обновить именно эти данные, не дожидаясь такта. */
   refresh: () => Promise<void>;
+  /** Собственные переключатели виджета — в шапке, слева от метки времени. */
+  tools?: React.ReactNode;
 };
 
 /** Ширина сетки в пикселях: react-grid-layout не умеет считать её сам. */
@@ -165,6 +167,7 @@ function WidgetHead({ widget, onHide }: { widget: WidgetContent; onHide: () => v
     <header className="widget-grip">
       <h2>{widget.title}</h2>
       <div className="widget-tools">
+        {widget.tools}
         {widget.at === null ? (
           <span
             className="widget-at widget-at-none"

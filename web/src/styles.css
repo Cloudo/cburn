@@ -161,41 +161,41 @@ main.empty {
 
 /* --- переключатель окна --- */
 
-/* Окно усреднения выбирают редко, а выбранное и так названо под числом
-   («за последнюю минуту»), поэтому переключатель приглушён и проявляется
-   только при наведении. Место он занимает всегда: иначе прибор прыгал бы. */
-.windows {
+/* Окно усреднения стоит в шапке рядом с часами и живёт в их же гамме:
+   тот же моноширинный кегль и тот же приглушённый цвет. */
+.window-picker {
   display: flex;
-  gap: 2px;
-  width: fit-content;
-  margin: 0 auto;
-  opacity: 0.3;
-  transition: opacity 0.15s;
-}
-
-.widget:hover .windows,
-.windows:focus-within {
-  opacity: 1;
+  gap: 1px;
+  margin-right: 6px;
 }
 
 .window {
   border: 0;
   background: transparent;
   color: var(--text-faint);
-  font-family: var(--sans);
-  font-size: 11px;
-  padding: 2px 9px;
-  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0;
+  padding: 2px 5px;
+  border-radius: 4px;
   cursor: pointer;
-  transition: color 0.15s, background 0.15s;
+  opacity: 0.6;
+  white-space: nowrap;
+  transition: opacity 0.15s, color 0.15s, background 0.15s;
+}
+
+.widget:hover .window {
+  opacity: 1;
 }
 
 .window:hover {
   color: var(--text);
+  background: var(--bg-sunken);
 }
 
 .window-on {
-  color: var(--amber);
+  color: var(--text);
+  opacity: 1;
 }
 
 .window:focus-visible {
