@@ -245,6 +245,76 @@ export function useSessions(filters: { project: string; status: string; period: 
   return { data, error, reload };
 }
 
+export type SessionTurn = {
+  message_id: string;
+  ts: string;
+  model: string | null;
+  output_tokens: number;
+  input_tokens: number;
+  cache_read: number;
+  cache_write: number;
+  context_estimate: number;
+  cost_usd: number;
+  is_sidechain: number;
+  is_idle: number;
+  tools: string | null;
+};
+
+export type SessionEvent = { ts: string; kind: "compact" | "fork"; session_id?: string };
+
+export type SessionDetails = {
+  session: {
+    session_id: string;
+    project: string | null;
+    root_path: string | null;
+    title: string | null;
+    first_prompt: string | null;
+    started_at: string | null;
+    last_at: string | null;
+    turns: number;
+    sidechain_turns: number;
+    sidechain_cost_usd: number;
+    output_tokens: number;
+    cache_read: number;
+    cache_write: number;
+    cost_usd: number;
+    last_context: number;
+    parent_session_id: string | null;
+  };
+  models: Array<{ model: string; turns: number; output_tokens: number }>;
+  tools: Array<{ tool: string; calls: number }>;
+  chain: { sessions: string[]; turns: number; tokens: number; cost_usd: number };
+  turns: SessionTurn[];
+  events: SessionEvent[];
+};
+
+/** Одна сессия целиком: суммы, ходы и вехи (экран «Сессия», задача C2). */
+export function useSession(id: string): {
+  data: SessionDetails | null;
+  error: boolean;
+  reload: () => Promise<void>;
+} {
+  const [data, setData] = useState<SessionDetails | null>(null);
+  const [error, setError] = useState(false);
+
+  const reload = useCallback(async () => {
+    try {
+      const response = await fetch(`api/sessions/${encodeURIComponent(id)}`);
+      if (!response.ok) throw new Error(String(response.status));
+      setData(await response.json());
+      setError(false);
+    } catch {
+      setError(true);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  return { data, error, reload };
+}
+
 /** Обзор, который сам себя обновляет: первый кадр и пуши приходят по WebSocket. */
 export function useOverview(): OverviewFeed {
   const [data, setData] = useState<Overview | null>(null);

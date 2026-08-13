@@ -177,6 +177,63 @@ def known_projects(conn: sqlite3.Connection) -> list[dict]:
     ]
 
 
+def session_turns(conn: sqlite3.Connection, session_id: str, limit: int = 500) -> list[dict]:
+    """Ходы сессии по порядку — для графика контекста и ленты (задача C2).
+
+    Холостой ход считается тем же порогом, что и в сводке (ТЗ §6): короткий
+    ответ при большом контексте. Флаг вычисляется в запросе, а не хранится,
+    чтобы правка порога не требовала переиндексации.
+    """
+    return [
+        dict(row)
+        for row in conn.execute(
+            """
+            SELECT t.message_id, t.ts, t.model, t.output_tokens, t.input_tokens,
+                   t.cache_read, t.cache_write_5m + t.cache_write_1h AS cache_write,
+                   t.context_estimate, t.cost_usd, t.is_sidechain,
+                   (t.output_tokens < :max_output
+                    AND t.context_estimate > :min_context) AS is_idle,
+                   (SELECT GROUP_CONCAT(c.tool, ' ') FROM tool_calls AS c
+                     WHERE c.turn_id = t.id) AS tools
+              FROM turns AS t
+             WHERE t.session_id = :session
+             ORDER BY t.ts, t.id
+             LIMIT :limit
+            """,
+            {
+                "session": session_id,
+                "limit": limit,
+                "max_output": IDLE_MAX_OUTPUT,
+                "min_context": IDLE_MIN_CONTEXT,
+            },
+        )
+    ]
+
+
+def session_events(conn: sqlite3.Connection, session_id: str) -> list[dict]:
+    """Заметные моменты сессии: автосуммаризации и точки ветвления resume.
+
+    Форк — это не запись в транскрипте, а связь между сессиями, поэтому он
+    собирается из `parent_session_id`, а не из `session_events`.
+    """
+    marks = [
+        dict(row)
+        for row in conn.execute(
+            "SELECT ts, kind FROM session_events WHERE session_id = ? ORDER BY ts",
+            (session_id,),
+        )
+    ]
+    marks += [
+        {"ts": row["started_at"], "kind": "fork", "session_id": row["id"]}
+        for row in conn.execute(
+            "SELECT id, started_at FROM sessions WHERE parent_session_id = ? ORDER BY started_at",
+            (session_id,),
+        )
+        if row["started_at"]
+    ]
+    return sorted(marks, key=lambda mark: mark["ts"] or "")
+
+
 #: Сколько точек в спарклайне расхода сессии: столбик шире пары пикселей на
 #: экране всё равно не разглядеть, а данных на каждую точку нужно тем меньше,
 #: чем их больше.

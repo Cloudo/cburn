@@ -112,6 +112,18 @@ CREATE TABLE IF NOT EXISTS model_prices (
     cache_read_per_mtok  REAL NOT NULL DEFAULT 0
 );
 
+-- Заметные моменты внутри сессии: автосуммаризация (после неё контекст
+-- обваливается), в будущем — прочие вехи. Нужны, чтобы на графике контекста
+-- было видно, почему он упал (TZ §5, задача C2).
+CREATE TABLE IF NOT EXISTS session_events (
+    id         INTEGER PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES sessions(id),
+    ts         TEXT NOT NULL,
+    kind       TEXT NOT NULL,  -- compact
+    UNIQUE (session_id, ts, kind)
+);
+CREATE INDEX IF NOT EXISTS idx_session_events ON session_events(session_id, ts);
+
 -- Незнакомые типы записей транскрипта: парсер не падает, кладёт сырьё сюда (TZ §2).
 CREATE TABLE IF NOT EXISTS raw_events (
     id      INTEGER PRIMARY KEY,

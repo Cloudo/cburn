@@ -95,6 +95,7 @@ def ingest_file(conn: sqlite3.Connection, path: Path) -> IngestStats:
     turns: dict[str, _Turn] = {}
     sessions: dict[str, _Session] = {}
     unknown: list[tuple[int, ParsedRecord, str]] = []
+    events: list[tuple[str, str, str]] = []
     for line_no, raw in enumerate(chunk, start=1):
         stats.lines += 1
         record = parse_line(raw)
@@ -102,6 +103,10 @@ def ingest_file(conn: sqlite3.Connection, path: Path) -> IngestStats:
             continue
         if record.kind is RecordKind.UNKNOWN:
             unknown.append((line_no, record, raw))
+        # Автосуммаризация: после неё контекст обваливается, и на графике
+        # должно быть видно, почему (задача C2).
+        if record.is_compact_summary and record.session_id and record.ts:
+            events.append((record.session_id, record.ts, "compact"))
         _collect(record, turns, sessions, stats)
 
     with conn:  # одна транзакция на файл: либо файл учтён, либо offset не сдвинут
@@ -109,6 +114,7 @@ def ingest_file(conn: sqlite3.Connection, path: Path) -> IngestStats:
         _upsert_sessions(conn, sessions, project_id)
         _insert_turns(conn, turns, stats)
         _store_unknown(conn, path, unknown)
+        _store_events(conn, events)
         _link_parents(conn, turns)
         apply_costs(conn, turns.keys())
         _refresh_session_totals(conn, sessions.keys())
@@ -481,6 +487,16 @@ def _store_unknown(
 #: По сколько message_id спрашивать за раз: в файле их бывают тысячи, а число
 #: параметров в запросе SQLite ограничено.
 _CHUNK = 500
+
+
+def _store_events(conn: sqlite3.Connection, events: list[tuple[str, str, str]]) -> None:
+    """Заметные моменты сессии. Повтор чтения хвоста их не задваивает: UNIQUE."""
+    if not events:
+        return
+    conn.executemany(
+        "INSERT OR IGNORE INTO session_events (session_id, ts, kind) VALUES (?, ?, ?)",
+        events,
+    )
 
 
 def _link_parents(conn: sqlite3.Connection, turns: dict[str, _Turn]) -> None:

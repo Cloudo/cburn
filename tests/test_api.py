@@ -675,6 +675,41 @@ def test_sessions_page_marks_resume_chain(transcripts: Path, db_path: Path) -> N
     assert rows["исток"]["children"] == 1
 
 
+def test_session_details_carry_turns_and_marks(transcripts: Path, db_path: Path) -> None:
+    """Экран «Сессия»: ходы по порядку, холостые помечены, вехи собраны (C2)."""
+    now = datetime.now(UTC)
+    compacted = json.dumps(
+        {
+            "type": "user",
+            "uuid": "compact-1",
+            "sessionId": "s1",
+            "timestamp": (now - timedelta(minutes=8)).isoformat().replace("+00:00", "Z"),
+            "isCompactSummary": True,
+            "message": {"role": "user", "content": "пересказ разговора"},
+        }
+    )
+    seed(
+        transcripts,
+        db_path,
+        [
+            # Обычный ход и холостой: короткий ответ при большом контексте.
+            assistant("msg_1", ts=now - timedelta(minutes=10), output=500, cache_read=60_000),
+            compacted,
+            assistant(
+                "msg_2", uuid="u2", ts=now - timedelta(minutes=5), output=5, cache_read=60_000
+            ),
+        ],
+    )
+
+    with client(db_path, transcripts) as api:
+        data = api.get("/api/sessions/s1").json()
+
+    turns = data["turns"]
+    assert [turn["message_id"] for turn in turns] == ["msg_1", "msg_2"]
+    assert [bool(turn["is_idle"]) for turn in turns] == [False, True]
+    assert [event["kind"] for event in data["events"]] == ["compact"]
+
+
 # --- метрики ТЗ §4 (задача B3) -----------------------------------------------
 
 

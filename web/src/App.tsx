@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Gauge, OutputMeter, Recorder, type Slice } from "./Gauge";
 import { Idle, Models, PlanLimits, Tools } from "./Profile";
 import { Dashboard, type WidgetContent } from "./Dashboard";
+import { Session } from "./Session";
 import { Sessions } from "./Sessions";
 import {
   agoLabel,
@@ -142,7 +143,9 @@ export default function App() {
         </div>
       </header>
 
-      {screen === "sessions" ? (
+      {screen.startsWith("session/") ? (
+        <Session id={screen.slice("session/".length)} />
+      ) : screen === "sessions" ? (
         <Sessions />
       ) : data ? (
         <Dashboard widgets={buildWidgets(data, refresh, burnWindow, setBurnWindow)} />

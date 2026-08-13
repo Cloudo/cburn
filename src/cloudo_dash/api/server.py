@@ -35,9 +35,11 @@ from ..metrics import (
     period_start,
     refresh_liveness,
     session_chain,
+    session_events,
     session_models,
     session_summary,
     session_tools,
+    session_turns,
     sessions_page,
     set_hidden,
 )
@@ -210,6 +212,9 @@ def create_app(
                 ],
                 # Линия работы: resume рассыпает одну работу по нескольким сессиям.
                 "chain": session_chain(conn, session_id),
+                # Экран «Сессия» (задача C2): график контекста и лента ходов.
+                "turns": session_turns(conn, session_id),
+                "events": session_events(conn, session_id),
             }
         finally:
             conn.close()

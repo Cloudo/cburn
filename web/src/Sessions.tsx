@@ -181,9 +181,13 @@ function SessionLine({
           </button>
         )}
         <span className={`sessions-dot sessions-dot-${row.status}`} title={STATUS_LABEL[row.status]} />
-        <span className="sessions-title" title={row.first_prompt ?? undefined}>
+        <a
+          className="sessions-title"
+          href={`#/session/${row.id}`}
+          title={row.first_prompt ?? undefined}
+        >
           {row.title ?? row.id.slice(0, 8)}
-        </span>
+        </a>
       </span>
       <span className="sessions-project" title={row.root_path ?? undefined}>
         {row.project ?? "—"}
