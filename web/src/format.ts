@@ -100,9 +100,23 @@ export function duration(fromIso: string | null, toIso: string | null): string {
   return rest ? `${h} ${rest} ${word("мин", "m")}` : h;
 }
 
-/** Сколько времени заняла работа: «8 с», «3 мин», «1 ч 5 мин». */
+/** Доля в процентах с десятыми: «1,7», «12,0». Знак процента ставит перевод. */
+export function share(value: number): string {
+  return (value * 100).toLocaleString(locale, {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+}
+
+/** Сколько времени заняла работа: «8,4 с», «3 мин», «1 ч 5 мин». */
 export function spent(seconds: number): string {
-  if (seconds < 60) return `${seconds < 10 ? seconds.toFixed(1) : Math.round(seconds)} ${word("с", "s")}`;
+  if (seconds < 60) {
+    const value =
+      seconds < 10
+        ? seconds.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+        : String(Math.round(seconds));
+    return `${value} ${word("с", "s")}`;
+  }
   const minutes = Math.round(seconds / 60);
   if (minutes < 60) return `${minutes} ${word("мин", "m")}`;
   const hours = Math.floor(minutes / 60);

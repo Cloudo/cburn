@@ -115,7 +115,7 @@ export function Session({ id }: { id: string }) {
                 <span className="bars-value">
                   {tool.calls}
                   {seconds.get(tool.tool) !== undefined && (
-                    <span className="bars-extra">{spent(seconds.get(tool.tool)!)}</span>
+                    <span className="bars-extra">({spent(seconds.get(tool.tool)!)})</span>
                   )}
                 </span>
               </li>
