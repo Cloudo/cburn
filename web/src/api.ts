@@ -378,6 +378,8 @@ export type AdviceItem = {
   action: string | null;
   evidence: string;
   status: "new" | "accepted" | "rejected";
+  /** Сессии, на которые совет ссылается: разворачиваются из коротких id. */
+  sessions: Array<{ id: string; title: string | null; project: string | null }>;
 };
 
 export type AdviceRun = {

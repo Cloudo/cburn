@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -266,7 +267,53 @@ def advice_history(conn: sqlite3.Connection, limit: int = 20) -> list[dict]:
         items[row["advice_id"]].append(dict(row))
     for run in runs:
         run["items"] = items[run["id"]]
+        _attach_mentioned_sessions(conn, run["items"])
     return runs
+
+
+#: Как советчик ссылается на сессию: коротким идентификатором из дайджеста.
+#: Полный uuid он не видит — в дайджест уходит тот же короткий вид.
+_SESSION_MENTION = re.compile(r"\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b|\b[0-9a-f]{8}\b")
+
+
+def _attach_mentioned_sessions(conn: sqlite3.Connection, items: list[dict]) -> None:
+    """Развернуть упомянутые в совете идентификаторы в имя сессии и проект.
+
+    Название сессии в дайджест не уходит — это пересказ переписки (ТЗ §7).
+    Но на экране оно нужно: «b2ae5a8a» человеку ничего не говорит. Поэтому
+    разворачиваем здесь, при показе, и название с машины никуда не уезжает.
+    """
+    prefixes = {
+        mention[:8]
+        for item in items
+        for field in ("title", "detail", "action", "evidence")
+        for mention in _SESSION_MENTION.findall(item.get(field) or "")
+    }
+    if not prefixes:
+        for item in items:
+            item["sessions"] = []
+        return
+    known = {
+        row["short"]: dict(row)
+        for row in conn.execute(
+            f"""
+            SELECT substr(s.id, 1, 8) AS short, s.id, s.title,
+                   COALESCE(p.display_name, p.slug) AS project
+              FROM sessions AS s
+              LEFT JOIN projects AS p ON p.id = s.project_id
+             WHERE substr(s.id, 1, 8) IN ({",".join("?" * len(prefixes))})
+            """,  # noqa: S608
+            tuple(prefixes),
+        )
+    }
+    for item in items:
+        seen: dict[str, dict] = {}
+        for field in ("title", "detail", "action", "evidence"):
+            for mention in _SESSION_MENTION.findall(item.get(field) or ""):
+                session = known.get(mention[:8])
+                if session is not None:
+                    seen[session["id"]] = session
+        item["sessions"] = list(seen.values())
 
 
 def set_advice_status(conn: sqlite3.Connection, item_id: int, status: str) -> bool:

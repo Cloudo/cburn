@@ -2484,3 +2484,33 @@ main.empty {
   color: var(--text);
   border-color: var(--steel);
 }
+
+/* Сессии, на которые ссылается совет: короткий id человеку ничего не говорит,
+   поэтому разворачиваем в имя и проект — и делаем ссылкой на экран сессии. */
+.advice-sessions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+}
+
+.advice-session {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 2px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--text);
+  text-decoration: none;
+  max-width: 100%;
+}
+
+.advice-session:hover {
+  border-color: var(--steel);
+}
+
+.advice-session-project {
+  color: var(--text-faint);
+}

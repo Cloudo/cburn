@@ -865,6 +865,47 @@ def test_advice_history_is_served(transcripts: Path, db_path: Path) -> None:
     assert {item["status"] for item in runs[0]["items"]} == {"new"}
 
 
+def test_advice_mentions_are_expanded(transcripts: Path, db_path: Path) -> None:
+    """Короткий id в совете разворачивается в имя сессии и проект (для экрана)."""
+    now = datetime.now(UTC)
+    seed(
+        transcripts,
+        db_path,
+        [
+            assistant("msg_1", session="b2ae5a8a-1111-2222-3333-444455556666", ts=now),
+            json.dumps(
+                {
+                    "type": "ai-title",
+                    "sessionId": "b2ae5a8a-1111-2222-3333-444455556666",
+                    "aiTitle": "разбор структуры проекта",
+                }
+            ),
+        ],
+    )
+    conn = connect(db_path)
+    with conn:
+        cursor = conn.execute(
+            "INSERT INTO advice (ts, kind, digest_json, model, cost_usd) VALUES (?, 'manual',"
+            " '{}', 'haiku', 0.07)",
+            (now.isoformat(),),
+        )
+        conn.execute(
+            """
+            INSERT INTO advice_items (advice_id, key, title, severity, detail, action, evidence)
+            VALUES (?, 'k1', 'Закрыть сессию', 'crit', '', '', 'sessions[0]: b2ae5a8a, turns 7568')
+            """,
+            (cursor.lastrowid,),
+        )
+    conn.close()
+
+    with client(db_path, transcripts) as api:
+        item = api.get("/api/advice").json()["runs"][0]["items"][0]
+
+    assert [s["title"] for s in item["sessions"]] == ["разбор структуры проекта"]
+    assert item["sessions"][0]["project"] == "project"
+    assert item["sessions"][0]["id"].startswith("b2ae5a8a"), "ссылка ведёт на полный id"
+
+
 def test_advice_status_is_saved(transcripts: Path, db_path: Path) -> None:
     """Отклонённый совет остаётся отклонённым — на этом держится «не повторять»."""
     conn = connect(db_path)

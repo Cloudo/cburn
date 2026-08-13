@@ -121,6 +121,16 @@ function Item({ item, onChange }: { item: AdviceItem; onChange: () => Promise<vo
         </span>
         <h3>{item.title}</h3>
       </div>
+      {item.sessions.length > 0 && (
+        <p className="advice-sessions">
+          {item.sessions.map((session) => (
+            <a key={session.id} className="advice-session" href={`#/session/${session.id}`}>
+              {session.title ?? session.id.slice(0, 8)}
+              <span className="advice-session-project">{session.project ?? "—"}</span>
+            </a>
+          ))}
+        </p>
+      )}
       {item.detail && <p className="advice-detail">{item.detail}</p>}
       {item.action && (
         <p className="advice-action">
