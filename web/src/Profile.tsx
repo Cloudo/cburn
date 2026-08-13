@@ -1,8 +1,8 @@
 // «На что уходят ходы»: метрики ТЗ §4 — профиль инструментов, доля моделей,
 // холостые ходы и оценка окна лимитов подписки.
 
-import { compact, grouped, modelLabel, toolLabel } from "./format";
-import type { IdleTurns, Limits, ModelShare, ToolProfile } from "./api";
+import { agoLabel, compact, grouped, modelLabel, toolLabel } from "./format";
+import type { IdleTurns, Limits, ModelShare, Plan, ToolProfile } from "./api";
 
 /** Список с полосками доли — одна форма для инструментов и bash-команд. */
 function Ranked({ rows, total }: { rows: Array<{ name: string; calls: number }>; total: number }) {
@@ -121,4 +121,75 @@ export function LimitWindow({ limits, now }: { limits: Limits; now: string }) {
       </p>
     </div>
   );
+}
+
+const PLAN_LABELS: Record<string, string> = { max: "Max", pro: "Pro", team: "Team" };
+
+/** Лимиты подписки — те же проценты, что показывает `/usage` в Claude Code. */
+export function PlanLimits({ plan }: { plan: Plan }) {
+  if (plan.limits.length === 0) {
+    return (
+      <p className="hint">
+        {plan.source === "none"
+          ? "лимиты недоступны: нет токена Claude Code в связке ключей"
+          : "лимиты пока не получены"}
+      </p>
+    );
+  }
+
+  const stale = plan.source === "cache";
+  const age = plan.fetched_at ? (Date.now() - plan.fetched_at * 1000) / 1000 : null;
+
+  return (
+    <div className="plan">
+      {plan.plan && (
+        <p className="plan-name">
+          {PLAN_LABELS[plan.plan] ?? plan.plan}
+          {plan.tier?.includes("5x") && " (5x)"}
+        </p>
+      )}
+
+      <ul className="plan-limits">
+        {plan.limits.map((limit) => (
+          <li key={limit.kind + limit.label} className={limit.is_active ? "plan-active" : ""}>
+            <div className="plan-head">
+              <span className="plan-label">{limit.label}</span>
+              <span className={`plan-percent plan-${limit.severity ?? "normal"}`}>
+                {Math.round(limit.percent)}%
+              </span>
+            </div>
+            <div className="plan-track">
+              <span
+                className={`plan-fill plan-fill-${limit.severity ?? "normal"}`}
+                style={{ width: `${Math.min(limit.percent, 100)}%` }}
+              />
+            </div>
+            {limit.resets_at && (
+              <p className="plan-reset">сброс {resetLabel(limit.resets_at)}</p>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      <p className="hint">
+        {stale ? "из кэша Claude Code" : "с сервера Anthropic"}
+        {age !== null && `, ${agoLabel(age)}`}
+      </p>
+    </div>
+  );
+}
+
+/** «через 2 ч 10 мин» — как в самом Claude Code, а не голая дата. */
+function resetLabel(iso: string): string {
+  const left = (new Date(iso).getTime() - Date.now()) / 1000;
+  if (left <= 0) return "вот-вот";
+  const hours = Math.floor(left / 3600);
+  const minutes = Math.round((left % 3600) / 60);
+  const when = new Date(iso).toLocaleString("ru-RU", {
+    weekday: hours >= 24 ? "short" : undefined,
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const inText = hours > 0 ? `через ${hours} ч ${minutes} мин` : `через ${minutes} мин`;
+  return hours >= 24 ? when : `${when} · ${inText}`;
 }

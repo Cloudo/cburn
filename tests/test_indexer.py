@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from cloudo_dash import paths as indexer_paths
 from cloudo_dash.collector.indexer import ingest_file, ingest_tree
 from cloudo_dash.db import connect
 
@@ -464,6 +465,28 @@ def test_ingest_tree_walks_all_files(conn: sqlite3.Connection, tmp_path: Path) -
     assert conn.execute("SELECT COUNT(*) FROM turns").fetchone()[0] == 2
 
 
+def test_subagent_transcript_keeps_parent_project(
+    conn: sqlite3.Connection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Сабагенты лежат в `<проект>/<сессия>/subagents/` — проект берётся родительский."""
+    monkeypatch.setattr(indexer_paths, "CLAUDE_PROJECTS_DIR", tmp_path)
+    project = tmp_path / "-Users-me-proj"
+    write_transcript(project / "s1.jsonl", [assistant("msg_1", session="s1")])
+    write_transcript(
+        project / "s1" / "subagents" / "agent-a1.jsonl",
+        [assistant("msg_2", session="s1", sidechain=True)],
+    )
+
+    ingest_tree(conn, tmp_path)
+
+    slugs = [row[0] for row in conn.execute("SELECT slug FROM projects")]
+    assert slugs == ["-Users-me-proj"]
+    row = conn.execute(
+        "SELECT p.slug FROM sessions s JOIN projects p ON p.id = s.project_id WHERE s.id = 's1'"
+    ).fetchone()
+    assert row["slug"] == "-Users-me-proj"
+
+
 # --- неполный usage в записях хода -------------------------------------------
 
 
@@ -562,6 +585,32 @@ def test_service_records_do_not_clear_pending(conn: sqlite3.Connection, tmp_path
     )
     ingest_file(conn, path)
     assert rows(conn, "SELECT last_record_kind FROM sessions")[0]["last_record_kind"] == "prompt"
+
+
+def test_service_records_keep_last_record_at(conn: sqlite3.Connection, tmp_path: Path) -> None:
+    """Батч из одной служебки не должен обнулять время последней настоящей записи."""
+    path = tmp_path / "proj" / "s1.jsonl"
+    write_transcript(path, [assistant("msg_1", ts="2026-08-13T11:00:00Z")])
+    ingest_file(conn, path)
+
+    with path.open("a") as fh:
+        fh.write(
+            json.dumps(
+                {
+                    "type": "attachment",
+                    "sessionId": "s1",
+                    "uuid": "a1",
+                    "timestamp": "2026-08-13T11:05:00Z",
+                }
+            )
+            + "\n"
+        )
+    ingest_file(conn, path)
+
+    session = rows(conn, "SELECT * FROM sessions")[0]
+    assert session["last_record_kind"] == "assistant"
+    assert session["last_record_at"] == "2026-08-13T11:00:00Z"
+    assert session["last_at"] == "2026-08-13T11:05:00Z"
 
 
 # --- название сессии ---------------------------------------------------------

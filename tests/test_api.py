@@ -93,8 +93,32 @@ def seed(transcripts: Path, db_path: Path, lines: list[str]) -> None:
     conn.close()
 
 
-def client(db_path: Path, transcripts: Path, *, watch: bool = False) -> TestClient:
-    app = create_app(db_path=db_path, projects_dir=transcripts.parent, watch=watch)
+class StubLimits:
+    """Лимиты в тестах не ходят ни в связку ключей, ни в сеть."""
+
+    def __init__(self, payload: dict | None = None) -> None:
+        self.payload = payload or {
+            "source": "none",
+            "fetched_at": None,
+            "plan": None,
+            "tier": None,
+            "limits": [],
+            "error": None,
+        }
+
+    def current(self, now: float | None = None) -> dict:
+        return self.payload
+
+
+def client(
+    db_path: Path, transcripts: Path, *, watch: bool = False, limits: object | None = None
+) -> TestClient:
+    app = create_app(
+        db_path=db_path,
+        projects_dir=transcripts.parent,
+        watch=watch,
+        limits=limits or StubLimits(),  # type: ignore[arg-type]
+    )
     return TestClient(app)
 
 
@@ -620,3 +644,30 @@ def test_limit_window_empty_when_no_turns(db_path: Path, transcripts: Path) -> N
         limits = api.get("/api/overview").json()["limits"]
     assert limits["started_at"] is None
     assert limits["usage"] is None
+
+
+# --- лимиты подписки ---------------------------------------------------------
+
+
+def test_plan_limits_reach_the_dashboard(transcripts: Path, db_path: Path) -> None:
+    """Проценты плана отдаются как есть — их считает Anthropic, не мы."""
+    payload = {
+        "source": "api",
+        "fetched_at": 1_786_635_000.0,
+        "plan": "max",
+        "tier": "default_claude_max_5x",
+        "limits": [
+            {
+                "kind": "session",
+                "label": "текущая сессия",
+                "percent": 48,
+                "resets_at": "2026-08-13T16:10:00Z",
+                "severity": "normal",
+                "is_active": True,
+            }
+        ],
+        "error": None,
+    }
+    seed(transcripts, db_path, [assistant("msg_1")])
+    with client(db_path, transcripts, limits=StubLimits(payload)) as api:
+        assert api.get("/api/overview").json()["plan"] == payload

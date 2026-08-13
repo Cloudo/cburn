@@ -478,7 +478,7 @@ main.empty {
 
 .leaders li {
   display: grid;
-  grid-template-columns: 76px minmax(0, 1fr) 84px;
+  grid-template-columns: minmax(0, 1fr) 84px;
   gap: 12px;
   align-items: center;
   font-family: var(--mono);
@@ -504,11 +504,11 @@ main.empty {
   opacity: 0.55;
 }
 
-.leaders-project {
+.leaders-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-faint);
+  color: var(--text);
 }
 
 .leaders-turns {
@@ -524,7 +524,7 @@ main.empty {
 
 @media (max-width: 860px) {
   .leaders li {
-    grid-template-columns: 70px minmax(0, 1fr) 76px;
+    grid-template-columns: minmax(0, 1fr) 76px;
   }
 }
 
@@ -1220,4 +1220,83 @@ main.empty {
   .profile {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* --- лимиты подписки --- */
+
+.plan-name {
+  margin: -4px 0 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.plan-limits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.plan-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 5px;
+}
+
+.plan-label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.plan-percent {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-warning {
+  color: var(--amber);
+}
+
+.plan-critical {
+  color: #d98080;
+}
+
+.plan-track {
+  height: 6px;
+  background: var(--bg-sunken);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.plan-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--steel);
+  transition: width 0.6s ease-out;
+}
+
+.plan-fill-warning {
+  background: var(--amber);
+}
+
+.plan-fill-critical {
+  background: #d98080;
+}
+
+/* Активное окно — то, что тикает прямо сейчас. */
+.plan-active .plan-label {
+  color: var(--text);
+}
+
+.plan-reset {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--text-faint);
 }

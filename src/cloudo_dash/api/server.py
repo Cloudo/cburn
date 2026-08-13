@@ -26,6 +26,7 @@ from .. import paths
 from ..collector.indexer import IngestStats
 from ..collector.watcher import TranscriptWatcher
 from ..db import connect
+from ..limits import LimitsWatcher
 from ..metrics import (
     overview,
     recent_sessions,
@@ -79,11 +80,21 @@ class Hub:
 
 
 def create_app(
-    *, db_path: Path | None = None, projects_dir: Path | None = None, watch: bool = True
+    *,
+    db_path: Path | None = None,
+    projects_dir: Path | None = None,
+    watch: bool = True,
+    limits: LimitsWatcher | None = None,
 ) -> FastAPI:
-    """Собрать приложение. `watch=False` — для тестов, где watcher не нужен."""
+    """Собрать приложение.
+
+    `watch=False` — для тестов, где watcher не нужен; `limits` подменяется там же,
+    чтобы тесты не ходили ни в связку ключей, ни в сеть.
+    """
     hub = Hub()
     events: asyncio.Queue[IngestStats] = asyncio.Queue()
+    # Лимиты живут отдельно от БД: они приходят от Anthropic, а не из транскриптов.
+    plan_limits = limits or LimitsWatcher()
 
     def open_db() -> Any:
         return connect(db_path, apply_schema=False)
@@ -104,9 +115,9 @@ def create_app(
 
             watcher = TranscriptWatcher(root, db_path=db_path, on_ingest=publish)
             watcher.start()
-            pump = asyncio.create_task(_pump(events, hub, open_db))
+            pump = asyncio.create_task(_pump(events, hub, collect_overview))
         # Тикер не зависит от watcher: окна burn rate скользят и без новых ходов.
-        ticker = asyncio.create_task(_ticker(hub, open_db))
+        ticker = asyncio.create_task(_ticker(hub, collect_overview))
         try:
             yield
         finally:
@@ -120,13 +131,19 @@ def create_app(
 
     app = FastAPI(title="cloudo-dash", lifespan=lifespan)
 
-    @app.get("/api/overview")
-    async def api_overview() -> dict[str, Any]:
+    async def collect_overview() -> dict[str, Any]:
         conn = open_db()
         try:
-            return overview(conn)
+            payload = overview(conn)
         finally:
             conn.close()
+        # Запрос к Anthropic блокирующий и раз в пять минут — в поток.
+        payload["plan"] = await asyncio.to_thread(plan_limits.current)
+        return payload
+
+    @app.get("/api/overview")
+    async def api_overview() -> dict[str, Any]:
+        return await collect_overview()
 
     @app.get("/api/sessions")
     async def api_sessions(limit: int = 50) -> dict[str, Any]:
@@ -200,11 +217,7 @@ def create_app(
     @app.websocket("/ws")
     async def ws(socket: WebSocket) -> None:
         await hub.join(socket)
-        conn = open_db()
-        try:
-            await socket.send_json({"type": "overview", "data": overview(conn)})
-        finally:
-            conn.close()
+        await socket.send_json({"type": "overview", "data": await collect_overview()})
         try:
             while True:  # входящие сообщения не нужны, ждём разрыва
                 await socket.receive_text()
@@ -217,36 +230,33 @@ def create_app(
     return app
 
 
-async def _ticker(hub: Hub, open_db: Any) -> None:
+async def _ticker(hub: Hub, collect: Any) -> None:
     """Периодический обзор: показания прибора не должны застывать в паузах."""
     while True:
         await asyncio.sleep(TICK_SECONDS)
         if hub.size == 0:  # некому показывать — незачем и считать
             continue
-        payload = _collect(open_db)
+        payload = await _collect(collect)
         if payload is not None:
             await hub.broadcast({"type": "overview", "data": payload})
 
 
-def _collect(open_db: Any) -> dict[str, Any] | None:
-    conn = open_db()
+async def _collect(collect: Any) -> dict[str, Any] | None:
     try:
-        return overview(conn)
+        return await collect()
     except Exception:
         log.exception("не удалось собрать обзор")
         return None
-    finally:
-        conn.close()
 
 
-async def _pump(events: asyncio.Queue[IngestStats], hub: Hub, open_db: Any) -> None:
+async def _pump(events: asyncio.Queue[IngestStats], hub: Hub, collect: Any) -> None:
     """Событие от watcher → свежий обзор всем подписчикам."""
     while True:
         await events.get()
         # Пачку событий подряд схлопываем: обзор всё равно считается целиком.
         while not events.empty():
             events.get_nowait()
-        payload = _collect(open_db)
+        payload = await _collect(collect)
         if payload is not None:
             await hub.broadcast({"type": "overview", "data": payload})
 

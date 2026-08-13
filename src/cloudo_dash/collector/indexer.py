@@ -18,6 +18,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .. import paths
 from .parser import ParsedRecord, RecordKind, Usage, parse_line
 
 log = logging.getLogger(__name__)
@@ -246,10 +247,24 @@ def _touch_session(sessions: dict[str, _Session], record: ParsedRecord) -> None:
 # --- запись -----------------------------------------------------------------
 
 
+def _project_slug(path: Path) -> str:
+    """Slug проекта — каталог верхнего уровня в каталоге транскриптов.
+
+    Имя родительского каталога тут не годится: транскрипты сабагентов лежат
+    в `<проект>/<сессия>/subagents/`, и от них заводился псевдопроект
+    «subagents», куда уезжали и сами родительские сессии.
+    """
+    try:
+        parts = path.relative_to(paths.CLAUDE_PROJECTS_DIR).parts
+    except ValueError:
+        return path.parent.name  # файл вне каталога транскриптов (тесты, ручной прогон)
+    return parts[0] if len(parts) > 1 else ""
+
+
 def _upsert_project(
     conn: sqlite3.Connection, path: Path, sessions: dict[str, _Session]
 ) -> int | None:
-    slug = path.parent.name
+    slug = _project_slug(path)
     if not slug:
         return None
     root_path = next((s.cwd for s in sessions.values() if s.cwd), None)
@@ -276,15 +291,19 @@ def _upsert_sessions(
                 :last_record_kind, :last_record_at, :title, :title_source,
                 :last_prompt, :last_stop_reason)
         ON CONFLICT(id) DO UPDATE SET
-            project_id   = COALESCE(sessions.project_id, excluded.project_id),
+            project_id   = COALESCE(excluded.project_id, sessions.project_id),
             started_at   = MIN(COALESCE(sessions.started_at, excluded.started_at),
                                excluded.started_at),
             last_at      = MAX(COALESCE(sessions.last_at, excluded.last_at), excluded.last_at),
             first_prompt = COALESCE(sessions.first_prompt, excluded.first_prompt),
+            -- Батч из одних служебных записей приходит без last_record_at, и NULL
+            -- в скалярном MAX обнулил бы колонку, а с ней и паузу до простоя.
             last_record_kind = CASE
+                WHEN excluded.last_record_at IS NULL THEN sessions.last_record_kind
                 WHEN excluded.last_record_at >= COALESCE(sessions.last_record_at, '')
                 THEN excluded.last_record_kind ELSE sessions.last_record_kind END,
-            last_record_at = MAX(COALESCE(sessions.last_record_at, ''), excluded.last_record_at),
+            last_record_at = MAX(COALESCE(sessions.last_record_at, excluded.last_record_at),
+                                 COALESCE(excluded.last_record_at, sessions.last_record_at)),
             -- Название, заданное человеком, не затирается сгенерированным.
             title = CASE
                 WHEN excluded.title IS NULL THEN sessions.title

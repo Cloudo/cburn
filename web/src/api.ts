@@ -109,6 +109,24 @@ export type Limits = {
   week: Usage;
 };
 
+export type PlanLimit = {
+  kind: string;
+  label: string;
+  percent: number;
+  resets_at: string | null;
+  severity: string | null;
+  is_active: boolean;
+};
+
+export type Plan = {
+  source: "api" | "cache" | "none";
+  fetched_at: number | null;
+  plan: string | null;
+  tier: string | null;
+  limits: PlanLimit[];
+  error: string | null;
+};
+
 export type Overview = {
   now: string;
   burn: Record<string, BurnRate>;
@@ -122,6 +140,7 @@ export type Overview = {
     output_tokens: number;
     last_context: number;
     first_prompt: string | null;
+    title: string | null;
   }>;
   totals: { sessions: number; turns: number; projects: number; last_turn_at: string | null };
   recent_turns: Turn[];
@@ -130,6 +149,7 @@ export type Overview = {
   tools: ToolProfile;
   idle: IdleTurns;
   limits: Limits;
+  plan: Plan;
   series: Bucket[];
   series_bucket_seconds: number;
   pending_sessions: string[];

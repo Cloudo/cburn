@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Gauge, OutputMeter, Recorder, type Slice } from "./Gauge";
-import { Idle, LimitWindow, Models, Tools } from "./Profile";
+import { Idle, Models, PlanLimits, Tools } from "./Profile";
 import {
   agoLabel,
   clockTime,
@@ -222,8 +222,9 @@ export default function App() {
                         style={{ width: `${(session.tokens / data.top_sessions[0].tokens) * 100}%` }}
                       />
                     </div>
-                    <code>{session.id.slice(0, 8)}</code>
-                    <span className="leaders-project">{session.project ?? "—"}</span>
+                    <span className="leaders-name" title={session.first_prompt ?? undefined}>
+                      {session.title ?? session.id.slice(0, 8)}
+                    </span>
                     <span className="leaders-tokens">{compact(session.tokens)}</span>
                   </li>
                 ))}
@@ -248,8 +249,8 @@ export default function App() {
             <Idle idle={data.idle} />
           </div>
           <div className="panel">
-            <h2>окно лимитов</h2>
-            <LimitWindow limits={data.limits} now={data.now} />
+            <h2>лимиты подписки</h2>
+            <PlanLimits plan={data.plan} />
           </div>
         </div>
       </section>
