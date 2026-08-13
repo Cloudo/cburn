@@ -250,6 +250,8 @@ const DICT: Record<string, [string, string]> = {
   "advice.kind.manual": ["вручную", "manual"],
   "advice.kind.hourly": ["часовой", "hourly"],
   "advice.kind.weekly": ["недельный", "weekly"],
+  "advice.status.accepted": ["принят", "accepted"],
+  "advice.status.rejected": ["отклонён", "rejected"],
   "advice.group.crit": ["горит", "burning"],
   "advice.group.warn": ["утечки", "leaks"],
   "advice.group.info": ["к сведению", "worth knowing"],

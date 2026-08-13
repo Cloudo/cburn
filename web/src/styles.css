@@ -2397,13 +2397,48 @@ main.empty {
   border-top: 1px solid var(--line);
 }
 
-/* Отклонённый совет не прячем: пусть видно, что уже решили. */
-.advice-item-rejected {
-  opacity: 0.5;
+/* Важность видно цветом полосы: горит — янтарный, утечка — стальной,
+   к сведению — приглушённый. Статус при этом уходит в подпись, чтобы два
+   разных смысла не боролись за один и тот же цвет. */
+.advice-item {
+  border-left: 2px solid transparent;
 }
 
-.advice-item-accepted {
-  border-left: 2px solid var(--mint);
+.advice-item-crit {
+  border-left-color: var(--amber);
+}
+
+.advice-item-warn {
+  border-left-color: var(--steel);
+}
+
+.advice-item-info {
+  border-left-color: var(--line);
+}
+
+.advice-item-crit h4 {
+  color: var(--amber);
+}
+
+/* Отклонённый совет не прячем: пусть видно, что уже решили. */
+.advice-item-rejected {
+  opacity: 0.45;
+}
+
+.advice-status {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+
+.advice-status-accepted {
+  color: var(--mint);
+  background: rgb(94 171 134 / 14%);
+}
+
+.advice-status-rejected {
+  color: var(--text-faint);
+  background: rgb(128 128 128 / 12%);
 }
 
 .advice-item-head {

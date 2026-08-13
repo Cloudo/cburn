@@ -121,9 +121,16 @@ function Item({
   };
 
   return (
-    <article className={`advice-item advice-item-${item.status}`}>
+    <article
+      className={`advice-item advice-item-${item.severity} advice-item-${item.status}`}
+    >
       <div className="advice-item-head">
         <h4>{item.title}</h4>
+        {item.status !== "new" && (
+          <span className={`advice-status advice-status-${item.status}`}>
+            {t(`advice.status.${item.status}`)}
+          </span>
+        )}
         <span className="advice-origin">
           {clockTime(item.run.ts)} · {t(`advice.kind.${item.run.kind}`)} · {usd(item.run.cost_usd)}
         </span>
