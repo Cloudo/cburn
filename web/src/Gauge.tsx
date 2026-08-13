@@ -8,6 +8,7 @@
 import { useState, type MouseEvent } from "react";
 
 import { compact, grouped } from "./format";
+import { useLang } from "./i18n";
 
 export type Slice = { key: string; label: string; value: number; color: string };
 
@@ -57,6 +58,7 @@ export function scalePosition(value: number): number {
 type Props = { value: number; slices: Slice[]; caption: string };
 
 export function Gauge({ value, slices, caption }: Props) {
+  const { t } = useLang();
   const position = scalePosition(value);
   const total = slices.reduce((sum, slice) => sum + slice.value, 0);
 
@@ -121,7 +123,7 @@ export function Gauge({ value, slices, caption }: Props) {
 
       <figcaption>
         <strong className="gauge-value">{compact(value)}</strong>
-        <span className="gauge-unit">токенов в минуту</span>
+        <span className="gauge-unit">{t("gauge.unit")}</span>
         <span className="gauge-caption">{caption}</span>
       </figcaption>
     </figure>
@@ -130,14 +132,15 @@ export function Gauge({ value, slices, caption }: Props) {
 
 /** Линейная шкала выходных токенов: их немного, и логарифм тут только мешает. */
 export function OutputMeter({ value, peak }: { value: number; peak: number }) {
+  const { t } = useLang();
   const ceiling = Math.max(peak, 1000);
   const share = Math.min(value / ceiling, 1);
   return (
     <div className="meter">
       <div className="meter-head">
-        <span className="meter-label">выход модели</span>
+        <span className="meter-label">{t("meter.label")}</span>
         <span className="meter-value">
-          {compact(value)} <span className="meter-unit">ток/мин</span>
+          {compact(value)} <span className="meter-unit">{t("meter.unit")}</span>
         </span>
       </div>
       <div className="meter-track">
@@ -162,6 +165,7 @@ export function Recorder({
 }) {
   // Высота — по выходу модели: в суммарных токенах любой ход выглядит
   // одинаково, потому что чтение кэша перевешивает всё остальное.
+  const { t } = useLang();
   const peak = Math.max(...series.map((bucket) => bucket.output_tokens), 1);
   const span = Math.round((series.length * bucketSeconds) / 60);
   const [hover, setHover] = useState<number | null>(null);
@@ -179,8 +183,8 @@ export function Recorder({
   return (
     <div className="recorder">
       <div className="recorder-head">
-        <span className="recorder-label">выход по {bucketSeconds} с</span>
-        <span className="recorder-span">последние {span} мин</span>
+        <span className="recorder-label">{t("recorder.label", { seconds: bucketSeconds })}</span>
+        <span className="recorder-span">{t("recorder.span", { minutes: span })}</span>
       </div>
       <div
         className="recorder-track"
@@ -213,21 +217,21 @@ export function Recorder({
           >
             <span className="recorder-tip-time">{bucketClock(active.at, bucketSeconds)}</span>
             <span className="recorder-tip-row">
-              выход <strong>{grouped(active.output_tokens)}</strong>
+              {t("recorder.output")} <strong>{grouped(active.output_tokens)}</strong>
             </span>
             <span className="recorder-tip-row">
-              всего <strong>{compact(active.tokens)}</strong>
+              {t("recorder.total")} <strong>{compact(active.tokens)}</strong>
             </span>
             <span className="recorder-tip-row">
-              ходов <strong>{active.turns}</strong>
+              {t("recorder.turns")} <strong>{active.turns}</strong>
             </span>
           </div>
         )}
       </div>
       <div className="recorder-scale">
-        <span>−{span} мин</span>
-        <span>пик {compact(peak)} за корзину</span>
-        <span>сейчас</span>
+        <span>{t("recorder.ago", { minutes: span })}</span>
+        <span>{t("recorder.peak", { value: compact(peak) })}</span>
+        <span>{t("recorder.now")}</span>
       </div>
     </div>
   );

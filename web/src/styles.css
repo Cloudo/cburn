@@ -161,6 +161,35 @@ main.empty {
 
 /* --- переключатель окна --- */
 
+/* Переключатель языка живёт в строке состояния и подчиняется её гамме. */
+.lang-picker {
+  display: flex;
+  gap: 1px;
+  margin-left: 4px;
+}
+
+.lang {
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  padding: 2px 5px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.lang:hover {
+  color: var(--text);
+  background: var(--bg-sunken);
+}
+
+.lang-on {
+  color: var(--text);
+}
+
 /* Окно усреднения стоит в шапке рядом с часами и живёт в их же гамме:
    тот же моноширинный кегль и тот же приглушённый цвет. */
 .window-picker {

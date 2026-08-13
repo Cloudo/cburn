@@ -4,24 +4,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { compact, duration, sinceLabel, usd } from "./format";
+import { compact, duration, grouped, sinceLabel, usd } from "./format";
 import { useSessions, type SessionRow } from "./api";
+import { useLang } from "./i18n";
 
-const STATUS_LABEL: Record<string, string> = {
-  permission: "ждёт разрешения",
-  working: "работает",
-  answered: "ждёт вас",
-  idle: "простаивает",
-  done: "закончилась",
-};
-
-const PERIODS: Array<{ key: string; label: string }> = [
-  { key: "today", label: "сегодня" },
-  { key: "24h", label: "сутки" },
-  { key: "7d", label: "неделя" },
-  { key: "30d", label: "месяц" },
-  { key: "all", label: "всё" },
-];
+//: Ключи статусов и периодов; подписи берутся из словаря.
+const STATUSES = ["permission", "working", "answered", "idle", "done"];
+const PERIODS = ["today", "24h", "7d", "30d", "all"];
 
 /** Строка списка: либо корень цепочки со своими продолжениями, либо одиночка. */
 type Line = { root: SessionRow; children: SessionRow[] };
@@ -45,6 +34,7 @@ function toLines(rows: SessionRow[]): Line[] {
 }
 
 export function Sessions() {
+  const { t } = useLang();
   const [project, setProject] = useState("");
   const [status, setStatus] = useState("");
   const [period, setPeriod] = useState("7d");
@@ -70,7 +60,7 @@ export function Sessions() {
     <section className="screen">
       <div className="filters">
         <select value={project} onChange={(event) => setProject(event.target.value)}>
-          <option value="">все проекты</option>
+          <option value="">{t("sessions.allProjects")}</option>
           {(data?.projects ?? []).map((item) => (
             <option key={item.slug} value={item.slug}>
               {item.name} ({item.sessions})
@@ -78,16 +68,16 @@ export function Sessions() {
           ))}
         </select>
 
-        <div className="filter-tabs" role="tablist" aria-label="статус">
+        <div className="filter-tabs" role="tablist" aria-label={t("sessions.status")}>
           <button
             role="tab"
             aria-selected={status === ""}
             className={status === "" ? "filter-tab filter-tab-on" : "filter-tab"}
             onClick={() => setStatus("")}
           >
-            любой
+            {t("sessions.any")}
           </button>
-          {Object.entries(STATUS_LABEL).map(([key, label]) => (
+          {STATUSES.map((key) => (
             <button
               key={key}
               role="tab"
@@ -95,47 +85,50 @@ export function Sessions() {
               className={status === key ? "filter-tab filter-tab-on" : "filter-tab"}
               onClick={() => setStatus(key)}
             >
-              {label}
+              {t(`status.${key}`)}
             </button>
           ))}
         </div>
 
-        <div className="filter-tabs" role="tablist" aria-label="период">
-          {PERIODS.map((item) => (
+        <div className="filter-tabs" role="tablist" aria-label={t("sessions.period")}>
+          {PERIODS.map((key) => (
             <button
-              key={item.key}
+              key={key}
               role="tab"
-              aria-selected={period === item.key}
-              className={period === item.key ? "filter-tab filter-tab-on" : "filter-tab"}
-              onClick={() => setPeriod(item.key)}
+              aria-selected={period === key}
+              className={period === key ? "filter-tab filter-tab-on" : "filter-tab"}
+              onClick={() => setPeriod(key)}
             >
-              {item.label}
+              {t(`sessions.period.${key}`)}
             </button>
           ))}
         </div>
       </div>
 
-      {error && <p className="hint">нет связи с cdash serve</p>}
+      {error && <p className="hint">{t("app.noConnection")}</p>}
 
       <p className="hint">
-        сессий {totals.sessions}, ходов {totals.turns.toLocaleString("ru-RU")},{" "}
-        {usd(totals.cost)} по тарифам API
+        {t("sessions.totals", {
+          sessions: totals.sessions,
+          turns: grouped(totals.turns),
+          cost: usd(totals.cost),
+        })}
       </p>
 
       <div className="sessions-table">
         <div className="sessions-head">
-          <span>сессия</span>
-          <span>проект</span>
-          <span className="sessions-number">ходов</span>
-          <span className="sessions-number">токенов</span>
-          <span className="sessions-number">по API</span>
-          <span>расход по времени</span>
-          <span>активность</span>
+          <span>{t("sessions.col.session")}</span>
+          <span>{t("sessions.col.project")}</span>
+          <span className="sessions-number">{t("sessions.col.turns")}</span>
+          <span className="sessions-number">{t("sessions.col.tokens")}</span>
+          <span className="sessions-number">{t("sessions.col.cost")}</span>
+          <span>{t("sessions.col.timeline")}</span>
+          <span>{t("sessions.col.activity")}</span>
         </div>
         {lines.map((line) => (
           <Row key={line.root.id} line={line} />
         ))}
-        {!lines.length && !error && <p className="hint">под фильтр ничего не попало</p>}
+        {!lines.length && !error && <p className="hint">{t("sessions.empty")}</p>}
       </div>
     </section>
   );
@@ -171,6 +164,7 @@ function SessionLine({
   onToggle?: () => void;
   nested?: boolean;
 }) {
+  const { t } = useLang();
   return (
     <div className={nested ? "sessions-row sessions-row-nested" : "sessions-row"}>
       <span className="sessions-name">
@@ -180,7 +174,10 @@ function SessionLine({
             {chain}
           </button>
         )}
-        <span className={`sessions-dot sessions-dot-${row.status}`} title={STATUS_LABEL[row.status]} />
+        <span
+          className={`sessions-dot sessions-dot-${row.status}`}
+          title={t(`status.${row.status}`)}
+        />
         <a
           className="sessions-title"
           href={`#/session/${row.id}`}
@@ -192,11 +189,14 @@ function SessionLine({
       <span className="sessions-project" title={row.root_path ?? undefined}>
         {row.project ?? "—"}
       </span>
-      <span className="sessions-number">{row.turns.toLocaleString("ru-RU")}</span>
+      <span className="sessions-number">{grouped(row.turns)}</span>
       <span className="sessions-number">{compact(row.tokens)}</span>
       <span className="sessions-number">{usd(row.cost_usd)}</span>
       <Spark values={row.spark} />
-      <span className="sessions-when" title={`шла ${duration(row.started_at, row.last_at)}`}>
+      <span
+        className="sessions-when"
+        title={t("sessions.ran", { duration: duration(row.started_at, row.last_at) })}
+      >
         {sinceLabel(row.last_at)}
       </span>
     </div>

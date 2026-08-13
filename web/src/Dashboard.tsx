@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import GridLayout, { type Layout } from "react-grid-layout";
 
 import { clockTime, freshnessLabel } from "./format";
+import { useLang } from "./i18n";
 import {
   COLUMNS,
   MARGIN,
@@ -49,6 +50,7 @@ function useWidth(): [number, (node: HTMLDivElement | null) => void] {
 }
 
 export function Dashboard({ widgets }: { widgets: WidgetContent[] }) {
+  const { t } = useLang();
   const [state, setState] = useState(loadState);
   const [tuning, setTuning] = useState(false);
   const [width, ref] = useWidth();
@@ -83,32 +85,25 @@ export function Dashboard({ widgets }: { widgets: WidgetContent[] }) {
     <>
       <div className="dashboard-bar">
         <button className="tune" onClick={() => setTuning((open) => !open)} aria-expanded={tuning}>
-          виджеты
+          {t("dash.widgets")}
           {state.hidden.length > 0 && <span className="tune-count">−{state.hidden.length}</span>}
         </button>
         {tuning && (
-          <div className="tune-panel" role="dialog" aria-label="настройка дашборда">
-            <p className="tune-hint">
-              Перетаскивать за заголовок, размер — за правый нижний угол. Расположение
-              сохраняется в браузере.
-            </p>
+          <div className="tune-panel" role="dialog" aria-label={t("dash.tune")}>
+            <p className="tune-hint">{t("dash.tuneHint")}</p>
             <ul>
-              {WIDGETS.map((widget) => (
-                <li key={widget.id}>
+              {WIDGETS.map((id) => (
+                <li key={id}>
                   <label>
-                    <input
-                      type="checkbox"
-                      checked={!hidden.has(widget.id)}
-                      onChange={() => toggle(widget.id)}
-                    />
-                    <span className="tune-title">{widget.title}</span>
-                    <span className="tune-note">{widget.note}</span>
+                    <input type="checkbox" checked={!hidden.has(id)} onChange={() => toggle(id)} />
+                    <span className="tune-title">{t(`widget.${id}`)}</span>
+                    <span className="tune-note">{t(`widget.${id}.note`)}</span>
                   </label>
                 </li>
               ))}
             </ul>
             <button className="tune-reset" onClick={() => setState(defaultState())}>
-              вернуть как было
+              {t("dash.reset")}
             </button>
           </div>
         )}
@@ -142,6 +137,7 @@ export function Dashboard({ widgets }: { widgets: WidgetContent[] }) {
 
 /** Шапка виджета: имя, на какое время данные и обновление по наведению. */
 function WidgetHead({ widget, onHide }: { widget: WidgetContent; onHide: () => void }) {
+  const { t } = useLang();
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const now = Date.now();
@@ -186,15 +182,15 @@ function WidgetHead({ widget, onHide }: { widget: WidgetContent; onHide: () => v
         )}
         <button
           className={busy ? "widget-refresh widget-refresh-busy" : "widget-refresh"}
-          aria-label={`обновить виджет «${widget.title}»`}
-          title={failed ? "обновить (прошлая попытка не удалась)" : "обновить"}
+          aria-label={t("dash.refreshWidget", { title: widget.title })}
+          title={failed ? t("dash.refreshFailed") : t("dash.refresh")}
           onClick={refresh}
         >
           <RefreshIcon />
         </button>
         <button
           className="widget-hide"
-          aria-label={`скрыть виджет «${widget.title}»`}
+          aria-label={t("dash.hideWidget", { title: widget.title })}
           onClick={onHide}
         >
           ×

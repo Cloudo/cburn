@@ -3,8 +3,24 @@
 
 const SPACE = " "; // тонкий пробел: 2 439 123 не разъезжается в моноширинном
 
+//: Язык форматирования. Числа и даты рисуются вне React, поэтому язык
+//: приезжает сюда из провайдера, а не через пропсы.
+let lang: "ru" | "en" = "ru";
+let locale = "ru-RU";
+
+export function setFormatLang(next: "ru" | "en"): void {
+  lang = next;
+  locale = next === "ru" ? "ru-RU" : "en-US";
+}
+
+/** Слово по текущему языку — для коротких единиц внутри формата. */
+function word(ru: string, en: string): string {
+  return lang === "ru" ? ru : en;
+}
+
 export function grouped(value: number): string {
-  return Math.round(value).toLocaleString("ru-RU").replace(/\s/g, SPACE);
+  // Русские разряды разделены пробелом (его и утончаем), английские — запятой.
+  return Math.round(value).toLocaleString(locale).replace(/\s/g, SPACE);
 }
 
 /** Крупные числа сокращаются как в США: K, M, B через тонкий пробел. */
@@ -18,22 +34,28 @@ export function compact(value: number): string {
 
 function trim(value: number): string {
   const digits = value >= 100 ? 0 : value >= 10 ? 1 : 2;
-  const text = value.toFixed(digits).replace(".", ",");
+  const text = value.toFixed(digits).replace(".", word(",", "."));
   // Хвостовые нули режутся только в дробной части: иначе «100» станет «1».
-  return text.includes(",") ? text.replace(/,?0+$/, "") : text;
+  const point = word(",", ".");
+  return text.includes(point) ? text.replace(/[.,]?0+$/, "") : text;
 }
 
 /** Деньги подписчику не счёт, а вес: точность до цента, разряды как у чисел. */
 export function usd(value: number): string {
   const text = value
-    .toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    .toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     .replace(/\s/g, SPACE);
   return `$${text}`;
 }
 
 export function clockTime(at: string | number): string {
   const date = typeof at === "number" ? new Date(at) : new Date(stamp(at));
-  return date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return date.toLocaleTimeString(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23", // 21:05:03 короче, чем 9:05:03 PM, и не прыгает по ширине
+  });
 }
 
 /** Момент из ISO-строки бэкенда в миллисекундах; null — событий не было. */
@@ -44,15 +66,16 @@ export function timestamp(iso: string | null): number | null {
 /** Подсказка у метки в шапке виджета: когда произошло последнее событие
  *  и когда обзор в последний раз пересчитывали. */
 export function freshnessLabel(at: number | null, checkedAt: number, now: number): string {
-  const checked = `пересчитано ${clockTime(checkedAt)}`;
-  if (at === null) return `данных за период нет, ${checked}`;
-  return `последние данные ${clockTime(at)}, ${agoLabel(Math.max(now - at, 0) / 1000)}; ${checked}`;
+  const checked = `${word("пересчитано", "recomputed")} ${clockTime(checkedAt)}`;
+  if (at === null) return `${word("данных за период нет", "no data for the period")}, ${checked}`;
+  const ago = agoLabel(Math.max(now - at, 0) / 1000);
+  return `${word("последние данные", "last data")} ${clockTime(at)}, ${ago}; ${checked}`;
 }
 
 export function agoLabel(seconds: number): string {
-  if (seconds < 5) return "только что";
-  if (seconds < 60) return `${Math.round(seconds)} с назад`;
-  return `${Math.round(seconds / 60)} мин назад`;
+  if (seconds < 5) return word("только что", "just now");
+  if (seconds < 60) return `${Math.round(seconds)} ${word("с назад", "s ago")}`;
+  return `${Math.round(seconds / 60)} ${word("мин назад", "min ago")}`;
 }
 
 export function modelLabel(model: string | null): string {
@@ -66,17 +89,18 @@ export function duration(fromIso: string | null, toIso: string | null): string {
   if (!fromIso || !toIso) return "—";
   const ms = new Date(stamp(toIso)).getTime() - new Date(stamp(fromIso)).getTime();
   const minutes = Math.max(Math.round(ms / 60000), 0);
-  if (minutes < 60) return `${minutes} мин`;
+  if (minutes < 60) return `${minutes} ${word("мин", "m")}`;
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
-  return rest ? `${hours} ч ${rest} мин` : `${hours} ч`;
+  const h = `${hours} ${word("ч", "h")}`;
+  return rest ? `${h} ${rest} ${word("мин", "m")}` : h;
 }
 
 /** Насколько давно это было, от «сейчас». */
 export function sinceLabel(iso: string | null): string {
   if (!iso) return "—";
   const seconds = (Date.now() - new Date(stamp(iso)).getTime()) / 1000;
-  if (seconds < 45) return "только что";
+  if (seconds < 45) return word("только что", "just now");
   return agoLabel(seconds);
 }
 

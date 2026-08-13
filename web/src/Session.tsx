@@ -4,7 +4,8 @@
 
 import { useEffect, useMemo } from "react";
 
-import { clockTime, compact, duration, modelLabel, toolLabel, usd } from "./format";
+import { clockTime, compact, duration, grouped, modelLabel, toolLabel, usd } from "./format";
+import { useLang } from "./i18n";
 import { useSession, type SessionEvent, type SessionTurn } from "./api";
 
 /** Зоны контекста по ТЗ §4: до 80k спокойно, до 150k пора оглядеться. */
@@ -12,6 +13,7 @@ const WARN = 80_000;
 const CRIT = 150_000;
 
 export function Session({ id }: { id: string }) {
+  const { t } = useLang();
   const { data, error, reload } = useSession(id);
 
   useEffect(() => {
@@ -19,8 +21,18 @@ export function Session({ id }: { id: string }) {
     return () => clearInterval(timer);
   }, [reload]);
 
-  if (error) return <section className="screen"><p className="hint">сессия не найдена</p></section>;
-  if (!data) return <section className="screen"><p className="hint">загружаю…</p></section>;
+  if (error)
+    return (
+      <section className="screen">
+        <p className="hint">{t("session.notFound")}</p>
+      </section>
+    );
+  if (!data)
+    return (
+      <section className="screen">
+        <p className="hint">{t("session.loading")}</p>
+      </section>
+    );
 
   const { session, turns, events, models, tools, chain } = data;
   const idle = turns.filter((turn) => turn.is_idle).length;
@@ -29,39 +41,45 @@ export function Session({ id }: { id: string }) {
     <section className="screen">
       <div className="session-head-line">
         <a className="back" href="#/sessions">
-          ← к сессиям
+          ← {t("session.back")}
         </a>
         <h2>{session.title ?? session.session_id.slice(0, 8)}</h2>
         <span className="hint">{session.project ?? "—"}</span>
       </div>
 
-      <p className="session-prompt">{session.first_prompt ?? "без промпта"}</p>
+      <p className="session-prompt">{session.first_prompt ?? t("card.noPrompt")}</p>
 
       <dl className="session-facts">
-        <Fact label="ходов" value={session.turns.toLocaleString("ru-RU")} />
-        <Fact label="выход" value={compact(session.output_tokens)} />
-        <Fact label="чтение кэша" value={compact(session.cache_read)} />
-        <Fact label="по тарифам API" value={usd(session.cost_usd)} />
-        <Fact label="контекст" value={compact(session.last_context)} />
-        <Fact label="шла" value={duration(session.started_at, session.last_at)} />
+        <Fact label={t("session.turns")} value={grouped(session.turns)} />
+        <Fact label={t("session.output")} value={compact(session.output_tokens)} />
+        <Fact label={t("session.cacheRead")} value={compact(session.cache_read)} />
+        <Fact label={t("session.cost")} value={usd(session.cost_usd)} />
+        <Fact label={t("session.context")} value={compact(session.last_context)} />
+        <Fact label={t("session.ran")} value={duration(session.started_at, session.last_at)} />
         {session.sidechain_turns > 0 && (
           <Fact
-            label="сабагенты"
-            value={`${session.sidechain_turns} ходов, ${usd(session.sidechain_cost_usd)}`}
+            label={t("session.sidechain")}
+            value={t("session.sidechainValue", {
+              turns: session.sidechain_turns,
+              cost: usd(session.sidechain_cost_usd),
+            })}
           />
         )}
-        {idle > 0 && <Fact label="холостых ходов" value={String(idle)} />}
+        {idle > 0 && <Fact label={t("session.idleTurns")} value={String(idle)} />}
       </dl>
 
       <ContextChart turns={turns} events={events} />
 
       {chain.sessions.length > 1 && (
         <p className="hint">
-          линия работы: {chain.sessions.length} сессий, {chain.turns.toLocaleString("ru-RU")} ходов,{" "}
+          {t("session.chain", {
+            sessions: chain.sessions.length,
+            turns: grouped(chain.turns),
+          })}{" "}
           {usd(chain.cost_usd)}
           {session.parent_session_id && (
             <>
-              {" · продолжает "}
+              {t("session.continues")}
               <a href={`#/session/${session.parent_session_id}`}>
                 {session.parent_session_id.slice(0, 8)}
               </a>
@@ -72,18 +90,18 @@ export function Session({ id }: { id: string }) {
 
       <div className="session-columns">
         <div>
-          <h3>модели</h3>
+          <h3>{t("session.models")}</h3>
           <ul className="bars">
             {models.map((model) => (
               <li key={model.model}>
                 <span className="bars-label">{modelLabel(model.model)}</span>
-                <span className="bars-value">{model.turns} ходов</span>
+                <span className="bars-value">{t("models.turns", { count: model.turns })}</span>
               </li>
             ))}
           </ul>
         </div>
         <div>
-          <h3>инструменты</h3>
+          <h3>{t("session.tools")}</h3>
           <ul className="bars">
             {tools.map((tool) => (
               <li key={tool.tool}>
@@ -95,13 +113,13 @@ export function Session({ id }: { id: string }) {
         </div>
       </div>
 
-      <h3>лента ходов</h3>
+      <h3>{t("session.feed")}</h3>
       <div className="turns">
         {turns.map((turn) => (
           <div
             key={turn.message_id}
             className={turn.is_idle ? "turns-row turns-row-idle" : "turns-row"}
-            title={turn.is_idle ? "холостой ход: короткий ответ при большом контексте" : undefined}
+            title={turn.is_idle ? t("session.idleHint") : undefined}
           >
             <span className="turns-time">{clockTime(turn.ts)}</span>
             <span className="turns-model">{modelLabel(turn.model)}</span>
@@ -129,6 +147,7 @@ function Fact({ label, value }: { label: string; value: string }) {
 /** График контекста по ходам. Ось X — порядковый номер хода, а не время:
  *  паузы между ходами бывают часами, и по времени график вырождается в полку. */
 function ContextChart({ turns, events }: { turns: SessionTurn[]; events: SessionEvent[] }) {
+  const { t } = useLang();
   const width = 1000;
   const height = 180;
   const peak = useMemo(
@@ -153,7 +172,7 @@ function ContextChart({ turns, events }: { turns: SessionTurn[]; events: Session
   return (
     <figure className="chart">
       <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img"
-        aria-label="контекст по ходам">
+        aria-label={t("session.chart")}>
         <rect x="0" y={y(CRIT)} width={width} height={y(WARN) - y(CRIT)} className="chart-warn" />
         <rect x="0" y="0" width={width} height={y(CRIT)} className="chart-crit" />
         <polyline points={line} className="chart-line" />
@@ -169,10 +188,12 @@ function ContextChart({ turns, events }: { turns: SessionTurn[]; events: Session
         ))}
       </svg>
       <figcaption className="chart-legend">
-        <span>контекст по ходам, максимум {compact(peak)}</span>
-        <span className="chart-key chart-key-compact">автосуммаризация</span>
-        <span className="chart-key chart-key-fork">ветвление</span>
-        <span className="chart-key chart-key-crit">выше {compact(CRIT)}</span>
+        <span>{t("session.chartPeak", { peak: compact(peak) })}</span>
+        <span className="chart-key chart-key-compact">{t("session.compaction")}</span>
+        <span className="chart-key chart-key-fork">{t("session.fork")}</span>
+        <span className="chart-key chart-key-crit">
+          {t("session.above", { value: compact(CRIT) })}
+        </span>
       </figcaption>
     </figure>
   );

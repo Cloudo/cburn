@@ -6,6 +6,7 @@ import { Dashboard, type WidgetContent } from "./Dashboard";
 import { Session } from "./Session";
 import { Sessions } from "./Sessions";
 import { Settings } from "./Settings";
+import { useLang } from "./i18n";
 import {
   agoLabel,
   clockTime,
@@ -32,36 +33,9 @@ import {
 } from "./api";
 
 const WINDOWS = ["10s", "1m", "5m", "60m"] as const;
-const WINDOW_LABEL: Record<string, string> = {
-  "10s": "10 секунд",
-  "1m": "минута",
-  "5m": "5 минут",
-  "60m": "час",
-};
-//: Подписи для шапки виджета: там переключатель стоит рядом с часами, и
-//: «10 секунд» вытеснило бы саму метку времени.
-const WINDOW_SHORT: Record<string, string> = {
-  "10s": "10 с",
-  "1m": "мин",
-  "5m": "5 мин",
-  "60m": "час",
-};
-
-const WINDOW_CAPTION: Record<string, string> = {
-  "10s": "за последние 10 секунд",
-  "1m": "за последнюю минуту",
-  "5m": "за последние 5 минут",
-  "60m": "за последний час",
-};
 
 //: Статусы в порядке важности: первым открывается таб, где что-то происходит.
-const STATUSES: Array<{ key: SessionStatus; label: string }> = [
-  { key: "permission", label: "ждёт разрешения" },
-  { key: "working", label: "работает" },
-  { key: "answered", label: "ждёт вас" },
-  { key: "idle", label: "простаивает" },
-  { key: "done", label: "закончилась" },
-];
+const STATUSES: SessionStatus[] = ["permission", "working", "answered", "idle", "done"];
 
 const COLORS = {
   cacheRead: "#4d7fa3",
@@ -70,17 +44,22 @@ const COLORS = {
   input: "#5eab86",
 };
 
-function slicesOf(source: Usage): Slice[] {
+function slicesOf(source: Usage, t: (key: string) => string): Slice[] {
   return [
-    { key: "cache_read", label: "чтение кэша", value: source.cache_read, color: COLORS.cacheRead },
+    {
+      key: "cache_read",
+      label: t("slice.cache_read"),
+      value: source.cache_read,
+      color: COLORS.cacheRead,
+    },
     {
       key: "cache_write",
-      label: "запись кэша",
+      label: t("slice.cache_write"),
       value: source.cache_write,
       color: COLORS.cacheWrite,
     },
-    { key: "output", label: "выход", value: source.output_tokens, color: COLORS.output },
-    { key: "input", label: "вход", value: source.input_tokens, color: COLORS.input },
+    { key: "output", label: t("slice.output"), value: source.output_tokens, color: COLORS.output },
+    { key: "input", label: t("slice.input"), value: source.input_tokens, color: COLORS.input },
   ];
 }
 
@@ -96,13 +75,10 @@ function useScreen(): string {
   return screen;
 }
 
-const SCREENS: Array<{ key: string; label: string }> = [
-  { key: "", label: "обзор" },
-  { key: "sessions", label: "сессии" },
-  { key: "settings", label: "настройки" },
-];
+const SCREENS = ["", "sessions", "settings"];
 
 export default function App() {
+  const { lang, setLang, t } = useLang();
   const { data, connection, updatedAt, refresh } = useOverview();
   const [, tick] = useState(0);
   const [burnWindow, setBurnWindow] = useState<string>("1m");
@@ -121,13 +97,13 @@ export default function App() {
         <div className="brand">
           <span className="brand-name">cloudo-dash</span>
           <nav className="screens">
-            {SCREENS.map((item) => (
+            {SCREENS.map((key) => (
               <a
-                key={item.key}
-                href={`#/${item.key}`}
-                className={item.key === screen ? "screen-link screen-link-on" : "screen-link"}
+                key={key}
+                href={`#/${key}`}
+                className={key === screen ? "screen-link screen-link-on" : "screen-link"}
               >
-                {item.label}
+                {t(`app.screen.${key || "overview"}`)}
               </a>
             ))}
           </nav>
@@ -136,12 +112,24 @@ export default function App() {
           {data && data.pending_sessions.length > 0 && (
             <span className="working">
               <span className="working-pulse" />
-              идёт запрос
+              {t("app.working")}
             </span>
           )}
           <span className={`dot dot-${connection}`} />
-          <span>{connection === "live" ? "живые данные" : "нет связи"}</span>
+          <span>{connection === "live" ? t("app.live") : t("app.offline")}</span>
           <span className="status-ago">{updatedAt ? agoLabel(ago) : ""}</span>
+          <div className="lang-picker" role="group" aria-label={t("app.lang")}>
+            {(["ru", "en"] as const).map((key) => (
+              <button
+                key={key}
+                aria-pressed={key === lang}
+                className={key === lang ? "lang lang-on" : "lang"}
+                onClick={() => setLang(key)}
+              >
+                {key.toUpperCase()}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 
@@ -152,10 +140,10 @@ export default function App() {
       ) : screen === "sessions" ? (
         <Sessions />
       ) : data ? (
-        <Dashboard widgets={buildWidgets(data, refresh, burnWindow, setBurnWindow)} />
+        <Dashboard widgets={buildWidgets(data, refresh, burnWindow, setBurnWindow, t)} />
       ) : (
         <p className="empty-note">
-          {connection === "offline" ? "нет связи с cdash serve" : "подключаюсь…"}
+          {connection === "offline" ? t("app.noConnection") : t("app.connecting")}
         </p>
       )}
     </main>
@@ -188,6 +176,7 @@ function buildWidgets(
   refresh: () => Promise<void>,
   burnWindow: string,
   setBurnWindow: (key: string) => void,
+  t: (key: string, vars?: Record<string, string | number>) => string,
 ): WidgetContent[] {
   const checkedAt = timestamp(data.now) ?? Date.now();
   const stamps = data.stamps ?? NO_STAMPS;
@@ -202,7 +191,7 @@ function buildWidgets(
   return [
     {
       id: "gauge",
-      title: "прибор",
+      title: t("widget.gauge"),
       body: <GaugeWidget data={data} window={burnWindow} />,
       tools: <WindowPicker value={burnWindow} onChange={setBurnWindow} />,
       at: lastTurn,
@@ -211,7 +200,7 @@ function buildWidgets(
     },
     {
       id: "today",
-      title: "за сегодня",
+      title: t("widget.today"),
       body: <TodayWidget data={data} />,
       at: todayTurn,
       checkedAt,
@@ -219,7 +208,7 @@ function buildWidgets(
     },
     {
       id: "live",
-      title: "сейчас в работе",
+      title: t("widget.live"),
       body: <SessionBoard sessions={data.live_sessions} limit={data.live_limit} now={data.now} />,
       at: liveAt,
       checkedAt,
@@ -227,7 +216,7 @@ function buildWidgets(
     },
     {
       id: "plan",
-      title: "лимиты подписки",
+      title: t("widget.plan"),
       body: <PlanLimits plan={data.plan} />,
       at: planAt,
       checkedAt,
@@ -236,7 +225,7 @@ function buildWidgets(
     },
     {
       id: "leaders",
-      title: "больше всего за сегодня",
+      title: t("widget.leaders"),
       body: <LeadersWidget data={data} />,
       at: todayTurn,
       checkedAt,
@@ -244,7 +233,7 @@ function buildWidgets(
     },
     {
       id: "tools",
-      title: "на что уходят ходы",
+      title: t("widget.tools"),
       body: <Tools profile={data.tools} />,
       at: timestamp(stamps.tool_call),
       checkedAt,
@@ -252,7 +241,7 @@ function buildWidgets(
     },
     {
       id: "models",
-      title: "модели за сегодня",
+      title: t("widget.models"),
       body: <Models models={data.models} />,
       at: todayTurn,
       checkedAt,
@@ -260,7 +249,7 @@ function buildWidgets(
     },
     {
       id: "idle",
-      title: "холостые ходы",
+      title: t("widget.idle"),
       body: <Idle idle={data.idle} />,
       at: timestamp(stamps.idle_turn),
       checkedAt,
@@ -268,7 +257,7 @@ function buildWidgets(
     },
     {
       id: "feed",
-      title: "лента ходов",
+      title: t("widget.feed"),
       body: <FeedWidget data={data} />,
       at: timestamp(data.recent_turns[0]?.ts ?? null),
       checkedAt,
@@ -280,18 +269,19 @@ function buildWidgets(
 /** Окно усреднения — в шапке виджета, в одной гамме с часами: меняют его
  *  редко, а места в теле прибора он занимал целую строку. */
 function WindowPicker({ value, onChange }: { value: string; onChange: (key: string) => void }) {
+  const { t } = useLang();
   return (
-    <div className="window-picker" role="tablist" aria-label="окно усреднения">
+    <div className="window-picker" role="tablist" aria-label={t("window.picker")}>
       {WINDOWS.map((key) => (
         <button
           key={key}
           role="tab"
           aria-selected={key === value}
-          title={WINDOW_LABEL[key]}
+          title={t(`window.${key}`)}
           className={key === value ? "window window-on" : "window"}
           onClick={() => onChange(key)}
         >
-          {WINDOW_SHORT[key]}
+          {t(`window.short.${key}`)}
         </button>
       ))}
     </div>
@@ -299,10 +289,11 @@ function WindowPicker({ value, onChange }: { value: string; onChange: (key: stri
 }
 
 function GaugeWidget({ data, window }: { data: Overview; window: string }) {
+  const { t } = useLang();
   const burn = data.burn[window];
   // Разбивка всегда за то же окно, что и стрелка: два разных периода рядом
   // читались как одно целое и путали.
-  const slices = slicesOf(burn.usage);
+  const slices = slicesOf(burn.usage, t);
   const peak = Math.max(...WINDOWS.map((key) => data.burn[key].output_per_min), 500);
   const total = slices.reduce((sum, item) => sum + item.value, 0);
 
@@ -311,10 +302,10 @@ function GaugeWidget({ data, window }: { data: Overview; window: string }) {
       {/* Разбивка — сбоку от прибора: по бокам полукруга остаётся пустое поле,
           а список из четырёх строк как раз в него укладывается. */}
       <div className="gauge-row">
-        <Gauge value={burn.tokens_per_min} slices={slices} caption={WINDOW_CAPTION[window]} />
+        <Gauge value={burn.tokens_per_min} slices={slices} caption={t(`window.caption.${window}`)} />
 
         <div className="breakdown">
-          <span className="legend-title">разбивка</span>
+          <span className="legend-title">{t("widget.gauge.breakdown")}</span>
           <ul className="legend">
             {slices.map((slice) => {
               const share = total > 0 ? (slice.value / total) * 100 : 0;
@@ -338,42 +329,47 @@ function GaugeWidget({ data, window }: { data: Overview; window: string }) {
 }
 
 function TodayWidget({ data }: { data: Overview }) {
+  const { t } = useLang();
   return (
     <>
       <dl className="today">
         <div>
-          <dt>ходов</dt>
+          <dt>{t("today.turns")}</dt>
           <dd>{grouped(data.today.turns)}</dd>
         </div>
         <div>
-          <dt>выход</dt>
+          <dt>{t("today.output")}</dt>
           <dd>{grouped(data.today.output_tokens)}</dd>
         </div>
         <div>
-          <dt>чтение кэша</dt>
+          <dt>{t("today.cacheRead")}</dt>
           <dd>{grouped(data.today.cache_read)}</dd>
         </div>
         <div>
-          <dt>запись кэша</dt>
+          <dt>{t("today.cacheWrite")}</dt>
           <dd>{grouped(data.today.cache_write)}</dd>
         </div>
         {/* Тариф подписочный: это не счёт, а «сколько стоило бы по API» (ТЗ §4). */}
         <div className="today-wide">
-          <dt>по тарифам API</dt>
+          <dt>{t("today.cost")}</dt>
           <dd>{usd(data.today.cost_usd)}</dd>
         </div>
       </dl>
       <p className="hint">
-        всего в базе {grouped(data.totals.turns)} ходов, {data.totals.sessions} сессий,{" "}
-        {data.totals.projects} проектов
+        {t("today.totals", {
+          turns: grouped(data.totals.turns),
+          sessions: data.totals.sessions,
+          projects: data.totals.projects,
+        })}
       </p>
     </>
   );
 }
 
 function LeadersWidget({ data }: { data: Overview }) {
+  const { t } = useLang();
   if (data.top_sessions.length === 0) {
-    return <p className="hint">сегодня ходов ещё не было</p>;
+    return <p className="hint">{t("leaders.empty")}</p>;
   }
   return (
     <ol className="leaders">
@@ -397,17 +393,18 @@ function LeadersWidget({ data }: { data: Overview }) {
 }
 
 function FeedWidget({ data }: { data: Overview }) {
+  const { t } = useLang();
   return (
     <>
       {/* Классы те же, что у строк: на узких экранах колонки прячутся по ним,
           иначе подписи разъехались бы относительно значений. */}
       <div className="turn turn-head" aria-hidden="true">
-        <span>время</span>
-        <span className="turn-model">модель</span>
-        <span className="turn-project">проект</span>
-        <span className="turn-output">выход</span>
-        <span className="turn-context">контекст</span>
-        <span className="turn-tools">инструменты</span>
+        <span>{t("feed.time")}</span>
+        <span className="turn-model">{t("feed.model")}</span>
+        <span className="turn-project">{t("feed.project")}</span>
+        <span className="turn-output">{t("feed.output")}</span>
+        <span className="turn-context">{t("feed.context")}</span>
+        <span className="turn-tools">{t("feed.tools")}</span>
       </div>
       <ol>
         {data.recent_turns.map((turn) => (
@@ -427,10 +424,11 @@ function SessionBoard({
   limit: number;
   now: string;
 }) {
+  const { t } = useLang();
   const [chosen, setChosen] = useState<SessionStatus | null>(null);
-  const counts = STATUSES.map((status) => ({
-    ...status,
-    items: sessions.filter((session) => session.status === status.key),
+  const counts = STATUSES.map((key) => ({
+    key,
+    items: sessions.filter((session) => session.status === key),
   }));
 
   // Пока вкладку не выбрали руками, открыта первая, где что-то есть: смотреть
@@ -439,12 +437,12 @@ function SessionBoard({
   const shown = counts.find((status) => status.key === active)?.items ?? [];
 
   if (sessions.length === 0) {
-    return <p className="hint">ни одной сессии за последний час</p>;
+    return <p className="hint">{t("live.empty")}</p>;
   }
 
   return (
     <>
-      <div className="tabs" role="tablist" aria-label="статус сессий">
+      <div className="tabs" role="tablist" aria-label={t("live.tabs")}>
         {counts.map((status) => (
           <button
             key={status.key}
@@ -454,14 +452,14 @@ function SessionBoard({
             className={status.key === active ? "tab tab-on" : "tab"}
             onClick={() => setChosen(status.key)}
           >
-            {status.label}
+            {t(`status.${status.key}`)}
             <span className={`tab-count tab-count-${status.key}`}>{status.items.length}</span>
           </button>
         ))}
       </div>
 
       {shown.length === 0 ? (
-        <p className="hint">в этом состоянии сессий нет</p>
+        <p className="hint">{t("live.emptyStatus")}</p>
       ) : (
         <ul className="sessions">
           {shown.slice(0, limit).map((session) => (
@@ -470,21 +468,14 @@ function SessionBoard({
         </ul>
       )}
       {shown.length > limit && (
-        <p className="hint">и ещё {shown.length - limit} — показаны самые свежие</p>
+        <p className="hint">{t("live.more", { count: shown.length - limit })}</p>
       )}
     </>
   );
 }
 
-const STATUS_NOTE: Record<SessionStatus, string> = {
-  permission: "ждёт разрешения",
-  working: "работает",
-  answered: "ждёт вас",
-  idle: "простаивает",
-  done: "закончилась",
-};
-
 function SessionCard({ session, now }: { session: LiveSession; now: string }) {
+  const { t } = useLang();
   const [asking, setAsking] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
@@ -492,7 +483,7 @@ function SessionCard({ session, now }: { session: LiveSession; now: string }) {
     setAsking(false);
     try {
       const result = await closeSession(session.id);
-      setNote(result.stopped ? `процесс ${result.pid} завершён` : result.note);
+      setNote(result.stopped ? t("card.terminated", { pid: String(result.pid) }) : result.note);
     } catch (error) {
       setNote(String(error));
     }
@@ -512,36 +503,36 @@ function SessionCard({ session, now }: { session: LiveSession; now: string }) {
       <div className="session-head">
         <span className="session-name">{session.title ?? session.id.slice(0, 8)}</span>
         <span className={`session-badge session-badge-${session.status}`}>
-          {STATUS_NOTE[session.status]}
+          {t(`status.${session.status}`)}
         </span>
         <div className="session-close">
           <button
             className="session-close-button"
-            aria-label="закрыть сессию"
+            aria-label={t("card.close")}
             aria-expanded={asking}
             onClick={() => setAsking((open) => !open)}
           >
             ×
           </button>
           {asking && (
-            <div className="popover" role="dialog" aria-label="закрыть сессию">
-              <p>Завершить процесс Claude Code и убрать сессию с дашборда?</p>
+            <div className="popover" role="dialog" aria-label={t("card.close")}>
+              <p>{t("card.closeQuestion")}</p>
               <p className="popover-warning">
-                Процесс получит SIGTERM: хуки SessionEnd при этом могут не отработать.
+                {t("card.closeWarning")}
               </p>
               <div className="popover-actions">
                 <button className="popover-danger" onClick={close}>
-                  Закрыть сессию
+                  {t("card.closeConfirm")}
                 </button>
-                <button onClick={hide}>Только убрать</button>
-                <button onClick={() => setAsking(false)}>Отмена</button>
+                <button onClick={hide}>{t("card.hideOnly")}</button>
+                <button onClick={() => setAsking(false)}>{t("card.cancel")}</button>
               </div>
             </div>
           )}
         </div>
       </div>
       <p className="session-prompt">
-        {session.last_prompt ?? session.first_prompt ?? "без промпта"}
+        {session.last_prompt ?? session.first_prompt ?? t("card.noPrompt")}
       </p>
       <div className="session-meta">
         <code>{session.id.slice(0, 8)}</code>
@@ -551,10 +542,10 @@ function SessionCard({ session, now }: { session: LiveSession; now: string }) {
         </span>
       </div>
       <div className="session-meta">
-        <span>активность {sinceLabel(session.last_at)}</span>
-        <span>идёт {duration(session.started_at, now)}</span>
-        <span>ходов {session.turns}</span>
-        <span>контекст {compact(session.last_context)}</span>
+        <span>{t("card.activity", { when: sinceLabel(session.last_at) })}</span>
+        <span>{t("card.running", { duration: duration(session.started_at, now) })}</span>
+        <span>{t("card.turns", { count: session.turns })}</span>
+        <span>{t("card.context", { tokens: compact(session.last_context) })}</span>
       </div>
       {note && <p className="session-note">{note}</p>}
     </li>
@@ -562,6 +553,7 @@ function SessionCard({ session, now }: { session: LiveSession; now: string }) {
 }
 
 function TurnRow({ turn }: { turn: Turn }) {
+  const { t } = useLang();
   const tools = (turn.tools ?? "").split(" ").filter(Boolean);
   return (
     <li className={turn.is_sidechain ? "turn turn-sidechain" : "turn"}>
@@ -574,7 +566,7 @@ function TurnRow({ turn }: { turn: Turn }) {
         {tools.length === 0 ? "" : tools.slice(0, 4).map(toolLabel).join(" · ")}
         {tools.length > 4 && ` +${tools.length - 4}`}
       </span>
-      {turn.is_sidechain === 1 && <span className="badge">сабагент</span>}
+      {turn.is_sidechain === 1 && <span className="badge">{t("feed.sidechain")}</span>}
     </li>
   );
 }

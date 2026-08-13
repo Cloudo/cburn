@@ -1,6 +1,7 @@
 import { Component, StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import { LangProvider } from "./i18n";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 import "./styles.css";
@@ -32,7 +33,9 @@ class Boundary extends Component<{ children: ReactNode }, { error: Error | null 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <Boundary>
-      <App />
+      <LangProvider>
+        <App />
+      </LangProvider>
     </Boundary>
   </StrictMode>,
 );

@@ -5,16 +5,18 @@
 import { useEffect, useState } from "react";
 
 import { loadConfig, saveConfig, type Config, type ModelPrice } from "./api";
+import { useLang } from "./i18n";
 
-const PRICE_COLUMNS: Array<{ key: keyof ModelPrice; label: string }> = [
-  { key: "input", label: "вход" },
-  { key: "output", label: "выход" },
-  { key: "cache_write_5m", label: "кэш 5m" },
-  { key: "cache_write_1h", label: "кэш 1h" },
-  { key: "cache_read", label: "чтение" },
+const PRICE_COLUMNS: Array<keyof ModelPrice> = [
+  "input",
+  "output",
+  "cache_write_5m",
+  "cache_write_1h",
+  "cache_read",
 ];
 
 export function Settings() {
+  const { t } = useLang();
   const [config, setConfig] = useState<Config | null>(null);
   const [path, setPath] = useState("");
   const [note, setNote] = useState("");
@@ -27,11 +29,16 @@ export function Settings() {
         setConfig(data.config);
         setPath(data.path);
       })
-      .catch(() => setError("не удалось прочитать настройки"));
+      .catch(() => setError(t("settings.loadFailed")));
   }, []);
 
   if (error && !config) return <section className="screen"><p className="hint">{error}</p></section>;
-  if (!config) return <section className="screen"><p className="hint">загружаю…</p></section>;
+  if (!config)
+    return (
+      <section className="screen">
+        <p className="hint">{t("session.loading")}</p>
+      </section>
+    );
 
   const patch = (section: keyof Config, key: string, value: unknown) =>
     setConfig({ ...config, [section]: { ...(config[section] as object), [key]: value } });
@@ -49,7 +56,7 @@ export function Settings() {
     try {
       const saved = await saveConfig(config);
       setConfig(saved.config);
-      setNote("сохранено, цены пересчитаны");
+      setNote(t("settings.saved"));
     } catch (reason) {
       setError(String(reason instanceof Error ? reason.message : reason));
     } finally {
@@ -60,61 +67,61 @@ export function Settings() {
   return (
     <section className="screen">
       <div className="session-head-line">
-        <h2>настройки</h2>
+        <h2>{t("settings.title")}</h2>
         <span className="hint">{path}</span>
       </div>
 
       <div className="settings-columns">
         <fieldset className="settings-group">
-          <legend>зоны контекста и тревоги</legend>
+          <legend>{t("settings.zones")}</legend>
           <Num
-            label="жёлтая зона, токенов"
+            label={t("settings.warn")}
             value={config.thresholds.context_warn}
             onChange={(value) => patch("thresholds", "context_warn", value)}
           />
           <Num
-            label="красная зона, токенов"
+            label={t("settings.crit")}
             value={config.thresholds.context_crit}
             onChange={(value) => patch("thresholds", "context_crit", value)}
           />
           <Num
-            label="холостых ходов подряд"
+            label={t("settings.idleRun")}
             value={config.thresholds.idle_run}
             onChange={(value) => patch("thresholds", "idle_run", value)}
           />
           <Num
-            label="тревога при токенах в минуту"
+            label={t("settings.burnWarn")}
             value={config.thresholds.burn_rate_warn_per_min}
             onChange={(value) => patch("thresholds", "burn_rate_warn_per_min", value)}
           />
         </fieldset>
 
         <fieldset className="settings-group">
-          <legend>советчик</legend>
+          <legend>{t("settings.analyzer")}</legend>
           <Check
-            label="включён"
+            label={t("settings.enabled")}
             value={config.analyzer.enabled}
             onChange={(value) => patch("analyzer", "enabled", value)}
           />
           <Num
-            label="такт, минут"
+            label={t("settings.interval")}
             value={config.analyzer.interval_minutes}
             onChange={(value) => patch("analyzer", "interval_minutes", value)}
           />
           <Choice
-            label="модель"
+            label={t("settings.model")}
             value={config.analyzer.model}
             options={["haiku", "sonnet", "opus"]}
             onChange={(value) => patch("analyzer", "model", value)}
           />
           <Choice
-            label="модель недельного разбора"
+            label={t("settings.weeklyModel")}
             value={config.analyzer.weekly_deep_model}
             options={["haiku", "sonnet", "opus"]}
             onChange={(value) => patch("analyzer", "weekly_deep_model", value)}
           />
           <Check
-            label="разрешить фрагменты команд в дайджесте"
+            label={t("settings.snippets")}
             value={config.analyzer.allow_snippets}
             onChange={(value) => patch("analyzer", "allow_snippets", value)}
           />
@@ -123,18 +130,18 @@ export function Settings() {
         <fieldset className="settings-group">
           <legend>telegram</legend>
           <Choice
-            label="канал"
+            label={t("settings.channel")}
             value={config.telegram.mode}
             options={["bridge", "bot", "off"]}
             onChange={(value) => patch("telegram", "mode", value)}
           />
           <Text
-            label="адрес бриджа"
+            label={t("settings.bridge")}
             value={config.telegram.bridge_url}
             onChange={(value) => patch("telegram", "bridge_url", value)}
           />
           <Text
-            label="токен бота"
+            label={t("settings.botToken")}
             value={config.telegram.bot_token}
             secret
             onChange={(value) => patch("telegram", "bot_token", value)}
@@ -145,34 +152,31 @@ export function Settings() {
             onChange={(value) => patch("telegram", "chat_id", value)}
           />
           <Text
-            label="дневная сводка в"
+            label={t("settings.dailyAt")}
             value={config.telegram.daily_summary_at}
             onChange={(value) => patch("telegram", "daily_summary_at", value)}
           />
         </fieldset>
 
         <fieldset className="settings-group">
-          <legend>сервер</legend>
+          <legend>{t("settings.server")}</legend>
           <Num
-            label="порт"
+            label={t("settings.port")}
             value={config.server.port}
             onChange={(value) => patch("server", "port", value)}
           />
-          <p className="hint">новый порт подхватится при следующем запуске</p>
+          <p className="hint">{t("settings.portNote")}</p>
         </fieldset>
       </div>
 
-      <h3>цены моделей, $ за миллион токенов</h3>
-      <p className="hint">
-        Подписка ими не оплачивается: это общая шкала, чтобы взвесить вход, выход и обе записи
-        кэша между собой.
-      </p>
+      <h3>{t("settings.prices")}</h3>
+      <p className="hint">{t("settings.pricesNote")}</p>
       <div className="prices">
         <div className="prices-head">
-          <span>модель</span>
+          <span>{t("settings.priceModel")}</span>
           {PRICE_COLUMNS.map((column) => (
-            <span key={column.key} className="prices-number">
-              {column.label}
+            <span key={column} className="prices-number">
+              {t(`settings.price.${column}`)}
             </span>
           ))}
         </div>
@@ -181,27 +185,27 @@ export function Settings() {
             <span className="prices-model">{model}</span>
             {PRICE_COLUMNS.map((column) => (
               <input
-                key={column.key}
+                key={column}
                 className="prices-number"
                 type="number"
                 step="0.01"
                 min="0"
-                value={price[column.key] ?? 0}
-                onChange={(event) => patchPrice(model, column.key, Number(event.target.value))}
+                value={price[column] ?? 0}
+                onChange={(event) => patchPrice(model, column, Number(event.target.value))}
               />
             ))}
           </div>
         ))}
         {!Object.keys(config.prices).length && (
           <p className="hint">
-            цен нет — положите заготовку командой <code>cdash prices --init</code>
+            {t("settings.noPrices")} <code>cdash prices --init</code>
           </p>
         )}
       </div>
 
       <div className="settings-actions">
         <button className="settings-save" onClick={save} disabled={saving}>
-          {saving ? "сохраняю…" : "сохранить"}
+          {saving ? t("settings.saving") : t("settings.save")}
         </button>
         {note && <span className="settings-note">{note}</span>}
         {error && <span className="settings-error">{error}</span>}

@@ -28,19 +28,18 @@ export type WidgetId =
   | "plan"
   | "feed";
 
-export type WidgetMeta = { id: WidgetId; title: string; note: string };
-
-/** Порядок в списке настроек — сверху вниз по важности. */
-export const WIDGETS: WidgetMeta[] = [
-  { id: "gauge", title: "прибор", note: "burn rate, разбивка, самописец" },
-  { id: "today", title: "за сегодня", note: "суммы с местной полуночи" },
-  { id: "live", title: "сейчас в работе", note: "сессии по статусам" },
-  { id: "plan", title: "лимиты подписки", note: "проценты плана от Anthropic" },
-  { id: "leaders", title: "больше всего за сегодня", note: "топ сессий" },
-  { id: "tools", title: "на что уходят ходы", note: "инструменты и bash" },
-  { id: "models", title: "модели за сегодня", note: "доля моделей" },
-  { id: "idle", title: "холостые ходы", note: "ответ короче 10 токенов" },
-  { id: "feed", title: "лента ходов", note: "последние ходы" },
+/** Порядок в списке настроек — сверху вниз по важности. Названия и пояснения
+ *  берутся из словаря по ключам `widget.<id>` и `widget.<id>.note`. */
+export const WIDGETS: WidgetId[] = [
+  "gauge",
+  "today",
+  "live",
+  "plan",
+  "leaders",
+  "tools",
+  "models",
+  "idle",
+  "feed",
 ];
 
 /** Раскладка по умолчанию — та же, что была до перетаскивания. */
@@ -86,7 +85,7 @@ export function loadState(): DashboardState {
     const raw = current ?? legacy;
     if (!raw) return defaultState();
     const saved = JSON.parse(raw) as Partial<DashboardState>;
-    const known = new Set<string>(WIDGETS.map((widget) => widget.id));
+    const known = new Set<string>(WIDGETS);
     const stored = (saved.layout ?? []).filter((item) => known.has(item.i));
     const layout = legacy ? upscale(stored) : stored;
     // Виджет, добавленный новой версией, подставляется из умолчания —
