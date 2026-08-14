@@ -220,6 +220,13 @@ export type Overview = {
   stamps?: Stamps;
   /** Тоже может не прийти — сервер старше этого фронта. */
   otel?: Otel;
+  /** Во что обошёлся сам советчик за сегодня (задача C4). */
+  advisor?: {
+    ticks: number;
+    cost_usd: number;
+    last_at: string | null;
+    by_kind: Array<{ kind: string; ticks: number; cost_usd: number }>;
+  };
   pending_sessions: string[];
 };
 

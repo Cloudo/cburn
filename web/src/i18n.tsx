@@ -162,6 +162,10 @@ const DICT: Record<string, [string, string]> = {
     "{turns} turns, {sessions} sessions, {projects} projects in the database",
   ],
 
+  "today.advisor": [
+    "советчик обошёлся в {cost} за {ticks} разбор(а/ов) — {share}% дневного расхода",
+    "the advisor cost {cost} over {ticks} run(s) — {share}% of today's spending",
+  ],
   "leaders.empty": ["сегодня ходов ещё не было", "no turns today yet"],
 
   "feed.time": ["время", "time"],

@@ -16,6 +16,7 @@ import {
   duration,
   grouped,
   modelLabel,
+  share as percent,
   sinceLabel,
   timestamp,
   toolLabel,
@@ -377,6 +378,7 @@ function GaugeWidget({ data, window }: { data: Overview; window: string }) {
 
 function TodayWidget({ data }: { data: Overview }) {
   const { t } = useLang();
+  const advisor = data.advisor;
   return (
     <>
       <dl className="today">
@@ -402,6 +404,17 @@ function TodayWidget({ data }: { data: Overview }) {
           <dd>{usd(data.today.cost_usd)}</dd>
         </div>
       </dl>
+      {/* Свой расход рядом с чужим: прибор, который стоит дороже того, что
+          экономит, — плохой прибор (задача C4). */}
+      {advisor !== undefined && advisor.ticks > 0 && (
+        <p className="hint">
+          {t("today.advisor", {
+            cost: usd(advisor.cost_usd),
+            ticks: advisor.ticks,
+            share: percent(advisor.cost_usd / (data.today.cost_usd || advisor.cost_usd)),
+          })}
+        </p>
+      )}
       <p className="hint">
         {t("today.totals", {
           turns: grouped(data.totals.turns),

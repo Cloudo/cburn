@@ -1156,3 +1156,27 @@ def test_plan_refresh_asks_limits_now(transcripts: Path, db_path: Path) -> None:
         assert response.status_code == 200
         assert response.json()["plan"] == limits.payload
         assert limits.refreshes == 1
+
+
+def test_overview_shows_what_the_advisor_costs(transcripts: Path, db_path: Path) -> None:
+    """Прибор, который стоит дороже того, что экономит, — плохой прибор: свой
+    расход виден в «Обзоре» рядом с чужим (задача C4)."""
+    conn = connect(db_path)
+    advice_run(conn, kind="hourly", cost=0.07)
+    advice_run(conn, kind="weekly", cost=0.31)
+    conn.close()
+
+    with client(db_path, transcripts) as api:
+        advisor = api.get("/api/overview").json()["advisor"]
+
+    assert advisor["ticks"] == 2
+    assert advisor["cost_usd"] == pytest.approx(0.38)
+    assert advisor["by_kind"][0] == {"kind": "weekly", "ticks": 1, "cost_usd": pytest.approx(0.31)}
+
+
+def test_overview_without_advisor_runs(transcripts: Path, db_path: Path) -> None:
+    """Пока разборов не было, строка в «Обзоре» не появляется вовсе."""
+    connect(db_path).close()
+    with client(db_path, transcripts) as api:
+        advisor = api.get("/api/overview").json()["advisor"]
+    assert advisor == {"ticks": 0, "cost_usd": 0, "last_at": None, "by_kind": []}

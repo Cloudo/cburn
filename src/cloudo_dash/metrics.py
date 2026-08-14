@@ -497,6 +497,31 @@ def project_filter(project: str | None, column: str = "session_id") -> tuple[str
     return clause, [f"%{project}%"]
 
 
+def advisor_cost(conn: sqlite3.Connection, since: datetime) -> dict:
+    """Во что обошёлся сам советчик за период (задача C4, ТЗ §10).
+
+    Прибор, который стоит дороже того, что он экономит, — плохой прибор,
+    поэтому собственный расход виден рядом с чужим. Такт на haiku стоит около
+    $0.07: почти всё это запись системного промпта Claude Code в кэш, и
+    подрезать её нечем (см. CLAUDE.md про `claude -p`).
+    """
+    row = conn.execute(
+        "SELECT COUNT(*) AS ticks, COALESCE(SUM(cost_usd), 0) AS cost_usd,"
+        "       MAX(ts) AS last_at"
+        "  FROM advice WHERE ts >= ?",
+        (_utc_stamp(since),),
+    ).fetchone()
+    by_kind = [
+        dict(item)
+        for item in conn.execute(
+            "SELECT kind, COUNT(*) AS ticks, COALESCE(SUM(cost_usd), 0) AS cost_usd"
+            "  FROM advice WHERE ts >= ? GROUP BY kind ORDER BY cost_usd DESC",
+            (_utc_stamp(since),),
+        )
+    ]
+    return dict(row) | {"by_kind": by_kind}
+
+
 def window_usage(
     conn: sqlite3.Connection,
     since: datetime,
@@ -1374,6 +1399,9 @@ def overview(
         "stamps": data_stamps(conn, moment),
         "pending_sessions": pending_sessions(conn, moment),
         "otel": otel if otel is not None else otel_state(conn, day_start),
+        # Свой расход рядом с чужим: советчик не должен съедать больше, чем
+        # экономит (задача C4).
+        "advisor": advisor_cost(conn, day_start),
         "series_bucket_seconds": SERIES_BUCKET_SECONDS,
         "totals": dict(totals),
     }
