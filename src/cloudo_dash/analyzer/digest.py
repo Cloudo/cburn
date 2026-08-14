@@ -215,13 +215,19 @@ def _mcp(conn: sqlite3.Connection, since: datetime, project: str | None) -> dict
         parts = row["tool"].removeprefix("mcp__").split("__")
         server = parts[0] if parts else row["tool"]
         servers[server] = servers.get(server, 0) + row["calls"]
-    return {
+    profile = {
         "servers": [
             {"server": name, "calls": calls}
             for name, calls in sorted(servers.items(), key=lambda item: -item[1])
         ],
         "calls": sum(servers.values()),
     }
+    # Сколько стоит сам факт подключения, знает только телеметрия: сервер
+    # стартует заново в каждой сессии, даже если его ни разу не позвали.
+    connections = metrics.otel_mcp(conn, since, project=project)
+    if connections["servers"]:
+        profile["connections"] = connections
+    return profile
 
 
 def _permissions(

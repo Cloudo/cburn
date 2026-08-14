@@ -670,6 +670,82 @@ def test_project_filter_narrows_telemetry(conn: Any) -> None:
     assert metrics.otel_permissions(conn, since, project="второй")["manual"] == 0
 
 
+def test_mcp_startup_cost_is_counted(conn: Any) -> None:
+    """Сервер стартует заново в каждой сессии, даже если его не позвали."""
+    otlp.ingest(
+        conn,
+        "logs",
+        logs_payload(
+            event(
+                "mcp_server_connection",
+                1,
+                status="connected",
+                duration_ms="1750",
+                transport_type="stdio",
+                **{"plugin.name": "playwright"},
+            ),
+            event(
+                "mcp_server_connection",
+                2,
+                status="connected",
+                duration_ms="2190",
+                **{"plugin.name": "chrome-devtools-mcp"},
+            ),
+            # Отключение несёт то же поле, но означает прожитое время: сложить
+            # его со временем подключения значило бы соврать вчетверо.
+            event(
+                "mcp_server_connection",
+                3,
+                status="disconnected",
+                duration_ms="66329",
+                **{"plugin.name": "playwright"},
+            ),
+            event(
+                "mcp_server_connection",
+                4,
+                status="failed",
+                duration_ms="120",
+                error_code="ENOENT",
+                **{"plugin.name": "сломанный"},
+            ),
+        ),
+    )
+    stats = metrics.otel_mcp(conn, datetime(2026, 8, 14, tzinfo=UTC))
+    assert stats["connect_seconds"] == pytest.approx(3.94)
+    assert stats["seconds_per_session"] == pytest.approx(3.94)  # все события одной сессии
+    assert stats["failures"] == 1
+    assert stats["servers"][0] == {
+        "server": "chrome-devtools-mcp",
+        "connects": 1,
+        "failures": 0,
+        "seconds": 2.19,
+    }
+
+
+def test_digest_carries_mcp_startup_cost(conn: Any) -> None:
+    otlp.ingest(
+        conn,
+        "logs",
+        logs_payload(
+            event(
+                "mcp_server_connection",
+                1,
+                status="connected",
+                duration_ms="1750",
+                **{"plugin.name": "playwright"},
+            )
+        ),
+    )
+    built = digest.build(conn, datetime(2026, 8, 14, tzinfo=UTC))["mcp"]
+    assert built["connections"]["connect_seconds"] == pytest.approx(1.75)
+    assert built["connections"]["servers"][0]["server"] == "playwright"
+
+
+def test_digest_omits_mcp_connections_without_telemetry(conn: Any) -> None:
+    """Без телеметрии раздела нет вовсе — пустой список читался бы как «серверов нет»."""
+    assert "connections" not in digest.build(conn, datetime(2026, 8, 14, tzinfo=UTC))["mcp"]
+
+
 def test_work_done_is_counted_from_metrics(conn: Any) -> None:
     """Строки кода и активное время считает сам Claude Code — в истории их нет."""
     lines = "claude_code.lines_of_code.count"

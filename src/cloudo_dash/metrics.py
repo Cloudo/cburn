@@ -997,6 +997,72 @@ def otel_errors(conn: sqlite3.Connection, since: datetime) -> dict:
     return {"errors": sum(row["errors"] for row in rows), "by_status": rows}
 
 
+def otel_mcp(
+    conn: sqlite3.Connection,
+    since: datetime,
+    until: datetime | None = None,
+    project: str | None = None,
+) -> dict:
+    """Во что обходятся MCP-серверы на старте сессии (веха E).
+
+    Событие `mcp_server_connection` знает время подключения и его исход, а
+    транскрипт — только вызовы инструментов. Сервер, который подключается
+    секунды при каждом запуске и ни разу не пригодился, виден только так.
+    Имя приходит из `server_name` (при `OTEL_LOG_TOOL_DETAILS=1`) или из
+    `plugin.name` у серверов от плагинов.
+    """
+    clause = "ts >= ?"
+    params: list[Any] = [_utc_stamp(since)]
+    if until is not None:
+        clause += " AND ts < ?"
+        params.append(_utc_stamp(until))
+    project_clause, project_params = project_filter(project)
+    clause += project_clause
+    params += project_params
+    rows = [
+        dict(row)
+        for row in conn.execute(
+            # Ключ с точкой внутри имени: без кавычек путь читался бы как
+            # вложенный объект `plugin` с полем `name`.
+            f"SELECT COALESCE(json_extract(attrs, '$.server_name'),"
+            f"                json_extract(attrs, '$.\"plugin.name\"'), '—') AS server,"
+            f"       json_extract(attrs, '$.status')                      AS status,"
+            f"       COUNT(*)                                             AS events,"
+            f"       COUNT(DISTINCT session_id)                           AS sessions,"
+            f"       SUM(CAST(json_extract(attrs, '$.duration_ms') AS REAL)) / 1000.0 AS seconds"
+            f"  FROM otel_events WHERE name = 'mcp_server_connection' AND {clause}"  # noqa: S608
+            f" GROUP BY server, status",
+            params,
+        )
+    ]
+    servers: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        entry = servers.setdefault(
+            row["server"], {"server": row["server"], "connects": 0, "failures": 0, "seconds": 0.0}
+        )
+        if row["status"] == "connected":
+            entry["connects"] += row["events"]
+            # Время подключения; у `disconnected` та же величина означает
+            # прожитое соединение, и складывать их вместе нельзя.
+            entry["seconds"] += row["seconds"] or 0.0
+        elif row["status"] == "failed":
+            entry["failures"] += row["events"]
+    sessions = conn.execute(
+        f"SELECT COUNT(DISTINCT session_id) FROM otel_events"
+        f" WHERE name = 'mcp_server_connection' AND {clause}",  # noqa: S608
+        params,
+    ).fetchone()[0]
+    total = sum(entry["seconds"] for entry in servers.values())
+    return {
+        "servers": sorted(servers.values(), key=lambda item: -item["seconds"]),
+        "connect_seconds": total,
+        # Во что подключение обходится одному запуску: серверы стартуют заново
+        # в каждой сессии, и суммарная цифра без этого мало что говорит.
+        "seconds_per_session": total / sessions if sessions else 0.0,
+        "failures": sum(entry["failures"] for entry in servers.values()),
+    }
+
+
 def otel_work(conn: sqlite3.Connection, since: datetime) -> dict:
     """Что получилось за расход: строки кода и активное время (веха E).
 
