@@ -770,12 +770,15 @@ def test_overview_reuses_the_telemetry_slice(client: TestClient) -> None:
     """Обзор уходит подписчикам каждую секунду, а срез телеметрии считается по
     десяткам тысяч событий — пересчитывать его на каждый тик незачем."""
     client.post("/otlp/v1/logs", json=logs_payload(event("api_request", 1)))
-    first = client.get("/api/overview").json()["otel"]
-    assert first["active"] is True
 
-    # Новое событие в ту же секунду ещё не видно: срез свежий.
-    client.post("/otlp/v1/logs", json=logs_payload(event("api_error", 2, status_code="429")))
-    assert client.get("/api/overview").json()["otel"]["api"]["errors"] == 0
+    # Срок жизни задаётся явно: на настоящие пять секунд полагаться нельзя —
+    # под нагрузкой полного прогона запросы расходятся дальше, и «свежий»
+    # срез успевает протухнуть между двумя строчками теста.
+    with mock.patch.object(server, "OTEL_CACHE_SECONDS", 3600):
+        assert client.get("/api/overview").json()["otel"]["active"] is True
+        # Новое событие в готовый срез уже не попадает: он ещё свежий.
+        client.post("/otlp/v1/logs", json=logs_payload(event("api_error", 2, status_code="429")))
+        assert client.get("/api/overview").json()["otel"]["api"]["errors"] == 0
 
     with mock.patch.object(server, "OTEL_CACHE_SECONDS", 0):
         assert client.get("/api/overview").json()["otel"]["api"]["errors"] == 1
