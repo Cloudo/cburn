@@ -300,7 +300,17 @@ def test_watcher_stops_with_app(transcripts: Path, db_path: Path) -> None:
     before = {thread.name for thread in threading.enumerate()}
     with client(db_path, transcripts, watch=True) as api:
         api.get("/api/health")
-    time.sleep(0.3)
+
+    # Ждём завершения потока, а не спим фиксированную долю секунды: на
+    # загруженной машине планировщик даёт ему очередь не сразу, и жёсткая
+    # пауза превращает тест в лотерею.
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        alive = {thread.name for thread in threading.enumerate()} - before
+        if "cdash-watcher" not in alive:
+            break
+        time.sleep(0.05)
+
     after = {thread.name for thread in threading.enumerate()}
     assert "cdash-watcher" not in after - before
 
