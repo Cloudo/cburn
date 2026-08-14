@@ -169,3 +169,45 @@ def test_digest_text_mentions_cost_and_titles() -> None:
     )
     assert "$0.07" in text
     assert "Закрыть линию работы" in text
+
+
+# --- пауза через API ---------------------------------------------------------
+
+
+def test_pause_endpoint_holds_and_releases(tmp_path: Path) -> None:
+    """Кнопка в трее и в окне зовёт один и тот же эндпоинт (задача D5)."""
+    from fastapi.testclient import TestClient
+
+    from cloudo_dash.api.server import create_app
+
+    db_path = tmp_path / "api.db"
+    connect(db_path).close()
+    app = create_app(db_path=db_path, projects_dir=tmp_path, watch=False, liveness=lambda: None)
+    client = TestClient(app)
+
+    assert client.get("/api/notify").json()["paused_until"] is None
+
+    until = client.post("/api/notify/pause").json()["paused_until"]
+    assert until is not None
+    assert client.get("/api/notify").json()["paused_until"] == until
+
+    assert client.post("/api/notify/pause?on=false").json()["paused_until"] is None
+    assert client.get("/api/notify").json()["paused_until"] is None
+
+
+def test_notify_state_shows_what_was_sent(tmp_path: Path) -> None:
+    from fastapi.testclient import TestClient
+
+    from cloudo_dash.api.server import create_app
+
+    db_path = tmp_path / "api.db"
+    conn = connect(db_path)
+    channel = Sent()
+    with mock.patch.object(notifier, "Channel", return_value=channel):
+        notifier.dispatch(conn, [rules.Message("daily", "итог дня")], {})
+    conn.close()
+
+    app = create_app(db_path=db_path, projects_dir=tmp_path, watch=False, liveness=lambda: None)
+    state = TestClient(app).get("/api/notify").json()
+    assert state["recent"][0]["kind"] == "daily"
+    assert state["recent"][0]["ok"] == 1

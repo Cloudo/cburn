@@ -166,9 +166,18 @@ fn on_menu<R: Runtime>(
         }
         "pause" => {
             let quiet = state.is_quiet();
-            state
-                .quiet_until
-                .store(if quiet { 0 } else { unix_now() + PAUSE.as_secs() as i64 }, Ordering::Relaxed);
+            state.quiet_until.store(
+                if quiet { 0 } else { unix_now() + PAUSE.as_secs() as i64 },
+                Ordering::Relaxed,
+            );
+            // Та же пауза уходит и на сервер: она гасит не только красную точку
+            // в меню-баре, но и сообщения в telegram (D5).
+            let _ = ureq::post(&format!(
+                "{DASHBOARD}/api/notify/pause?on={}",
+                if quiet { "false" } else { "true" }
+            ))
+            .timeout(Duration::from_secs(3))
+            .call();
             let _ = items.pause.set_text(if quiet {
                 "пауза на 2 часа"
             } else {

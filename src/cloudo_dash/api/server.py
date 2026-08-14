@@ -26,7 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import JSONResponse, Response
 from starlette.types import Scope
 
-from .. import config, paths, pricing
+from .. import config, notifier, paths, pricing
 from ..analyzer import scheduler
 from ..collector import otlp
 from ..collector.indexer import IngestStats
@@ -203,6 +203,41 @@ def create_app(
     @app.get("/api/overview")
     async def api_overview() -> dict[str, Any]:
         return await collect_overview()
+
+    @app.get("/api/notify")
+    async def api_notify_state() -> dict[str, Any]:
+        """Состояние уведомлений: стоит ли пауза и что уходило последним (D5)."""
+        conn = open_db()
+        try:
+            until = notifier.paused_until(conn)
+            recent = [
+                dict(row)
+                for row in conn.execute(
+                    "SELECT ts, kind, severity, channel, ok FROM notifications"
+                    " ORDER BY ts DESC LIMIT 10"
+                )
+            ]
+            return {
+                "mode": (config.load().get("telegram") or {}).get("mode"),
+                "paused_until": until.isoformat() if until else None,
+                "recent": recent,
+            }
+        finally:
+            conn.close()
+
+    @app.post("/api/notify/pause")
+    async def api_notify_pause(on: bool = True) -> dict[str, Any]:
+        """Тишина на два часа или снятие паузы (пункт трея и кнопка в UI).
+
+        `crit` сквозь паузу всё равно проходит — решает `notifier.dispatch`.
+        """
+        conn = connect(db_path, apply_schema=False)
+        try:
+            until = notifier.pause_until() if on else None
+            notifier.set_pause(conn, until)
+        finally:
+            conn.close()
+        return {"paused_until": until.isoformat() if until else None}
 
     @app.get("/api/advice")
     async def api_advice(limit: int = 20) -> dict[str, Any]:
