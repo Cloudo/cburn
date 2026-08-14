@@ -255,7 +255,7 @@ def _off_transcript(
     занижены.
     """
     usage = metrics.otel_usage(conn, since, until, project)
-    work = metrics.otel_work(conn, since)
+    work = metrics.otel_work(conn, since, until, project)
     prompts = metrics.otel_prompts(conn, since, until, project)
     if not any((usage["tokens"], usage["cost_usd"], work["active_seconds"], prompts["prompts"])):
         return {"available": False, "note": "телеметрия OTel не включена — данных нет"}

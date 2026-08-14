@@ -1158,22 +1158,35 @@ def otel_sessions(conn: sqlite3.Connection, since: datetime) -> dict:
     }
 
 
-def otel_work(conn: sqlite3.Connection, since: datetime) -> dict:
+def otel_work(
+    conn: sqlite3.Connection,
+    since: datetime,
+    until: datetime | None = None,
+    project: str | None = None,
+) -> dict:
     """Что получилось за расход: строки кода и активное время (веха E).
 
     Обе величины считает сам Claude Code, и в транскриптах их нет: строки —
     результат правок, а активное время исключает паузы, поэтому оно короче
     промежутка между первым и последним ходом.
     """
+    clause = "ts >= ?"
+    params: list[Any] = [_utc_stamp(since)]
+    if until is not None:
+        clause += " AND ts < ?"
+        params.append(_utc_stamp(until))
+    project_clause, project_params = project_filter(project)
+    clause += project_clause
+    params += project_params
     rows = {
         (row["name"], row["kind"]): row["value"]
         for row in conn.execute(
-            "SELECT name, kind, COALESCE(SUM(value), 0) AS value FROM otel_metrics"
-            " WHERE ts >= ? AND name IN ('claude_code.lines_of_code.count',"
-            "                            'claude_code.active_time.total',"
-            "                            'claude_code.commit.count')"
-            " GROUP BY name, kind",
-            (_utc_stamp(since),),
+            f"SELECT name, kind, COALESCE(SUM(value), 0) AS value FROM otel_metrics"
+            f" WHERE {clause} AND name IN ('claude_code.lines_of_code.count',"  # noqa: S608
+            f"                             'claude_code.active_time.total',"
+            f"                             'claude_code.commit.count')"
+            f" GROUP BY name, kind",
+            params,
         )
     }
     lines = "claude_code.lines_of_code.count"

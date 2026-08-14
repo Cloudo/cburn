@@ -780,6 +780,18 @@ def test_project_filter_narrows_telemetry(conn: Any) -> None:
     assert metrics.otel_permissions(conn, since, project="первый")["manual"] == 1
     assert metrics.otel_permissions(conn, since, project="второй")["manual"] == 0
 
+    # Дайджест по проекту не должен смешивать в одной секции свои цифры с
+    # общемашинными: активное время фильтруется так же, как расход.
+    otlp.ingest(
+        conn,
+        "metrics",
+        metrics_payload(point(90, type="user"), name="claude_code.active_time.total"),
+    )
+    assert metrics.otel_work(conn, since, project="первый")["active_seconds"] == 90
+    assert metrics.otel_work(conn, since, project="второй")["active_seconds"] == 0
+    built = digest.build(conn, since, project="второй")["off_transcript"]
+    assert built["available"] is False
+
 
 def test_mcp_startup_cost_is_counted(conn: Any) -> None:
     """Сервер стартует заново в каждой сессии, даже если его не позвали."""
