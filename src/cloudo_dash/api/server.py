@@ -512,8 +512,10 @@ def _prune_once(open_db: Any, keep_days: int) -> dict[str, int]:
 async def _prune_otel(open_db: Any) -> None:
     """Чистка телеметрии по сроку хранения: сразу и дальше раз в сутки."""
     while True:
-        keep_days = int((config.load().get("otel") or {}).get("keep_days") or 0)
         try:
+            # Чтение конфига тоже внутри: файл правят руками, и опечатка в
+            # `keep_days` не должна тихо убивать фоновую задачу навсегда.
+            keep_days = int((config.load().get("otel") or {}).get("keep_days") or 0)
             await asyncio.to_thread(_prune_once, open_db, keep_days)
         except asyncio.CancelledError:
             raise

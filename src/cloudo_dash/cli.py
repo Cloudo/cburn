@@ -230,6 +230,13 @@ def _otel(show_env: bool, show_settings: bool, port: int | None, prune: bool = F
             f"{signal:8}: посылок {row['batches']}, записей {row['stored']}, "
             f"потеряно {row['dropped']}, последняя {row['last_at']}"
         )
+    # Посылки идут, а записей нет — почти всегда это чужая кодировка: приёмник
+    # читает только `http/json`, а `http/protobuf` разобрать нечем.
+    if state["signals"] and not any(row["stored"] for row in state["signals"].values()):
+        print(
+            "посылки приходят, но не разобраны — проверьте"
+            " OTEL_EXPORTER_OTLP_PROTOCOL=http/json (`cdash otel --env`)"
+        )
     for row in state["metrics"]:
         print(f"  {row['name']:34} точек {row['points']:6}  сумма {row['total']:,.2f}")
     for row in state["events"]:

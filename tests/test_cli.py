@@ -344,6 +344,20 @@ def test_stats_stays_silent_without_telemetry(
     assert "разрешения" not in out
 
 
+def test_otel_status_hints_at_wrong_protocol(
+    project: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Посылки идут, записей нет — почти всегда это `http/protobuf`."""
+    from cloudo_dash.collector import otlp
+
+    with connect() as conn:
+        otlp.note_ingest(conn, "metrics", stored=0, dropped=1)
+    assert cli.main(["otel"]) == 0
+    out = capsys.readouterr().out
+    assert "посылки приходят, но не разобраны" in out
+    assert "http/json" in out
+
+
 def test_otel_prune_removes_old_records(project: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """Срок хранения применяется и руками: события копятся быстрее ходов."""
     from cloudo_dash.collector import otlp
