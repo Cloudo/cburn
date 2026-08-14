@@ -435,6 +435,13 @@ rate в токенах почти не реагирует на работу мо
   репозитории: `POST /notify` с `hookToken`, тело `{text, severity, silent}`,
   отправка в тему MAIN; правки в `src/http/server.ts` и `src/http/router.ts`,
   запись в README бриджа.
+  Разведано по телеметрии (веха E) перед тем, как браться: бридж держит хуки
+  Claude Code по 16-35 секунд. У `Stop` и `PermissionRequest` это заложено —
+  `createPending` ждёт ответа из Telegram до `waitTimeoutSec` (540 с), в этом и
+  смысл. А вот `UserPromptSubmit` ждёт зря: там `ensureSession` создаёт тему и
+  правит живое сообщение, то есть Claude Code стоит, пока бридж ходит в Bot
+  API. Этот путь стоит сделать фоновым — хук может отвечать `{}` сразу.
+  Для сравнения: `PreToolUse` и `PostToolUse` укладываются в 6-7 мс.
 - [ ] **D5. Notifier** (`notifier/`): три типа сообщений (часовой дайджест только
   при severity ≥ warn, дневная сводка в 21:00, мгновенные алерты), cooldown
   30 мин на сессию, глобальная пауза на 2 часа кроме crit. Каналы: bridge
