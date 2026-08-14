@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from .. import metrics
+from .. import metrics, notifier
 from . import advisor, digest
 
 log = logging.getLogger(__name__)
@@ -96,6 +96,11 @@ def run_tick(
     payload = digest.build(conn, tick.since, config=config)
     result = advisor.advise(conn, payload, model=tick.model, runner=runner, kind=tick.kind)
     result["kind"] = tick.kind
+    # Разбор нашёл что-то важное — человек узнает об этом в телеграме, а не
+    # когда сам откроет экран «Советы» (задача D5).
+    message = notifier.digest_if_worth(result, result.get("advice") or [])
+    if message is not None:
+        notifier.dispatch(conn, [message], config)
     log.info(
         "такт %s: советов %s, стоил $%.4f",
         tick.kind,
@@ -125,9 +130,18 @@ async def loop(
         config = load_config()
         conn = open_db()
         try:
-            tick = plan_tick(conn, datetime.now(UTC), config, started_at=started_at)
+            now = datetime.now(UTC)
+            tick = plan_tick(conn, now, config, started_at=started_at)
             if tick is not None:
                 run_tick(conn, config, tick, runner=runner)
+            # Уведомления живут на том же такте: цикл и так тикает раз в
+            # минуту, а заводить второй ради двух проверок незачем (D5).
+            messages = notifier.alerts_for(conn, metrics.overview(conn, now), config, now=now)
+            daily = notifier.daily_if_due(conn, config, now=now)
+            if daily is not None:
+                messages.append(daily)
+            if messages:
+                notifier.dispatch(conn, messages, config, now=now)
         finally:
             conn.close()
 

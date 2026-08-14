@@ -212,3 +212,27 @@ CREATE TABLE IF NOT EXISTS otel_ingest (
     stored  INTEGER NOT NULL DEFAULT 0,
     dropped INTEGER NOT NULL DEFAULT 0
 );
+
+-- Что уже отправлено в telegram (задача D5). Нужна не история ради истории,
+-- а память: по ней считается cooldown, чтобы одна и та же сессия не будила
+-- каждую минуту, и видно, что дневная сводка за сегодня уже ушла.
+CREATE TABLE IF NOT EXISTS notifications (
+    id       INTEGER PRIMARY KEY,
+    ts       TEXT NOT NULL,
+    kind     TEXT NOT NULL,   -- digest | daily | alert
+    key      TEXT,            -- сессия для алерта, дата для сводки
+    severity TEXT NOT NULL DEFAULT 'info',  -- info | warn | crit
+    channel  TEXT,            -- bridge | bot
+    text     TEXT,
+    ok       INTEGER NOT NULL DEFAULT 1     -- 0, если отправить не удалось
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_kind ON notifications(kind, ts);
+CREATE INDEX IF NOT EXISTS idx_notifications_key  ON notifications(key, ts);
+
+-- Мелкое состояние уведомлений: до какого момента стоит глобальная пауза.
+-- Отдельная таблица, а не поле в конфиге: пауза ставится кнопкой и живёт
+-- часами, а конфиг человек правит руками и перечитывает при каждом запросе.
+CREATE TABLE IF NOT EXISTS notifier_state (
+    key   TEXT PRIMARY KEY,
+    value TEXT
+);
