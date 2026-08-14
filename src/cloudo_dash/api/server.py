@@ -395,7 +395,12 @@ def create_app(
         try:
             payload = otlp.decode(body, request.headers.get("content-encoding"))
         except Exception:
+            # Обычно это `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`: посылки
+            # идут, а мы их не понимаем. Молча их проглотить нельзя — тогда
+            # `cdash otel` скажет «посылок не было», и человек будет искать
+            # проблему не там. Отметка в счётчике потерь показывает правду.
             log.warning("посылка OTLP (%s) не разобрана: %s байт", signal, len(body))
+            await asyncio.to_thread(_note_undecodable, open_db, signal)
             return JSONResponse({})
 
         def write() -> dict[str, int]:
@@ -482,6 +487,17 @@ async def _liveness(open_db: Any, probe: LivenessProbe) -> None:
 #: Как часто убирать устаревшую телеметрию. Реже суток смысла нет: срок
 #: хранения считается в сутках, а удаление стоит доли секунды.
 PRUNE_SECONDS = 24 * 3600
+
+
+def _note_undecodable(open_db: Any, signal: str) -> None:
+    """Отметить непонятую посылку в счётчиках приёма (веха E)."""
+    conn = open_db()
+    try:
+        otlp.note_ingest(conn, signal, stored=0, dropped=1)
+    except sqlite3.OperationalError as exc:  # база занята — отметка не стоит повтора
+        log.warning("отметка о непонятой посылке не записана: %s", exc)
+    finally:
+        conn.close()
 
 
 def _prune_once(open_db: Any, keep_days: int) -> dict[str, int]:

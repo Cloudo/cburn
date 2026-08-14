@@ -384,6 +384,22 @@ def test_broken_body_is_acknowledged(client: TestClient) -> None:
     assert stored_metrics(client) == 0
 
 
+def test_undecodable_batches_are_visible_in_status(client: TestClient) -> None:
+    """Если выставить protocol=http/protobuf, посылки пойдут, а мы их не поймём.
+
+    Статус обязан это показать: «посылок не было» отправило бы человека искать
+    проблему не там.
+    """
+    client.post("/otlp/v1/metrics", content=b"\x00\x01protobuf")
+    state = client.get("/api/otel").json()
+    assert state["signals"]["metrics"] == {
+        "last_at": state["signals"]["metrics"]["last_at"],
+        "batches": 1,
+        "stored": 0,
+        "dropped": 1,
+    }
+
+
 def test_disabled_receiver_stores_nothing(client: TestClient) -> None:
     cfg = config.load()
     cfg["otel"]["enabled"] = False
