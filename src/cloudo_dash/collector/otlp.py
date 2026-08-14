@@ -376,7 +376,7 @@ def _resource_attrs(resource: Any) -> dict[str, Any]:
     return _attributes(body.get("attributes"))
 
 
-def _attributes(items: Any, *, keep_all: bool = False) -> dict[str, Any]:
+def _attributes(items: Any) -> dict[str, Any]:
     attrs: dict[str, Any] = {}
     if not isinstance(items, list):
         return attrs
@@ -384,7 +384,7 @@ def _attributes(items: Any, *, keep_all: bool = False) -> dict[str, Any]:
         if not isinstance(item, dict) or not isinstance(item.get("key"), str):
             continue
         key = item["key"]
-        if keep_all or key not in SKIPPED_ATTRS:
+        if key not in SKIPPED_ATTRS:
             attrs[key] = _any_value(item.get("value"))
     return attrs
 
@@ -411,7 +411,9 @@ def _any_value(value: Any) -> Any:
         if field in value:
             inner = value[field]
             values = inner.get("values") if isinstance(inner, dict) else None
-            return _attributes(values, keep_all=True)
+            # Вложенный список пар разбирается тем же правилом: содержимое
+            # работы не должно просочиться в БД через kvlist.
+            return _attributes(values)
     return None
 
 

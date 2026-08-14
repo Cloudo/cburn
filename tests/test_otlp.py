@@ -168,6 +168,28 @@ def test_conversation_text_is_never_stored(conn: Any) -> None:
     assert "Bash" in stored
 
 
+def test_nested_values_are_filtered_too(conn: Any) -> None:
+    """Содержимое не должно просочиться через вложенный список пар."""
+    record = event("tool_result", 1, tool_name="Bash")
+    record["attributes"].append(
+        {
+            "key": "details",
+            "value": {
+                "kvlistValue": {
+                    "values": [
+                        {"key": "response", "value": {"stringValue": "текст ответа"}},
+                        {"key": "duration_ms", "value": {"stringValue": "968"}},
+                    ]
+                }
+            },
+        }
+    )
+    otlp.ingest(conn, "logs", logs_payload(record))
+    stored = conn.execute("SELECT attrs FROM otel_events").fetchone()[0]
+    assert "текст ответа" not in stored
+    assert "968" in stored
+
+
 def test_repeated_batch_does_not_double_the_numbers(conn: Any) -> None:
     """Экспортёр повторяет неподтверждённую посылку — цифры от этого не растут."""
     payload = metrics_payload(point(1200, type="input"))
