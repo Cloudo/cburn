@@ -965,6 +965,17 @@ def otel_permissions(
             manual_total += row["decisions"]
             tool = row["tool"] or "—"
             manual[tool] = manual.get(tool, 0) + row["decisions"]
+    # Переключения режима — та же тема с другой стороны: если человек раз за
+    # разом уходит в acceptEdits, значит правила разрешений ему мешают.
+    modes = [
+        dict(row)
+        for row in conn.execute(
+            f"SELECT json_extract(attrs, '$.to_mode') AS mode, COUNT(*) AS switches"
+            f"  FROM otel_events WHERE name = 'permission_mode_changed' AND {clause}"  # noqa: S608
+            f" GROUP BY mode ORDER BY switches DESC",
+            params,
+        )
+    ]
     return {
         "decisions": total,
         "manual": manual_total,
@@ -974,6 +985,7 @@ def otel_permissions(
             {"tool": tool, "decisions": count}
             for tool, count in sorted(manual.items(), key=lambda item: -item[1])[:limit]
         ],
+        "mode_switches": modes,
     }
 
 

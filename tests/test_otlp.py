@@ -561,6 +561,22 @@ def test_permission_decisions_are_split_by_source(conn: Any) -> None:
     assert stats["by_tool"][0] == {"tool": "Bash", "decisions": 2}
 
 
+def test_permission_mode_switches_are_counted(conn: Any) -> None:
+    """Уход в acceptEdits раз за разом значит, что правила разрешений мешают."""
+    otlp.ingest(
+        conn,
+        "logs",
+        logs_payload(
+            event("permission_mode_changed", 1, from_mode="default", to_mode="acceptEdits"),
+            event("permission_mode_changed", 2, from_mode="acceptEdits", to_mode="default"),
+            event("permission_mode_changed", 3, from_mode="default", to_mode="acceptEdits"),
+        ),
+    )
+    stats = metrics.otel_permissions(conn, datetime(2026, 8, 14, tzinfo=UTC))
+    assert stats["mode_switches"][0] == {"mode": "acceptEdits", "switches": 2}
+    assert stats["decisions"] == 0  # переключение режима — не решение по инструменту
+
+
 def test_permission_breakdown_has_a_tail_limit(conn: Any) -> None:
     """MCP-инструментов на машине бывают десятки: хвост ест бюджет дайджеста."""
     otlp.ingest(
@@ -627,6 +643,7 @@ def test_digest_carries_permissions_when_telemetry_works(conn: Any) -> None:
         "auto": 0,
         "rejected": 0,
         "by_tool": [{"tool": "Bash", "decisions": 1}],
+        "mode_switches": [],
     }
 
 
