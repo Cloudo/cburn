@@ -1184,6 +1184,47 @@ def otel_hooks(
     }
 
 
+def otel_plugins(
+    conn: sqlite3.Connection,
+    since: datetime,
+    until: datetime | None = None,
+    project: str | None = None,
+) -> list[dict]:
+    """Плагины, которые грузятся в каждую сессию (веха E).
+
+    Плагин сам по себе бесплатен, а вот что он приносит — нет: MCP-сервер
+    подключается секунды при каждом запуске, скиллы и команды занимают место
+    в контексте. В транскрипте следов загрузки нет вовсе.
+    """
+    clause = "ts >= ?"
+    params: list[Any] = [_utc_stamp(since)]
+    if until is not None:
+        clause += " AND ts < ?"
+        params.append(_utc_stamp(until))
+    project_clause, project_params = project_filter(project)
+    clause += project_clause
+    params += project_params
+    return [
+        dict(row)
+        for row in conn.execute(
+            f"SELECT COALESCE(json_extract(attrs, '$.\"plugin.name\"'), '—') AS plugin,"
+            # Признака может не быть вовсе: без COALESCE MAX(NULL) даёт NULL,
+            # и «нет хуков» стало бы неотличимо от «неизвестно».
+            f"       COALESCE(MAX(json_extract(attrs, '$.has_mcp') IN (1, 'true')), 0)"
+            f"         AS mcp,"
+            f"       COALESCE(MAX(json_extract(attrs, '$.has_hooks') IN (1, 'true')), 0)"
+            f"         AS hooks,"
+            f"       MAX(COALESCE(CAST(json_extract(attrs,"
+            f"                         '$.skill_path_count') AS INTEGER), 0)) AS skills,"
+            f"       MAX(COALESCE(CAST(json_extract(attrs,"
+            f"                         '$.command_path_count') AS INTEGER), 0)) AS commands"
+            f"  FROM otel_events WHERE name = 'plugin_loaded' AND {clause}"  # noqa: S608
+            f" GROUP BY plugin ORDER BY plugin",
+            params,
+        )
+    ]
+
+
 def otel_sessions(conn: sqlite3.Connection, since: datetime) -> dict:
     """Сессии глазами телеметрии и глазами парсера (веха E).
 

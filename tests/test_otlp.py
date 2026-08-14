@@ -902,6 +902,34 @@ def test_digest_carries_mcp_startup_cost(conn: Any) -> None:
     assert built["connections"]["servers"][0]["server"] == "playwright"
 
 
+def test_loaded_plugins_show_what_they_bring(conn: Any) -> None:
+    """Плагин бесплатен, а его MCP-сервер и скиллы — нет: они грузятся всегда."""
+    otlp.ingest(
+        conn,
+        "logs",
+        logs_payload(
+            event("plugin_loaded", 1, has_mcp="true", skill_path_count=0, **{"plugin.name": "pw"}),
+            # Тот же плагин в другой сессии — в списке он остаётся одной строкой.
+            event("plugin_loaded", 2, has_mcp="true", skill_path_count=0, **{"plugin.name": "pw"}),
+            event(
+                "plugin_loaded",
+                3,
+                has_mcp="false",
+                skill_path_count=1,
+                command_path_count=2,
+                **{"plugin.name": "design"},
+            ),
+        ),
+    )
+    plugins = metrics.otel_plugins(conn, datetime(2026, 8, 14, tzinfo=UTC))
+    assert [row["plugin"] for row in plugins] == ["design", "pw"]
+    assert plugins[0] == {"plugin": "design", "mcp": 0, "hooks": 0, "skills": 1, "commands": 2}
+    assert plugins[1]["mcp"] == 1
+
+    built = digest.build(conn, datetime(2026, 8, 14, tzinfo=UTC))["mcp"]
+    assert [row["plugin"] for row in built["plugins"]] == ["design", "pw"]
+
+
 def test_digest_omits_mcp_connections_without_telemetry(conn: Any) -> None:
     """Без телеметрии раздела нет вовсе — пустой список читался бы как «серверов нет»."""
     assert "connections" not in digest.build(conn, datetime(2026, 8, 14, tzinfo=UTC))["mcp"]

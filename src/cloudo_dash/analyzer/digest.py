@@ -227,6 +227,11 @@ def _mcp(conn: sqlite3.Connection, since: datetime, project: str | None) -> dict
     connections = metrics.otel_mcp(conn, since, project=project)
     if connections["servers"]:
         profile["connections"] = connections
+    # Откуда серверы берутся: плагин тянет за собой MCP, скиллы и команды,
+    # и всё это грузится в каждую сессию независимо от того, нужно ли оно.
+    plugins = metrics.otel_plugins(conn, since, project=project)
+    if plugins:
+        profile["plugins"] = plugins
     return profile
 
 
