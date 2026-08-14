@@ -936,6 +936,47 @@ def test_slash_commands_are_counted(conn: Any) -> None:
     assert built["prompts"]["commands"][0]["command"] == "clear"
 
 
+def test_hook_time_is_counted(conn: Any) -> None:
+    """Хук выполняется между ходами: в транскрипте на его месте просто пауза,
+    и HTTP-хук к недоступному сервису там неотличим от раздумий модели."""
+    otlp.ingest(
+        conn,
+        "logs",
+        logs_payload(
+            event(
+                "hook_execution_complete",
+                1,
+                hook_event="UserPromptSubmit",
+                total_duration_ms="15857",
+                num_success="1",
+            ),
+            event(
+                "hook_execution_complete",
+                2,
+                hook_event="Stop",
+                total_duration_ms="34513",
+                num_cancelled="1",
+            ),
+            event(
+                "hook_execution_complete",
+                3,
+                hook_event="PreToolUse",
+                total_duration_ms="6",
+            ),
+            # Начало выполнения времени ещё не знает — считать надо завершения.
+            event("hook_execution_start", 4, hook_event="Stop"),
+        ),
+    )
+    stats = metrics.otel_hooks(conn, datetime(2026, 8, 14, tzinfo=UTC))
+    assert stats["seconds"] == pytest.approx(50.376)
+    assert stats["failures"] == 1
+    assert stats["events"][0]["event"] == "Stop"
+    assert stats["events"][0]["slowest"] == pytest.approx(34.513)
+
+    built = digest.build(conn, datetime(2026, 8, 14, tzinfo=UTC))["off_transcript"]
+    assert built["hooks"]["events"][0]["event"] == "Stop"
+
+
 def test_session_starts_are_labelled(conn: Any) -> None:
     """`start_type` размечает запуски: транскрипт такой разметки не несёт,
     там продолжение видно только по копиям ходов."""

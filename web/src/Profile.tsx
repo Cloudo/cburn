@@ -90,6 +90,10 @@ export function Idle({ idle }: { idle: IdleTurns }) {
  *  Одно-два — обычная работа, а не признак того, что правила мешают. */
 const MODE_SWITCHES_WORTH_MENTIONING = 3;
 
+/** С какого времени хуки стоит показывать: быстрые укладываются в единицы
+ *  миллисекунд, и шум от них ни о чём не говорит. */
+const HOOK_SECONDS_WORTH_MENTIONING = 5;
+
 /** Телеметрия Claude Code: то, чего в транскриптах нет (веха E).
  *
  *  Служебные запросы модель делает сама (например, придумывает название
@@ -111,6 +115,7 @@ export function Telemetry({ otel }: { otel?: Otel }) {
   // Поля появились позже остальных: фронт мог обогнать запущенный сервер.
   const work = otel.work;
   const errors = otel.api?.errors ?? 0;
+  const hooks = otel.hooks;
   return (
     <div className="telemetry">
       <div className="telemetry-pair">
@@ -151,6 +156,18 @@ export function Telemetry({ otel }: { otel?: Otel }) {
           {t("otel.modes", {
             modes: (permissions.mode_switches ?? [])
               .map((row) => `${row.mode ?? "—"} ×${row.switches}`)
+              .join(", "),
+          })}
+        </p>
+      )}
+      {hooks && hooks.seconds >= HOOK_SECONDS_WORTH_MENTIONING && (
+        <p className="hint">
+          {t("otel.hooks", {
+            time: spent(hooks.seconds),
+            events: hooks.events
+              .filter((row) => (row.seconds ?? 0) > 0)
+              .slice(0, 3)
+              .map((row) => `${row.event} ${spent(row.seconds ?? 0)}`)
               .join(", "),
           })}
         </p>

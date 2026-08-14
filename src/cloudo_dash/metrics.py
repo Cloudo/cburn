@@ -1121,6 +1121,56 @@ def otel_prompts(
     }
 
 
+#: Сколько секунд суммарно должны отнять хуки, чтобы об этом стоило говорить.
+#: Быстрые хуки укладываются в единицы миллисекунд, и шум от них не нужен.
+HOOKS_WORTH_MENTIONING = 5.0
+
+
+def otel_hooks(
+    conn: sqlite3.Connection,
+    since: datetime,
+    until: datetime | None = None,
+    project: str | None = None,
+) -> dict:
+    """Сколько времени съедают хуки Claude Code (веха E).
+
+    Хук выполняется между ходами и в транскрипт не попадает вовсе: там между
+    промптом и ответом просто пауза. Между тем HTTP-хук, ждущий недоступный
+    сервис, отнимает десятки секунд на каждом промпте — и заметить это можно
+    только здесь.
+    """
+    clause = "ts >= ?"
+    params: list[Any] = [_utc_stamp(since)]
+    if until is not None:
+        clause += " AND ts < ?"
+        params.append(_utc_stamp(until))
+    project_clause, project_params = project_filter(project)
+    clause += project_clause
+    params += project_params
+    rows = [
+        dict(row)
+        for row in conn.execute(
+            f"SELECT COALESCE(json_extract(attrs, '$.hook_event'), '—') AS event,"
+            f"       COUNT(*) AS runs,"
+            f"       SUM(CAST(json_extract(attrs, '$.total_duration_ms') AS REAL)) / 1000.0"
+            f"         AS seconds,"
+            f"       MAX(CAST(json_extract(attrs, '$.total_duration_ms') AS REAL)) / 1000.0"
+            f"         AS slowest,"
+            f"       SUM(COALESCE(CAST(json_extract(attrs, '$.num_cancelled') AS INTEGER), 0)"
+            f"           + COALESCE(CAST(json_extract(attrs,"
+            f"                           '$.num_non_blocking_error') AS INTEGER), 0)) AS failures"
+            f"  FROM otel_events WHERE name = 'hook_execution_complete' AND {clause}"  # noqa: S608
+            f" GROUP BY event ORDER BY seconds DESC",
+            params,
+        )
+    ]
+    return {
+        "events": rows,
+        "seconds": sum(row["seconds"] or 0.0 for row in rows),
+        "failures": sum(row["failures"] or 0 for row in rows),
+    }
+
+
 def otel_sessions(conn: sqlite3.Connection, since: datetime) -> dict:
     """Сессии глазами телеметрии и глазами парсера (веха E).
 
@@ -1215,6 +1265,7 @@ def otel_state(conn: sqlite3.Connection, since: datetime) -> dict:
         "permissions": otel_permissions(conn, since),
         "api": otel_errors(conn, since),
         "work": otel_work(conn, since),
+        "hooks": otel_hooks(conn, since),
     }
 
 

@@ -164,6 +164,18 @@ export type Otel = {
   /** Неудавшиеся запросы к API: в транскрипт они не попадают вовсе.
    *  Необязательные — фронт могли собрать раньше, чем перезапустили сервер. */
   api?: { errors: number; by_status: Array<{ status: string; errors: number }> };
+  /** Время, съеденное хуками: в транскрипте от них остаётся только пауза. */
+  hooks?: {
+    seconds: number;
+    failures: number;
+    events: Array<{
+      event: string;
+      runs: number;
+      seconds: number | null;
+      slowest: number | null;
+      failures: number;
+    }>;
+  };
   /** Что получилось за расход: строки кода и активное время без пауз. */
   work?: {
     lines_added: number;

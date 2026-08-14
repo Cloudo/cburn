@@ -257,7 +257,16 @@ def _off_transcript(
     usage = metrics.otel_usage(conn, since, until, project)
     work = metrics.otel_work(conn, since, until, project)
     prompts = metrics.otel_prompts(conn, since, until, project)
-    if not any((usage["tokens"], usage["cost_usd"], work["active_seconds"], prompts["prompts"])):
+    hooks = metrics.otel_hooks(conn, since, until, project)
+    if not any(
+        (
+            usage["tokens"],
+            usage["cost_usd"],
+            work["active_seconds"],
+            prompts["prompts"],
+            hooks["seconds"],
+        )
+    ):
         return {"available": False, "note": "телеметрия OTel не включена — данных нет"}
     return {
         "available": True,
@@ -273,6 +282,10 @@ def _off_transcript(
         # Слэш-команды: в транскрипте от них остаются только блоки разметки,
         # а парсер их не разбирает — телеметрия называет команду прямо.
         "prompts": prompts,
+        # Хуки выполняются между ходами, и в транскрипте от них остаётся
+        # только пауза: HTTP-хук к недоступному сервису отнимает десятки
+        # секунд на каждом промпте, а по файлам истории это не отличить.
+        "hooks": hooks,
     }
 
 

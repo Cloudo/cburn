@@ -107,6 +107,10 @@ const DICT: Record<string, [string, string]> = {
     "Режим разрешений переключали: {modes}. Частые переходы значат, что правила мешают работе.",
     "Permission mode was switched: {modes}. Frequent switching means the rules get in the way.",
   ],
+  "otel.hooks": [
+    "Хуки отняли {time}: {events}. В файлах истории от них остаётся только пауза.",
+    "Hooks took {time}: {events}. The history files show only a pause instead.",
+  ],
   "otel.errors": [
     "Запросов к API сорвалось: {count} (коды {statuses}). В файлах истории их нет — там виден только тот ответ, который в итоге пришёл.",
     "Failed API requests: {count} (codes {statuses}). The history files don't show them — only the reply that eventually arrived.",
