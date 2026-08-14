@@ -107,7 +107,10 @@ export function Telemetry({ otel }: { otel?: Otel }) {
     );
   }
   const { off_transcript: extra, permissions } = otel;
-  const switches = permissions.mode_switches.reduce((sum, row) => sum + row.switches, 0);
+  const switches = (permissions.mode_switches ?? []).reduce((sum, row) => sum + row.switches, 0);
+  // Поля появились позже остальных: фронт мог обогнать запущенный сервер.
+  const work = otel.work;
+  const errors = otel.api?.errors ?? 0;
   return (
     <div className="telemetry">
       <div className="telemetry-pair">
@@ -129,15 +132,15 @@ export function Telemetry({ otel }: { otel?: Otel }) {
           </span>
         </div>
       </div>
-      {otel.work.active_seconds > 0 && (
+      {work && work.active_seconds > 0 && (
         <p className="telemetry-note">
-          {t("otel.work.time", { time: spent(otel.work.active_seconds) })}
-          {otel.work.lines_added + otel.work.lines_removed > 0 && (
+          {t("otel.work.time", { time: spent(work.active_seconds) })}
+          {work.lines_added + work.lines_removed > 0 && (
             <>
               {" "}
               {t("otel.work.lines", {
-                added: grouped(otel.work.lines_added),
-                removed: grouped(otel.work.lines_removed),
+                added: grouped(work.lines_added),
+                removed: grouped(work.lines_removed),
               })}
             </>
           )}
@@ -146,17 +149,17 @@ export function Telemetry({ otel }: { otel?: Otel }) {
       {switches >= MODE_SWITCHES_WORTH_MENTIONING && (
         <p className="telemetry-note">
           {t("otel.modes", {
-            modes: permissions.mode_switches
+            modes: (permissions.mode_switches ?? [])
               .map((row) => `${row.mode ?? "—"} ×${row.switches}`)
               .join(", "),
           })}
         </p>
       )}
-      {otel.api.errors > 0 && (
+      {errors > 0 && (
         <p className="hint">
           {t("otel.errors", {
-            count: otel.api.errors,
-            statuses: otel.api.by_status.map((row) => row.status).join(", "),
+            count: errors,
+            statuses: (otel.api?.by_status ?? []).map((row) => row.status).join(", "),
           })}
         </p>
       )}

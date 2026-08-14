@@ -157,13 +157,15 @@ export type Otel = {
     auto: number;
     rejected: number;
     by_tool: Array<{ tool: string; decisions: number }>;
-    /** Уход в другой режим разрешений — та же тема с другой стороны. */
-    mode_switches: Array<{ mode: string | null; switches: number }>;
+    /** Уход в другой режим разрешений — та же тема с другой стороны.
+     *  Тоже может не прийти: поле появилось позже остальных. */
+    mode_switches?: Array<{ mode: string | null; switches: number }>;
   };
-  /** Неудавшиеся запросы к API: в транскрипт они не попадают вовсе. */
-  api: { errors: number; by_status: Array<{ status: string; errors: number }> };
+  /** Неудавшиеся запросы к API: в транскрипт они не попадают вовсе.
+   *  Необязательные — фронт могли собрать раньше, чем перезапустили сервер. */
+  api?: { errors: number; by_status: Array<{ status: string; errors: number }> };
   /** Что получилось за расход: строки кода и активное время без пауз. */
-  work: {
+  work?: {
     lines_added: number;
     lines_removed: number;
     active_seconds: number;
