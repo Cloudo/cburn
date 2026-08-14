@@ -95,29 +95,34 @@ const DICT: Record<string, [string, string]> = {
     "Приём данных от Claude Code. Сама телеметрия включается его переменными окружения — их печатает команда cdash otel --env.",
     "Receiving data from Claude Code. Telemetry itself is switched on by its environment variables — run cdash otel --env to print them.",
   ],
-  "otel.work.time": [
-    "Работа шла {time} без учёта пауз.",
-    "Work ran for {time}, idle time excluded.",
+  "otel.work.time": ["работа {time} без пауз", "worked {time}, idle excluded"],
+  "otel.work.why": [
+    "Активное время считает сам Claude Code: паузы, когда никто ничего не делал, в него не входят.",
+    "Claude Code counts active time itself: idle stretches are excluded.",
   ],
-  "otel.work.lines": [
-    "Кода: +{added} / −{removed} строк.",
-    "Code: +{added} / −{removed} lines.",
+  "otel.work.lines": ["кода +{added} / −{removed}", "code +{added} / −{removed}"],
+  "otel.modes": ["режим разрешений менялся: {modes}", "permission mode switched: {modes}"],
+  "otel.modes.why": [
+    "Частые переходы в другой режим значат, что правила разрешений мешают работе.",
+    "Frequent mode switching means the permission rules get in the way.",
   ],
-  "otel.modes": [
-    "Режим разрешений переключали: {modes}. Частые переходы значат, что правила мешают работе.",
-    "Permission mode was switched: {modes}. Frequent switching means the rules get in the way.",
+  "otel.hooks": ["хуки отняли {time}: {events}", "hooks took {time}: {events}"],
+  "otel.hooks.why": [
+    "Хук выполняется между ходами, и в файлах истории на его месте остаётся только пауза — ожидание хука там не отличить от раздумий модели.",
+    "A hook runs between turns and the history files show only a pause — waiting on a hook is indistinguishable from the model thinking.",
   ],
-  "otel.hooks": [
-    "Хуки отняли {time}: {events}. В файлах истории от них остаётся только пауза.",
-    "Hooks took {time}: {events}. The history files show only a pause instead.",
-  ],
-  "otel.internal": [
-    "Claude Code споткнулся сам {count} раз: {errors}. Работа обрывается на середине, потраченные токены не вернуть.",
-    "Claude Code itself failed {count} times: {errors}. Work stops midway and the tokens spent are gone.",
+  "otel.internal": ["сбоев клиента: {count} ({errors})", "client failures: {count} ({errors})"],
+  "otel.internal.why": [
+    "Claude Code споткнулся сам: работа обрывается на середине, и потраченные на неё токены не вернуть.",
+    "Claude Code failed on its own: work stops midway and the tokens spent on it are gone.",
   ],
   "otel.errors": [
-    "Запросов к API сорвалось: {count} (коды {statuses}). В файлах истории их нет — там виден только тот ответ, который в итоге пришёл.",
-    "Failed API requests: {count} (codes {statuses}). The history files don't show them — only the reply that eventually arrived.",
+    "запросов сорвалось: {count} ({statuses})",
+    "failed requests: {count} ({statuses})",
+  ],
+  "otel.errors.why": [
+    "В файлах истории неудавшихся запросов нет — там виден только тот ответ, который в итоге пришёл, поэтому повторы после 429 и 529 незаметны.",
+    "The history files omit failed requests — only the reply that eventually arrived is there, so retries after 429 and 529 stay invisible.",
   ],
 
   "dash.widgets": ["виджеты", "widgets"],

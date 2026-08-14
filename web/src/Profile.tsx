@@ -138,57 +138,57 @@ export function Telemetry({ otel }: { otel?: Otel }) {
           </span>
         </div>
       </div>
-      {work && work.active_seconds > 0 && (
-        <p className="telemetry-note">
-          {t("otel.work.time", { time: spent(work.active_seconds) })}
-          {work.lines_added + work.lines_removed > 0 && (
-            <>
-              {" "}
-              {t("otel.work.lines", {
+      {/* Наблюдения — короткими строками: подробное объяснение уходит
+          в подсказку, иначе виджет не помещается на дашборде. */}
+      <ul className="telemetry-facts">
+        {work && work.active_seconds > 0 && (
+          <li title={t("otel.work.why")}>
+            {t("otel.work.time", { time: spent(work.active_seconds) })}
+            {work.lines_added + work.lines_removed > 0 &&
+              ` · ${t("otel.work.lines", {
                 added: grouped(work.lines_added),
                 removed: grouped(work.lines_removed),
-              })}
-            </>
-          )}
-        </p>
-      )}
-      {switches >= MODE_SWITCHES_WORTH_MENTIONING && (
-        <p className="telemetry-note">
-          {t("otel.modes", {
-            modes: (permissions.mode_switches ?? [])
-              .map((row) => `${row.mode ?? "—"} ×${row.switches}`)
-              .join(", "),
-          })}
-        </p>
-      )}
-      {hooks && hooks.seconds >= HOOK_SECONDS_WORTH_MENTIONING && (
-        <p className="hint">
-          {t("otel.hooks", {
-            time: spent(hooks.seconds),
-            events: hooks.events
-              .filter((row) => (row.seconds ?? 0) > 0)
-              .slice(0, 3)
-              .map((row) => `${row.event} ${spent(row.seconds ?? 0)}`)
-              .join(", "),
-          })}
-        </p>
-      )}
-      {errors > 0 && (
-        <p className="hint">
-          {t("otel.errors", {
-            count: errors,
-            statuses: (otel.api?.by_status ?? []).map((row) => row.status).join(", "),
-          })}
-        </p>
-      )}
-      {internal.length > 0 && (
-        <p className="hint">
-          {t("otel.internal", {
-            count: internal.reduce((sum, row) => sum + row.count, 0),
-            errors: internal.map((row) => `${row.error} ×${row.count}`).join(", "),
-          })}
-        </p>
-      )}
+              })}`}
+          </li>
+        )}
+        {hooks && hooks.seconds >= HOOK_SECONDS_WORTH_MENTIONING && (
+          <li title={t("otel.hooks.why")}>
+            {t("otel.hooks", {
+              time: spent(hooks.seconds),
+              events: hooks.events
+                .filter((row) => (row.seconds ?? 0) >= 1)
+                .slice(0, 2)
+                .map((row) => `${row.event} ${spent(row.seconds ?? 0)}`)
+                .join(", "),
+            })}
+          </li>
+        )}
+        {switches >= MODE_SWITCHES_WORTH_MENTIONING && (
+          <li title={t("otel.modes.why")}>
+            {t("otel.modes", {
+              modes: (permissions.mode_switches ?? [])
+                .map((row) => `${row.mode ?? "—"} ×${row.switches}`)
+                .join(", "),
+            })}
+          </li>
+        )}
+        {errors > 0 && (
+          <li title={t("otel.errors.why")}>
+            {t("otel.errors", {
+              count: errors,
+              statuses: (otel.api?.by_status ?? []).map((row) => row.status).join(", "),
+            })}
+          </li>
+        )}
+        {internal.length > 0 && (
+          <li title={t("otel.internal.why")}>
+            {t("otel.internal", {
+              count: internal.reduce((sum, row) => sum + row.count, 0),
+              errors: internal.map((row) => `${row.error} ×${row.count}`).join(", "),
+            })}
+          </li>
+        )}
+      </ul>
       {permissions.by_tool.length > 0 && (
         <ol className="ranked">
           {permissions.by_tool.slice(0, 5).map((row) => (

@@ -1281,6 +1281,30 @@ main.empty {
   color: var(--text-faint);
 }
 
+/* Наблюдения списком: коротко и в одну строку каждое, подробности — в title.
+   Виджет живёт на дашборде рядом с девятью другими, читать его должно быть
+   так же быстро, как стрелку прибора. */
+.telemetry-facts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.telemetry-facts li {
+  cursor: help;
+  border-bottom: 1px dotted var(--line);
+  padding-bottom: 3px;
+}
+
+.telemetry-facts li:last-child {
+  border-bottom: 0;
+}
+
 .telemetry-off code {
   display: inline-block;
   margin-top: 8px;

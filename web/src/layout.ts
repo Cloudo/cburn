@@ -57,7 +57,7 @@ export const DEFAULT_LAYOUT: Layout[] = [
   { i: "models", x: 0, y: 56, w: 8, h: 6, minW: 6, minH: 6 },
   { i: "idle", x: 8, y: 56, w: 6, h: 10, minW: 4, minH: 6 },
   { i: "feed", x: 0, y: 62, w: 24, h: 42, minW: 8, minH: 10 },
-  { i: "otel", x: 0, y: 104, w: 12, h: 16, minW: 6, minH: 10 },
+  { i: "otel", x: 0, y: 104, w: 12, h: 18, minW: 6, minH: 10 },
 ];
 
 export type DashboardState = { layout: Layout[]; hidden: WidgetId[] };
