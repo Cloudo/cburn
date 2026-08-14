@@ -1164,10 +1164,23 @@ def otel_hooks(
             params,
         )
     ]
+    # Что вообще объявлено: хуки регистрируются заново в каждой сессии, поэтому
+    # считаются уникальные пары «событие + тип», а не сумма регистраций.
+    registered = [
+        dict(row)
+        for row in conn.execute(
+            f"SELECT DISTINCT COALESCE(json_extract(attrs, '$.hook_event'), '—') AS event,"
+            f"       COALESCE(json_extract(attrs, '$.hook_type'), '—')          AS type"
+            f"  FROM otel_events WHERE name = 'hook_registered' AND {clause}"  # noqa: S608
+            f" ORDER BY event",
+            params,
+        )
+    ]
     return {
         "events": rows,
         "seconds": sum(row["seconds"] or 0.0 for row in rows),
         "failures": sum(row["failures"] or 0 for row in rows),
+        "registered": registered,
     }
 
 

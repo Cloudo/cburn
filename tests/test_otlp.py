@@ -977,6 +977,26 @@ def test_hook_time_is_counted(conn: Any) -> None:
     assert built["hooks"]["events"][0]["event"] == "Stop"
 
 
+def test_registered_hooks_are_listed_once(conn: Any) -> None:
+    """Хуки регистрируются заново в каждой сессии — считаются уникальные пары."""
+    otlp.ingest(
+        conn,
+        "logs",
+        logs_payload(
+            event("hook_registered", 1, hook_event="SessionStart", hook_type="http"),
+            event("hook_registered", 2, hook_event="Stop", hook_type="http"),
+            event("hook_registered", 3, hook_event="Stop", hook_type="http"),  # вторая сессия
+            event("hook_registered", 4, hook_event="PreToolUse", hook_type="command"),
+        ),
+    )
+    registered = metrics.otel_hooks(conn, datetime(2026, 8, 14, tzinfo=UTC))["registered"]
+    assert registered == [
+        {"event": "PreToolUse", "type": "command"},
+        {"event": "SessionStart", "type": "http"},
+        {"event": "Stop", "type": "http"},
+    ]
+
+
 def test_session_starts_are_labelled(conn: Any) -> None:
     """`start_type` размечает запуски: транскрипт такой разметки не несёт,
     там продолжение видно только по копиям ходов."""
