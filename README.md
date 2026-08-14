@@ -47,7 +47,7 @@ OTLP. Приёмник живёт в самом дашборде (`POST /otlp/v1
 ```bash
 cdash otel --env       # строки export для профиля шелла
 cdash otel --settings  # тот же набор фрагментом для ~/.claude/settings.json
-cdash otel             # что уже дошло: посылки, метрики, события, объём
+cdash otel             # что дошло: посылки, метрики, события, объём, сверка сессий
 cdash otel --prune     # убрать данные старше otel.keep_days
 ```
 
