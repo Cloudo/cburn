@@ -1063,6 +1063,52 @@ def otel_mcp(
     }
 
 
+def otel_prompts(
+    conn: sqlite3.Connection,
+    since: datetime,
+    until: datetime | None = None,
+    project: str | None = None,
+    limit: int = 12,
+) -> dict:
+    """Промпты и слэш-команды за период (веха E).
+
+    В транскрипте слэш-команда — это блоки `<command-name>` вместо живого
+    текста, и парсер их не разбирает; телеметрия называет команду прямо.
+    Из самого промпта берётся только длина: текста у нас нет и не будет.
+    """
+    clause = "ts >= ?"
+    params: list[Any] = [_utc_stamp(since)]
+    if until is not None:
+        clause += " AND ts < ?"
+        params.append(_utc_stamp(until))
+    project_clause, project_params = project_filter(project)
+    clause += project_clause
+    params += project_params
+    row = conn.execute(
+        f"SELECT COUNT(*) AS prompts,"
+        f"       COALESCE(AVG(CAST(json_extract(attrs, '$.prompt_length') AS REAL)), 0) AS length"
+        f"  FROM otel_events WHERE name = 'user_prompt' AND {clause}",  # noqa: S608
+        params,
+    ).fetchone()
+    commands = [
+        dict(command)
+        for command in conn.execute(
+            f"SELECT json_extract(attrs, '$.command_name')   AS command,"
+            f"       json_extract(attrs, '$.command_source') AS source,"
+            f"       COUNT(*)                                AS calls"
+            f"  FROM otel_events WHERE name = 'user_prompt' AND {clause}"  # noqa: S608
+            f"   AND json_extract(attrs, '$.command_name') IS NOT NULL"
+            f" GROUP BY command, source ORDER BY calls DESC LIMIT ?",
+            (*params, limit),
+        )
+    ]
+    return {
+        "prompts": row["prompts"],
+        "avg_length": round(row["length"], 1),
+        "commands": commands,
+    }
+
+
 def otel_work(conn: sqlite3.Connection, since: datetime) -> dict:
     """Что получилось за расход: строки кода и активное время (веха E).
 

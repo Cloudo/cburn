@@ -37,9 +37,16 @@ TS_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
 #: Префикс имён Claude Code: `claude_code.token.usage`, событие `claude_code.api_request`.
 PREFIX = "claude_code."
 
-#: Атрибуты, которые в БД не кладутся. Они одинаковы у каждой точки одной
-#: машины и на расчёты не влияют, зато почта и идентификаторы аккаунта копией
-#: в каждой строке — лишние данные о человеке, а не о расходе (ТЗ §7).
+#: Атрибуты, которые в БД не кладутся (ТЗ §7).
+#:
+#: Первая часть — одинаковые для машины: почта и идентификаторы аккаунта копией
+#: в каждой строке говорят о человеке, а не о расходе.
+#:
+#: Вторая — содержимое работы. По умолчанию Claude Code присылает вместо него
+#: `<REDACTED>`, но `OTEL_LOG_USER_PROMPTS`, `OTEL_LOG_ASSISTANT_RESPONSES`,
+#: `OTEL_LOG_TOOL_DETAILS` и `OTEL_LOG_RAW_API_BODIES` включают настоящие
+#: тексты. Человек мог включить их для своей отладки — и это не повод
+#: дашборду становиться хранилищем переписки: нам хватает длин и счётчиков.
 SKIPPED_ATTRS = frozenset(
     {
         "user.email",
@@ -53,6 +60,13 @@ SKIPPED_ATTRS = frozenset(
         "os.type",
         "os.version",
         "service.name",
+        "prompt",
+        "response",
+        "error",
+        "tool_input",
+        "tool_parameters",
+        "body",
+        "body_ref",
     }
 )
 

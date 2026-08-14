@@ -256,7 +256,8 @@ def _off_transcript(
     """
     usage = metrics.otel_usage(conn, since, until, project)
     work = metrics.otel_work(conn, since)
-    if not usage["tokens"] and not usage["cost_usd"] and not work["active_seconds"]:
+    prompts = metrics.otel_prompts(conn, since, until, project)
+    if not any((usage["tokens"], usage["cost_usd"], work["active_seconds"], prompts["prompts"])):
         return {"available": False, "note": "телеметрия OTel не включена — данных нет"}
     return {
         "available": True,
@@ -269,6 +270,9 @@ def _off_transcript(
         "active_minutes": round(work["active_seconds"] / 60, 1),
         "lines_added": work["lines_added"],
         "lines_removed": work["lines_removed"],
+        # Слэш-команды: в транскрипте от них остаются только блоки разметки,
+        # а парсер их не разбирает — телеметрия называет команду прямо.
+        "prompts": prompts,
     }
 
 

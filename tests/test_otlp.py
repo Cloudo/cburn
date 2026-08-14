@@ -135,6 +135,37 @@ def test_personal_attributes_are_not_stored(conn: Any) -> None:
     assert set(stored) == {"session.id", "model", "type", "query_source"}
 
 
+def test_conversation_text_is_never_stored(conn: Any) -> None:
+    """Человек мог включить OTEL_LOG_USER_PROMPTS для своей отладки — дашборд
+    от этого не должен становиться хранилищем переписки (ТЗ §7)."""
+    otlp.ingest(
+        conn,
+        "logs",
+        logs_payload(
+            event("user_prompt", 1, prompt="секретный текст задания", prompt_length=64),
+            event("assistant_response", 2, response="ответ модели целиком", response_length=41),
+            event(
+                "tool_result",
+                3,
+                tool_name="Bash",
+                tool_input='{"command": "cat ~/.ssh/id_rsa"}',
+                error="ENOENT: нет такого файла",
+            ),
+        ),
+    )
+    stored = " ".join(
+        row[0]
+        for row in conn.execute("SELECT attrs FROM otel_events")  # type: ignore[misc]
+    )
+    assert "секретный текст" not in stored
+    assert "ответ модели" not in stored
+    assert "id_rsa" not in stored
+    assert "ENOENT" not in stored
+    # Длины и имена остаются: по ним и считается всё, что нам нужно.
+    assert "prompt_length" in stored
+    assert "Bash" in stored
+
+
 def test_repeated_batch_does_not_double_the_numbers(conn: Any) -> None:
     """Экспортёр повторяет неподтверждённую посылку — цифры от этого не растут."""
     payload = metrics_payload(point(1200, type="input"))
@@ -744,6 +775,35 @@ def test_digest_carries_mcp_startup_cost(conn: Any) -> None:
 def test_digest_omits_mcp_connections_without_telemetry(conn: Any) -> None:
     """Без телеметрии раздела нет вовсе — пустой список читался бы как «серверов нет»."""
     assert "connections" not in digest.build(conn, datetime(2026, 8, 14, tzinfo=UTC))["mcp"]
+
+
+def test_slash_commands_are_counted(conn: Any) -> None:
+    """В транскрипте от слэш-команды остаётся разметка, а не имя: парсер её не
+    разбирает, телеметрия называет команду прямо."""
+    otlp.ingest(
+        conn,
+        "logs",
+        logs_payload(
+            event("user_prompt", 1, prompt_length=64),
+            event(
+                "user_prompt", 2, prompt_length=12, command_name="clear", command_source="builtin"
+            ),
+            event(
+                "user_prompt", 3, prompt_length=14, command_name="clear", command_source="builtin"
+            ),
+            event(
+                "user_prompt", 4, prompt_length=30, command_name="deploy", command_source="custom"
+            ),
+        ),
+    )
+    stats = metrics.otel_prompts(conn, datetime(2026, 8, 14, tzinfo=UTC))
+    assert stats["prompts"] == 4
+    assert stats["avg_length"] == 30.0
+    assert stats["commands"][0] == {"command": "clear", "source": "builtin", "calls": 2}
+    assert len(stats["commands"]) == 2  # промпт без команды в список не попадает
+
+    built = digest.build(conn, datetime(2026, 8, 14, tzinfo=UTC))["off_transcript"]
+    assert built["prompts"]["commands"][0]["command"] == "clear"
 
 
 def test_work_done_is_counted_from_metrics(conn: Any) -> None:
