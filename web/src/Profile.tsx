@@ -86,6 +86,10 @@ export function Idle({ idle }: { idle: IdleTurns }) {
   );
 }
 
+/** С какого числа переключений режима разрешений об этом стоит говорить.
+ *  Одно-два — обычная работа, а не признак того, что правила мешают. */
+const MODE_SWITCHES_WORTH_MENTIONING = 3;
+
 /** Телеметрия Claude Code: то, чего в транскриптах нет (веха E).
  *
  *  Служебные запросы модель делает сама (например, придумывает название
@@ -103,6 +107,7 @@ export function Telemetry({ otel }: { otel?: Otel }) {
     );
   }
   const { off_transcript: extra, permissions } = otel;
+  const switches = permissions.mode_switches.reduce((sum, row) => sum + row.switches, 0);
   return (
     <div className="telemetry">
       <div className="telemetry-pair">
@@ -136,6 +141,15 @@ export function Telemetry({ otel }: { otel?: Otel }) {
               })}
             </>
           )}
+        </p>
+      )}
+      {switches >= MODE_SWITCHES_WORTH_MENTIONING && (
+        <p className="telemetry-note">
+          {t("otel.modes", {
+            modes: permissions.mode_switches
+              .map((row) => `${row.mode ?? "—"} ×${row.switches}`)
+              .join(", "),
+          })}
         </p>
       )}
       {otel.api.errors > 0 && (

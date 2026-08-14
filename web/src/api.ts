@@ -157,6 +157,8 @@ export type Otel = {
     auto: number;
     rejected: number;
     by_tool: Array<{ tool: string; decisions: number }>;
+    /** Уход в другой режим разрешений — та же тема с другой стороны. */
+    mode_switches: Array<{ mode: string | null; switches: number }>;
   };
   /** Неудавшиеся запросы к API: в транскрипт они не попадают вовсе. */
   api: { errors: number; by_status: Array<{ status: string; errors: number }> };
