@@ -163,7 +163,12 @@ export type Otel = {
   };
   /** Неудавшиеся запросы к API: в транскрипт они не попадают вовсе.
    *  Необязательные — фронт могли собрать раньше, чем перезапустили сервер. */
-  api?: { errors: number; by_status: Array<{ status: string; errors: number }> };
+  api?: {
+    errors: number;
+    by_status: Array<{ status: string; errors: number }>;
+    /** Сбои внутри самого клиента: работа обрывается на середине. */
+    internal?: Array<{ error: string; count: number }>;
+  };
   /** Время, съеденное хуками: в транскрипте от них остаётся только пауза. */
   hooks?: {
     seconds: number;

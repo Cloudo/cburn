@@ -116,6 +116,7 @@ export function Telemetry({ otel }: { otel?: Otel }) {
   const work = otel.work;
   const errors = otel.api?.errors ?? 0;
   const hooks = otel.hooks;
+  const internal = otel.api?.internal ?? [];
   return (
     <div className="telemetry">
       <div className="telemetry-pair">
@@ -177,6 +178,14 @@ export function Telemetry({ otel }: { otel?: Otel }) {
           {t("otel.errors", {
             count: errors,
             statuses: (otel.api?.by_status ?? []).map((row) => row.status).join(", "),
+          })}
+        </p>
+      )}
+      {internal.length > 0 && (
+        <p className="hint">
+          {t("otel.internal", {
+            count: internal.reduce((sum, row) => sum + row.count, 0),
+            errors: internal.map((row) => `${row.error} ×${row.count}`).join(", "),
           })}
         </p>
       )}

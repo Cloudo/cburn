@@ -111,6 +111,10 @@ const DICT: Record<string, [string, string]> = {
     "Хуки отняли {time}: {events}. В файлах истории от них остаётся только пауза.",
     "Hooks took {time}: {events}. The history files show only a pause instead.",
   ],
+  "otel.internal": [
+    "Claude Code споткнулся сам {count} раз: {errors}. Работа обрывается на середине, потраченные токены не вернуть.",
+    "Claude Code itself failed {count} times: {errors}. Work stops midway and the tokens spent are gone.",
+  ],
   "otel.errors": [
     "Запросов к API сорвалось: {count} (коды {statuses}). В файлах истории их нет — там виден только тот ответ, который в итоге пришёл.",
     "Failed API requests: {count} (codes {statuses}). The history files don't show them — only the reply that eventually arrived.",

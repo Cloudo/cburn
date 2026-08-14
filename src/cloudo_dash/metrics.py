@@ -1006,7 +1006,23 @@ def otel_errors(conn: sqlite3.Connection, since: datetime) -> dict:
             (_utc_stamp(since),),
         )
     ]
-    return {"errors": sum(row["errors"] for row in rows), "by_status": rows}
+    # Сбой внутри самого Claude Code — другая беда, чем отказ сети: работа
+    # обрывается на середине, и потраченные на неё токены уже не вернуть.
+    internal = [
+        dict(row)
+        for row in conn.execute(
+            "SELECT COALESCE(json_extract(attrs, '$.error_name'), '—') AS error,"
+            "       COUNT(*) AS count"
+            "  FROM otel_events WHERE name = 'internal_error' AND ts >= ?"
+            " GROUP BY error ORDER BY count DESC",
+            (_utc_stamp(since),),
+        )
+    ]
+    return {
+        "errors": sum(row["errors"] for row in rows),
+        "by_status": rows,
+        "internal": internal,
+    }
 
 
 def otel_mcp(

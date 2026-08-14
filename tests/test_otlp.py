@@ -787,7 +787,7 @@ def test_overview_without_telemetry_says_so(client: TestClient) -> None:
     assert otel["last_at"] is None
     assert otel["off_transcript"]["tokens"] == 0
     assert otel["permissions"]["decisions"] == 0
-    assert otel["api"] == {"errors": 0, "by_status": []}
+    assert otel["api"] == {"errors": 0, "by_status": [], "internal": []}
 
 
 def test_period_bounds_are_respected(conn: Any) -> None:
@@ -1080,6 +1080,27 @@ def test_api_failures_are_visible_only_here(conn: Any) -> None:
     assert stats["errors"] == 4
     assert stats["by_status"][0] == {"status": "429", "errors": 2}
     assert {row["status"] for row in stats["by_status"]} == {"429", "529", "—"}
+    assert stats["internal"] == []
+
+
+def test_client_failures_are_counted_apart(conn: Any) -> None:
+    """Сбой внутри клиента — другая беда, чем отказ сети: работа обрывается."""
+    otlp.ingest(
+        conn,
+        "logs",
+        logs_payload(
+            event("internal_error", 1, error_name="TypeError"),
+            event("internal_error", 2, error_name="TypeError"),
+            event("internal_error", 3, error_name="SyntaxError", error_code="ENOENT"),
+            event("api_error", 4, status_code="429"),
+        ),
+    )
+    stats = metrics.otel_errors(conn, datetime(2026, 8, 14, tzinfo=UTC))
+    assert stats["errors"] == 1  # отказ сети считается своим счётчиком
+    assert stats["internal"] == [
+        {"error": "TypeError", "count": 2},
+        {"error": "SyntaxError", "count": 1},
+    ]
 
 
 def test_tool_times_come_from_events(conn: Any) -> None:
