@@ -19,7 +19,7 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindowBuilder};
 
 /// Адрес дашборда: тот же, что открывается в браузере.
-const DASHBOARD: &str = "http://127.0.0.1:8799";
+pub const DASHBOARD: &str = "http://127.0.0.1:8799";
 
 /// Как часто спрашивать обзор. Прибор в меню-баре — не секундомер: пять секунд
 /// достаточно, чтобы цифра выглядела живой, и вчетверо дешевле, чем такт фронта.
@@ -61,6 +61,7 @@ struct Items<R: Runtime> {
     advice: MenuItem<R>,
     unit: MenuItem<R>,
     pause: MenuItem<R>,
+    autostart: MenuItem<R>,
 }
 
 pub fn setup<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
@@ -74,6 +75,7 @@ pub fn setup<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let advice = MenuItem::with_id(app, "advice", "советов пока нет", true, None::<&str>)?;
     let unit = MenuItem::with_id(app, "unit", "показывать $/ч", true, None::<&str>)?;
     let pause = MenuItem::with_id(app, "pause", "пауза на 2 часа", true, None::<&str>)?;
+    let autostart = MenuItem::with_id(app, "autostart", autostart_label(app), true, None::<&str>)?;
     let open = MenuItem::with_id(app, "open", "открыть дашборд", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "выйти", true, None::<&str>)?;
     let sessions: Vec<MenuItem<R>> = (0..HOT_SESSIONS)
@@ -91,6 +93,7 @@ pub fn setup<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         &separator,
         &unit,
         &pause,
+        &autostart,
         &open,
         &quit,
     ]);
@@ -103,6 +106,7 @@ pub fn setup<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         advice,
         unit,
         pause,
+        autostart,
     });
 
     let handler_state = Arc::clone(&state);
@@ -146,6 +150,10 @@ fn on_menu<R: Runtime>(
     match event.id.as_ref() {
         "quit" => app.exit(0),
         "open" => show_dashboard(app, ""),
+        "autostart" => {
+            toggle_autostart(app);
+            let _ = items.autostart.set_text(autostart_label(app));
+        }
         "advice" => show_dashboard(app, "#/advice"),
         "unit" => {
             let cost = !state.show_cost.load(Ordering::Relaxed);
@@ -309,6 +317,35 @@ fn apply<R: Runtime>(
     } else {
         "советов пока нет".to_string()
     });
+}
+
+/// Подпись пункта автозапуска: она же показывает текущее состояние.
+fn autostart_label<R: Runtime>(app: &AppHandle<R>) -> &'static str {
+    if is_autostart_on(app) {
+        "не запускать при входе"
+    } else {
+        "запускать при входе"
+    }
+}
+
+fn is_autostart_on<R: Runtime>(app: &AppHandle<R>) -> bool {
+    use tauri_plugin_autostart::ManagerExt;
+    app.autolaunch().is_enabled().unwrap_or(false)
+}
+
+/// Включить или выключить автозапуск. Ошибку прячем не молча: без прав на
+/// LaunchAgents подпись просто не изменится, и это видно в меню.
+fn toggle_autostart<R: Runtime>(app: &AppHandle<R>) {
+    use tauri_plugin_autostart::ManagerExt;
+    let manager = app.autolaunch();
+    let result = if is_autostart_on(app) {
+        manager.disable()
+    } else {
+        manager.enable()
+    };
+    if let Err(error) = result {
+        log::warn!("автозапуск не переключился: {error}");
+    }
 }
 
 fn status_label(status: &str) -> &str {
