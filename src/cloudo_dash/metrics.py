@@ -1109,6 +1109,43 @@ def otel_prompts(
     }
 
 
+def otel_sessions(conn: sqlite3.Connection, since: datetime) -> dict:
+    """Сессии глазами телеметрии и глазами парсера (веха E).
+
+    Метрика `session.count` размечает запуски по `start_type`: свежий,
+    продолженный (`resume`, `continue`) или открытый из списка агентов.
+    Транскрипт такой разметки не несёт — там resume виден только по копиям
+    ходов. Рядом стоит число сессий, дошедших до парсера: расхождение значит,
+    что один из каналов чего-то не видит, и это повод посмотреть внимательнее.
+    """
+    starts = [
+        dict(row)
+        for row in conn.execute(
+            "SELECT COALESCE(json_extract(attrs, '$.start_type'), '—') AS start_type,"
+            "       COALESCE(SUM(value), 0) AS sessions"
+            "  FROM otel_metrics WHERE name = 'claude_code.session.count' AND ts >= ?"
+            " GROUP BY start_type ORDER BY sessions DESC",
+            (_utc_stamp(since),),
+        )
+    ]
+    seen = conn.execute(
+        "SELECT COUNT(*) FROM (SELECT session_id FROM otel_events WHERE ts >= ?"
+        " UNION SELECT session_id FROM otel_metrics WHERE ts >= ?)",
+        (_utc_stamp(since), _utc_stamp(since)),
+    ).fetchone()[0]
+    indexed = conn.execute(
+        "SELECT COUNT(DISTINCT session_id) FROM turns WHERE ts >= ?", (_utc_stamp(since),)
+    ).fetchone()[0]
+    return {
+        "starts": starts,
+        "telemetry": seen,
+        "transcripts": indexed,
+        "resumed": sum(
+            row["sessions"] for row in starts if row["start_type"] in ("resume", "continue")
+        ),
+    }
+
+
 def otel_work(conn: sqlite3.Connection, since: datetime) -> dict:
     """Что получилось за расход: строки кода и активное время (веха E).
 

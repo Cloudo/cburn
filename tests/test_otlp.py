@@ -869,6 +869,27 @@ def test_slash_commands_are_counted(conn: Any) -> None:
     assert built["prompts"]["commands"][0]["command"] == "clear"
 
 
+def test_session_starts_are_labelled(conn: Any) -> None:
+    """`start_type` размечает запуски: транскрипт такой разметки не несёт,
+    там продолжение видно только по копиям ходов."""
+    name = "claude_code.session.count"
+    otlp.ingest(conn, "metrics", metrics_payload(point(1, start_type="fresh"), name=name))
+    otlp.ingest(conn, "metrics", metrics_payload(point(1, start_type="resume"), name=name))
+    otlp.ingest(conn, "metrics", metrics_payload(point(1, start_type="continue"), name=name))
+    with conn:
+        conn.execute("INSERT INTO sessions (id) VALUES ('s1')")
+        conn.execute(
+            "INSERT INTO turns (message_id, session_id, ts) VALUES ('m1', 's1', ?)",
+            ("2026-08-14T07:30:00.000000Z",),
+        )
+
+    counts = metrics.otel_sessions(conn, datetime(2026, 8, 14, tzinfo=UTC))
+    assert counts["resumed"] == 2
+    assert counts["telemetry"] == 1  # все точки об одной сессии
+    assert counts["transcripts"] == 1
+    assert {row["start_type"] for row in counts["starts"]} == {"fresh", "resume", "continue"}
+
+
 def test_work_done_is_counted_from_metrics(conn: Any) -> None:
     """Строки кода и активное время считает сам Claude Code — в истории их нет."""
     lines = "claude_code.lines_of_code.count"

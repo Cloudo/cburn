@@ -283,6 +283,8 @@ def test_otel_status_counts_what_arrived(project: Path, capsys: pytest.CaptureFi
     assert "logs" in out
     assert "событие api_request" in out
     assert "накоплено: 1 строк" in out  # объём и охват: видно, растёт ли база
+    # Сверка каналов: сколько сессий видит телеметрия и сколько — парсер.
+    assert "сессии за сутки: 1 по телеметрии, 0 по транскриптам" in out
 
 
 def test_stats_shows_spending_off_the_transcript(

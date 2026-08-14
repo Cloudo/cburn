@@ -10,7 +10,7 @@ import argparse
 import json
 import sys
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from . import __version__, autostart, config, paths, pricing
@@ -22,6 +22,7 @@ from .metrics import (
     idle_turns,
     model_share,
     otel_permissions,
+    otel_sessions,
     otel_usage,
     period_start,
     recent_sessions,
@@ -233,6 +234,16 @@ def _otel(show_env: bool, show_settings: bool, port: int | None, prune: bool = F
         print(f"  {row['name']:34} точек {row['points']:6}  сумма {row['total']:,.2f}")
     for row in state["events"]:
         print(f"  событие {row['name']:26} {row['records']:6}")
+    if state["signals"]:
+        with connect() as conn:
+            counts = otel_sessions(conn, datetime.now(UTC) - timedelta(days=1))
+        starts = ", ".join(
+            f"{row['start_type']} {int(row['sessions'])}" for row in counts["starts"]
+        )
+        print(
+            f"сессии за сутки: {counts['telemetry']} по телеметрии,"
+            f" {counts['transcripts']} по транскриптам" + (f" ({starts})" if starts else "")
+        )
     stored = state["stored"]
     if stored["rows"]:
         keep = f"хранится {keep_days} суток" if keep_days else "хранится всё"
