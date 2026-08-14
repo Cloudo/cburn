@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sqlite3
 import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager, suppress
@@ -405,7 +406,14 @@ def create_app(
             finally:
                 conn.close()
 
-        stats = await asyncio.to_thread(write)
+        try:
+            stats = await asyncio.to_thread(write)
+        except sqlite3.OperationalError as exc:
+            # Писатель в SQLite один: если рядом идёт долгая транзакция (полная
+            # переиндексация), очередь может и не дождаться. Отказ с 503 честнее
+            # молчаливого подтверждения — экспортёр повторит посылку сам.
+            log.warning("посылка OTLP (%s) не записана: %s", signal, exc)
+            return JSONResponse({}, status_code=503)
         if stats["dropped"]:
             log.info("OTLP (%s): не разобрано кусков — %s", signal, stats["dropped"])
         return JSONResponse({})

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import gzip
 import json
+import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -398,6 +400,67 @@ def test_status_endpoint_shows_what_arrived(client: TestClient) -> None:
     assert state["signals"]["metrics"]["stored"] == 1
     assert [row["name"] for row in state["metrics"]] == ["claude_code.token.usage"]
     assert [row["name"] for row in state["events"]] == ["api_request"]
+
+
+def test_concurrent_batches_do_not_lock_the_database(client: TestClient) -> None:
+    """Посылки приходят из разных потоков, рядом пишут watcher и чистка.
+
+    SQLite пускает одного писателя за раз, поэтому важно, что параллельные
+    посылки не роняют приём: соединение ждёт своей очереди, а не отдаёт ошибку.
+    """
+    batches = [
+        logs_payload(event("api_request", index, model="claude-opus-5")) for index in range(40)
+    ]
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        codes = list(
+            pool.map(lambda body: client.post("/otlp/v1/logs", json=body).status_code, batches)
+        )
+    assert codes == [200] * len(batches)
+
+    conn = connect(client.db_path, apply_schema=False)  # type: ignore[attr-defined]
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM otel_events").fetchone()[0] == len(batches)
+        # Счётчик приёмов сходится с числом посылок: инкремент не потерялся.
+        assert conn.execute("SELECT batches FROM otel_ingest").fetchone()[0] == len(batches)
+    finally:
+        conn.close()
+
+
+def test_locked_database_asks_for_a_retry(client: TestClient) -> None:
+    """Отказ честнее молчаливого подтверждения: по 503 экспортёр повторит
+    посылку сам, а по 200 данные пропали бы."""
+    with mock.patch.object(otlp, "ingest", side_effect=sqlite3.OperationalError("locked")):
+        response = client.post("/otlp/v1/logs", json=logs_payload(event("api_request", 1)))
+    assert response.status_code == 503
+
+    # Повтор после того, как база освободилась, проходит обычным порядком.
+    assert (
+        client.post("/otlp/v1/logs", json=logs_payload(event("api_request", 1))).status_code == 200
+    )
+
+
+def test_parallel_writers_wait_for_each_other(tmp_path: Path) -> None:
+    """Каждый запрос пишет своим соединением из своего потока — ровно так же,
+    как это делает сервер. Писатель в SQLite один, остальные ждут очереди."""
+    db_path = tmp_path / "parallel.db"
+    connect(db_path).close()  # схема
+
+    def write(index: int) -> dict[str, int]:
+        conn = connect(db_path, apply_schema=False)
+        try:
+            return otlp.ingest(conn, "logs", logs_payload(event("api_request", index)))
+        finally:
+            conn.close()
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(write, range(50)))
+
+    assert sum(result["stored"] for result in results) == 50
+    conn = connect(db_path, apply_schema=False)
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM otel_events").fetchone()[0] == 50
+    finally:
+        conn.close()
 
 
 # --- срок хранения -----------------------------------------------------------
