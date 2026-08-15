@@ -1,0 +1,38 @@
+{
+  "tray.burn.none": ["расход: -", "burn rate: -"],
+  "tray.burn": [
+    "расход: {tokens}K ток/мин · ${cost}/ч",
+    "burn rate: {tokens}K tok/min · ${cost}/h"
+  ],
+  "tray.today.none": ["за сегодня: -", "today: -"],
+  "tray.today": ["за сегодня: {turns} ходов · ${cost}", "today: {turns} turns · ${cost}"],
+  "tray.advice.none": ["советов пока нет", "no tips yet"],
+  "tray.advice": ["советы: разборов за сегодня {ticks}", "advice: {ticks} analyses today"],
+  "tray.offline": ["нет связи с cburn serve: {error}", "no connection to cburn serve: {error}"],
+
+  "tray.title": ["в строке меню показывать", "menu bar shows"],
+  "tray.metric.burn": ["расход, K ток/мин", "burn rate, K tok/min"],
+  "tray.metric.cost": ["стоимость, $/ч", "cost, $/h"],
+  "tray.metric.today": ["за сегодня, $", "spent today, $"],
+  "tray.metric.session": ["пятичасовое окно, %", "5-hour window, %"],
+  "tray.metric.weekly_all": ["неделя, все модели, %", "week, all models, %"],
+  "tray.metric.weekly_scoped": ["неделя, по модели, %", "week, by model, %"],
+
+  "tray.pause": ["пауза на 2 часа", "pause for 2 hours"],
+  "tray.resume": ["вернуть уведомления", "resume notifications"],
+  "tray.autostart.on": ["не запускать при входе", "do not start at login"],
+  "tray.autostart.off": ["запускать при входе", "start at login"],
+  "tray.open": ["открыть дашборд", "open the dashboard"],
+  "tray.quit": ["выйти", "quit"],
+
+  "tray.status.permission": ["ждёт разрешения", "awaiting permission"],
+  "tray.status.working": ["работает", "working"],
+  "tray.status.answered": ["ждёт вас", "waiting for you"],
+  "tray.status.idle": ["простаивает", "idle"],
+  "tray.status.done": ["закончилась", "finished"],
+
+  "tray.value.burn": ["{value}K/мин", "{value}K/min"],
+  "tray.value.cost": ["${value}/ч", "${value}/h"],
+  "tray.window.session": ["5ч", "5h"],
+  "tray.window.week": ["нед", "wk"]
+}

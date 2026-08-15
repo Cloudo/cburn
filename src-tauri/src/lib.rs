@@ -17,6 +17,7 @@
 //! autostart agent get past that, so the guard lives here: the second process hands the
 //! launch over to the first and exits.
 
+mod dict;
 mod server;
 mod tray;
 

@@ -26,7 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import JSONResponse, Response
 from starlette.types import Scope
 
-from .. import config, notifier, paths, pricing
+from .. import config, notifier, paths, pricing, ui_state
 from ..analyzer import scheduler
 from ..collector import otlp
 from ..collector.indexer import IngestStats
@@ -316,6 +316,26 @@ def create_app(
 
         await asyncio.to_thread(apply_prices)
         return {"config": config.load()}
+
+    @app.get("/api/ui")
+    async def api_ui() -> dict[str, Any]:
+        """The interface language the browser chose, for the native surfaces (the tray)."""
+        return ui_state.load()
+
+    @app.post("/api/ui/lang")
+    async def api_ui_lang(lang: str) -> dict[str, Any]:
+        """Mirror the chosen language so that the tray follows the dashboard.
+
+        The server keeps no language of its own: it only passes the choice on to the
+        native part, which has no access to `localStorage`.
+        """
+        if lang not in ui_state.LANGUAGES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"lang: expected one of {', '.join(sorted(ui_state.LANGUAGES))}",
+            )
+        await asyncio.to_thread(ui_state.save_lang, lang)
+        return {"lang": lang}
 
     @app.post("/api/plan/refresh")
     async def api_plan_refresh() -> dict[str, Any]:

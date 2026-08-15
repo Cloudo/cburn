@@ -40,6 +40,7 @@ src/cburn/
   analyzer/         the digest + `claude -p` (M3)
   collector/otlp.py receiving Claude Code telemetry over OTLP/JSON (M4)
   notifier/         the telegram bridge and the Bot API (M3)
+  ui_state.py       the browser's choice mirrored for the tray (the interface language)
 tests/fixtures/transcripts/   anonymised transcripts for the parser tests
 ```
 
@@ -283,6 +284,19 @@ Claude Code 2.1.222 on 14 August 2026:
 - **The tray counts nothing itself:** every five seconds it takes `/api/overview`, and the
   alert threshold comes from `/api/config`, so that it obeys the same number that is edited
   in "Settings". The polling lives in its own thread: the menu bar lives without the window.
+- **What the tray shows is the tray's own business, like the dashboard layout.** The figures
+  of the icon title are ticked in the "menu bar shows" submenu (burn rate, $/h, the day, the
+  percentages of the 5-hour and weekly windows), and the choice lies in
+  `~/.local/share/cburn/tray.json` - the API knows nothing about it, exactly as it knows
+  nothing about the widget positions. Keys are stored there rather than a bit mask: the file
+  is read by a human and survives a change in the order of `METRICS`.
+- **The tray speaks the language of the dashboard, and the language is still the browser's.**
+  It lives in `localStorage` like the layout, and the tray cannot read that: on every switch
+  the frontend mirrors the choice through `POST /api/ui/lang`, the server writes
+  `~/.local/share/cburn/ui.json` (an atomic rename - the tray reads it whenever it likes),
+  and the poll relabels the menu without a restart. The mirror is one-way, and the server
+  takes no language of its own from it: texts still never come from the server. Until the
+  dashboard has been opened once the menu is English - the tray has no `navigator.language`.
 - **The `.app` raises the server when it stays quiet** (`CBURN_SERVE`, then the
   usual install locations). The interpreter is not packed inside the `.app` -
   a deliberate limitation: the Python part is installed separately, as before.
@@ -312,11 +326,13 @@ Claude Code 2.1.222 on 14 August 2026:
 - Claude Code hooks are not used for collecting data - only the file watcher.
 - Commits follow Conventional Commits (the `conventional-commits` skill), with messages in
   English.
-- **Russian lives in exactly one file: `web/src/dict.ts`.** That is the interface dictionary,
-  where both languages sit as pairs and the reader picks one. Everything else - the code, the
-  comments, the CLI output, the HTTP answers, the telegram notifications, the tray menu and
-  the documentation - is English. The advisor prompt is English too, and the language of its
-  answers is a setting (`analyzer.language`), not a hardcoded phrase.
+- **Russian lives in the interface dictionaries and nowhere else:** `web/src/dict.ts` for
+  the dashboard and `src-tauri/dict.json` for the tray menu. Both are the same device - a
+  key and a pair of languages, the reader picks one - and they are data, not code: the pairs
+  are baked into the binary by `include_str!`, so the menu needs no build step of its own.
+  Everything else - the code, the comments, the CLI output, the HTTP answers, the telegram
+  notifications and the documentation - is English. The advisor prompt is English too, and
+  the language of its answers is a setting (`analyzer.language`), not a hardcoded phrase.
 - **`.local/` is the Russian half, and it never reaches git.** Working documents the author
   reads rather than ships - the roadmap first of all - live there in Russian; the directory is
   in `.gitignore`. That is what keeps the two rules from colliding: the repository stays

@@ -16,6 +16,9 @@ CONFIG_PATH = Path.home() / ".config" / "cburn" / "config.toml"
 DATA_DIR = Path.home() / ".local" / "share" / "cburn"
 DB_PATH = DATA_DIR / "cburn.db"
 
+#: The browser's choice for the native surfaces: the tray cannot read `localStorage`.
+UI_STATE_PATH = DATA_DIR / "ui.json"
+
 #: Former project name. The directories move themselves: the database took months to fill.
 LEGACY_NAME = "cloudo-dash"
 LEGACY_CONFIG_DIR = Path.home() / ".config" / LEGACY_NAME

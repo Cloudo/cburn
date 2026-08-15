@@ -832,6 +832,41 @@ def test_config_rejects_broken_values(
     assert not config_path.exists()
 
 
+# --- the interface language for the native surfaces ----------------------------
+
+
+def test_ui_language_is_mirrored_for_the_tray(
+    transcripts: Path, db_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The browser's choice lands in a file: the tray has no access to localStorage."""
+    state_path = tmp_path / "ui.json"
+    monkeypatch.setattr(paths, "UI_STATE_PATH", state_path)
+    seed(transcripts, db_path, [assistant("msg_1")])
+
+    with client(db_path, transcripts) as api:
+        assert api.get("/api/ui").json() == {"lang": None}, "nobody has chosen yet"
+        saved = api.post("/api/ui/lang?lang=ru")
+        assert saved.status_code == 200
+        assert api.get("/api/ui").json() == {"lang": "ru"}
+
+    assert json.loads(state_path.read_text()) == {"lang": "ru"}
+
+
+def test_ui_language_rejects_an_unknown_one(
+    transcripts: Path, db_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only the languages of the dictionary: the tray has no third one."""
+    state_path = tmp_path / "ui.json"
+    monkeypatch.setattr(paths, "UI_STATE_PATH", state_path)
+    seed(transcripts, db_path, [assistant("msg_1")])
+
+    with client(db_path, transcripts) as api:
+        response = api.post("/api/ui/lang?lang=klingon")
+
+    assert response.status_code == 400
+    assert not state_path.exists(), "a bad value must not reach the file"
+
+
 # --- the "Advice" screen (task D6) ---------------------------------------------
 
 

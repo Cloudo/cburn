@@ -114,7 +114,10 @@ it takes the command from `CBURN_SERVE`, and without it looks for `cburn` in `~/
 homebrew and the development directory. The Python part is installed as usual meanwhile -
 the interpreter is not packed inside the `.app`.
 
-The menu bar shows the burn rate (switchable to $/h), a red dot lights up
+What the menu bar shows is ticked in the "menu bar shows" submenu: the burn rate, $/h,
+the spend of the day, the percentage of the 5-hour window, of the week and of the week by
+model - any combination, and the choice is remembered in `~/.local/share/cburn/tray.json`
+(nothing ticked leaves the bare icon). A red dot lights up
 when the spend goes above the threshold from "Settings", and the menu holds today's total,
 three live sessions with their statuses, "pause for 2 hours" and "start at login". The last
 item replaces the launchd agent: if you use the application, `cburn install` is not needed.
