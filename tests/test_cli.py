@@ -262,7 +262,13 @@ def test_otel_status_counts_what_arrived(project: Path, capsys: pytest.CaptureFi
                             {
                                 "logRecords": [
                                     {
-                                        "timeUnixNano": "1786690860000000000",
+                                        # Время «сейчас»: команда считает
+                                        # сессии за последние сутки, и
+                                        # прибитая к дате посылка назавтра
+                                        # выпадала бы из окна.
+                                        "timeUnixNano": str(
+                                            int(datetime.now(UTC).timestamp() * 1_000_000_000)
+                                        ),
                                         "body": {"stringValue": "claude_code.api_request"},
                                         "attributes": [
                                             {

@@ -27,9 +27,27 @@ from cloudo_dash.api.server import create_app
 from cloudo_dash.collector import otlp
 from cloudo_dash.db import connect
 
-# Наносекунды: 2026-08-14T07:00:00Z и минутой позже.
+# Наносекунды: 2026-08-14T07:00:00Z и минутой позже. Фиксированные — там, где
+# проверяется сам разбор: формат времени, дедупликация, границы окна точки.
 START_NANO = "1786690800000000000"
 END_NANO = "1786690860000000000"
+
+#: Тот же момент датой: от него считаются периоды в тестах разбора.
+FIXED_DAY = datetime(2026, 8, 14, tzinfo=UTC)
+
+
+def nanos(moment: datetime) -> str:
+    """Время в наносекундах, как его шлёт OTLP."""
+    return str(int(moment.timestamp() * 1_000_000_000))
+
+
+def now_nanos() -> str:
+    """Сейчас — для тестов, которые смотрят на срезы «за сегодня».
+
+    Прибитая к дате посылка вчера попадала в сегодняшнее окно, а сегодня уже
+    нет: такие тесты обязаны жить в том же дне, что и обзор.
+    """
+    return nanos(datetime.now(UTC))
 
 
 def attrs(**pairs: str | int) -> list[dict[str, Any]]:
@@ -69,10 +87,10 @@ def metrics_payload(*points: dict[str, Any], name: str = "claude_code.token.usag
     }
 
 
-def point(value: int, **extra: str | int) -> dict[str, Any]:
+def point(value: int, at: str | None = None, **extra: str | int) -> dict[str, Any]:
     return {
-        "startTimeUnixNano": START_NANO,
-        "timeUnixNano": END_NANO,
+        "startTimeUnixNano": at or START_NANO,
+        "timeUnixNano": at or END_NANO,
         "asInt": str(value),
         "attributes": attrs(session__id="s1", model="claude-opus-5", **extra),
     }
@@ -91,10 +109,10 @@ def logs_payload(*records: dict[str, Any]) -> dict:
     }
 
 
-def event(name: str, sequence: int, **extra: str | int) -> dict[str, Any]:
+def event(name: str, sequence: int, at: str | None = None, **extra: str | int) -> dict[str, Any]:
     return {
-        "timeUnixNano": END_NANO,
-        "observedTimeUnixNano": END_NANO,
+        "timeUnixNano": at or END_NANO,
+        "observedTimeUnixNano": at or END_NANO,
         "severityNumber": 9,
         "severityText": "INFO",
         "body": {"stringValue": f"claude_code.{name}"},
@@ -754,11 +772,21 @@ def test_fresh_request_is_never_a_permission_prompt() -> None:
 
 
 def test_overview_carries_telemetry(client: TestClient) -> None:
-    client.post("/otlp/v1/metrics", json=metrics_payload(point(517, query_source="auxiliary")))
+    at = now_nanos()
+    client.post(
+        "/otlp/v1/metrics", json=metrics_payload(point(517, at=at, query_source="auxiliary"))
+    )
     client.post(
         "/otlp/v1/logs",
         json=logs_payload(
-            event("tool_decision", 1, tool_name="Bash", decision="accept", source="user_permanent")
+            event(
+                "tool_decision",
+                1,
+                at=at,
+                tool_name="Bash",
+                decision="accept",
+                source="user_permanent",
+            )
         ),
     )
     otel = client.get("/api/overview").json()["otel"]
@@ -769,7 +797,8 @@ def test_overview_carries_telemetry(client: TestClient) -> None:
 def test_overview_reuses_the_telemetry_slice(client: TestClient) -> None:
     """Обзор уходит подписчикам каждую секунду, а срез телеметрии считается по
     десяткам тысяч событий — пересчитывать его на каждый тик незачем."""
-    client.post("/otlp/v1/logs", json=logs_payload(event("api_request", 1)))
+    at = now_nanos()
+    client.post("/otlp/v1/logs", json=logs_payload(event("api_request", 1, at=at)))
 
     # Срок жизни задаётся явно: на настоящие пять секунд полагаться нельзя —
     # под нагрузкой полного прогона запросы расходятся дальше, и «свежий»
@@ -777,7 +806,9 @@ def test_overview_reuses_the_telemetry_slice(client: TestClient) -> None:
     with mock.patch.object(server, "OTEL_CACHE_SECONDS", 3600):
         assert client.get("/api/overview").json()["otel"]["active"] is True
         # Новое событие в готовый срез уже не попадает: он ещё свежий.
-        client.post("/otlp/v1/logs", json=logs_payload(event("api_error", 2, status_code="429")))
+        client.post(
+            "/otlp/v1/logs", json=logs_payload(event("api_error", 2, at=at, status_code="429"))
+        )
         assert client.get("/api/overview").json()["otel"]["api"]["errors"] == 0
 
     with mock.patch.object(server, "OTEL_CACHE_SECONDS", 0):
