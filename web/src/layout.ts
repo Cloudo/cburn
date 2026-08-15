@@ -1,21 +1,21 @@
-// Раскладка дашборда: что где лежит, что скрыто. Хранится в localStorage —
-// сервер про это не знает, расположение виджетов дело сугубо local-first.
+// The dashboard layout: what sits where, what is hidden. Kept in localStorage -
+// the server knows nothing about it, widget placement is strictly local-first.
 
 import type { Layout } from "react-grid-layout";
 
 export const STORAGE_KEY = "cburn.layout.v3";
 
-/** Ключи прежнего имени проекта: сетка та же, читается как есть. */
+/** Keys of the former project name: the grid is the same, read as it is. */
 const RENAMED_KEY = "cloudo-dash.layout.v3";
 
-/** Ключ прежней, вдвое более крупной сетки — из него переносятся раскладки. */
+/** The key of the former, twice coarser grid - layouts are carried over from it. */
 const LEGACY_KEY = "cloudo-dash.layout.v2";
 
-/** Сколько колонок в сетке и какой высоты одна строка (px).
+/** How many columns the grid has and how tall one row is (px).
  *
- * Шаг сетки — это `ROW_HEIGHT + MARGIN[1]` по вертикали и доля ширины по
- * горизонтали, поэтому «мельче вдвое» — это вдвое больше колонок и вдвое
- * меньше и высота строки, и промежуток. */
+ * The grid step is `ROW_HEIGHT + MARGIN[1]` vertically and a share of the width
+ * horizontally, so "twice finer" means twice as many columns and half the row
+ * height and gap. */
 export const COLUMNS = 24;
 export const ROW_HEIGHT = 13;
 export const MARGIN: [number, number] = [8, 8];
@@ -32,8 +32,8 @@ export type WidgetId =
   | "otel"
   | "feed";
 
-/** Порядок в списке настроек — сверху вниз по важности. Названия и пояснения
- *  берутся из словаря по ключам `widget.<id>` и `widget.<id>.note`. */
+/** The order in the settings list - top down by importance. Names and notes
+ *  come from the dictionary under the keys `widget.<id>` and `widget.<id>.note`. */
 export const WIDGETS: WidgetId[] = [
   "gauge",
   "today",
@@ -47,9 +47,9 @@ export const WIDGETS: WidgetId[] = [
   "feed",
 ];
 
-/** Раскладка по умолчанию — та же, что была до перетаскивания. */
-//: Высоты подобраны по фактической высоте содержимого (h = (px + 8) / 21),
-//: чтобы при первом открытии не было ни пустоты, ни скролла.
+/** The default layout - the same one that existed before dragging. */
+//: The heights are picked from the actual content height (h = (px + 8) / 21),
+//: so that the first open shows neither emptiness nor a scrollbar.
 export const DEFAULT_LAYOUT: Layout[] = [
   { i: "gauge", x: 0, y: 0, w: 14, h: 38, minW: 8, minH: 24 },
   { i: "today", x: 14, y: 0, w: 10, h: 16, minW: 6, minH: 8 },
@@ -69,7 +69,7 @@ export function defaultState(): DashboardState {
   return { layout: DEFAULT_LAYOUT.map((item) => ({ ...item })), hidden: [] };
 }
 
-/** Раскладка со старой, вдвое более крупной сетки: те же места, новые единицы. */
+/** A layout from the old, twice coarser grid: the same places, new units. */
 function upscale(layout: Layout[]): Layout[] {
   return layout.map((item) => ({
     ...item,
@@ -82,11 +82,11 @@ function upscale(layout: Layout[]): Layout[] {
   }));
 }
 
-/** Прочитать сохранённую раскладку; на любой мусор — вернуться к умолчанию. */
+/** Read the saved layout; on any garbage - fall back to the default. */
 export function loadState(): DashboardState {
   try {
     const current = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(RENAMED_KEY);
-    // Настроенную раскладку не теряем при смене шага — переносим со старого ключа.
+    // A configured layout is not lost when the step changes - we carry it from the old key.
     const legacy = current ? null : localStorage.getItem(LEGACY_KEY);
     const raw = current ?? legacy;
     if (!raw) return defaultState();
@@ -94,8 +94,8 @@ export function loadState(): DashboardState {
     const known = new Set<string>(WIDGETS);
     const stored = (saved.layout ?? []).filter((item) => known.has(item.i));
     const layout = legacy ? upscale(stored) : stored;
-    // Виджет, добавленный новой версией, подставляется из умолчания —
-    // иначе после обновления он просто не появился бы на дашборде.
+    // A widget added by a new version is filled in from the default -
+    // otherwise after an update it simply would not appear on the dashboard.
     const placed = new Set(layout.map((item) => item.i));
     const missing = DEFAULT_LAYOUT.filter((item) => !placed.has(item.i));
     return {
@@ -111,6 +111,6 @@ export function saveState(state: DashboardState): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
-    // Приватный режим или переполненное хранилище — расположение просто не запомнится.
+    // Private mode or a full storage - the placement simply will not be remembered.
   }
 }

@@ -1,17 +1,17 @@
-"""Лимиты подписки — те же цифры, что показывает `/usage` в Claude Code.
+"""Subscription limits - the same numbers `/usage` shows in Claude Code.
 
-Claude Code берёт их из `GET /api/oauth/usage`, авторизуясь OAuth-токеном из
-связки ключей macOS, и кладёт ответ в `~/.claude.json` под ключом
-`cachedUsageUtilization`. Мы делаем то же самое:
+Claude Code takes them from `GET /api/oauth/usage`, authorising with an OAuth token from
+the macOS keychain, and stores the answer in `~/.claude.json` under the key
+`cachedUsageUtilization`. We do the same:
 
-* основной путь — свой запрос к тому же эндпоинту, не чаще раза в несколько
-  минут (запрос только читает, ничего в аккаунте не меняет);
-* запасной — кэш из `~/.claude.json`. Он обновляется, только когда сам Claude
-  Code открывает `/usage`, и на практике отстаёт на дни, поэтому отдаётся с
-  временем получения, чтобы дашборд мог сказать, насколько данные свежие.
+* the main path is our own request to that same endpoint, no more often than once every
+  few minutes (the request only reads, it changes nothing in the account);
+* the fallback is the cache from `~/.claude.json`. It refreshes only when Claude Code
+  itself opens `/usage`, and in practice lags by days, so it is served together with the
+  time it was obtained, so the dashboard can tell how fresh the data is.
 
-Токен читается из связки ключей и никуда не записывается: ни в БД, ни в лог,
-ни в ответ API — наружу уходят только проценты и время сброса.
+The token is read from the keychain and never written down: not into the database, not
+into the log, not into the API answer - only percentages and reset times leave.
 """
 
 from __future__ import annotations
@@ -31,23 +31,23 @@ log = logging.getLogger(__name__)
 
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 
-#: Запись связки ключей, в которой Claude Code хранит OAuth-токен.
+#: The keychain entry where Claude Code keeps the OAuth token.
 KEYCHAIN_SERVICE = "Claude Code-credentials"
 
-#: Локальный кэш ответа, который ведёт сам Claude Code.
+#: The local answer cache that Claude Code maintains itself.
 CLAUDE_STATE = Path.home() / ".claude.json"
 
-#: Как часто спрашивать лимиты. Чаще незачем: проценты меняются медленно,
-#: а лишние запросы к чужому эндпоинту ни к чему.
+#: How often to ask for the limits. More often is pointless: percentages move slowly,
+#: and extra requests to someone else's endpoint serve no purpose.
 REFRESH_SECONDS = 300.0
 
 REQUEST_TIMEOUT = 10.0
 
-#: Эндпоинт лимитов сам ограничивает частоту (отвечает 429). Получив отказ,
-#: ждём дольше обычного и живём на последнем известном значении.
+#: The limits endpoint rate-limits itself (it answers 429). Having been refused,
+#: we wait longer than usual and live on the last known value.
 BACKOFF_SECONDS = 900.0
 
-#: Человеческие названия окон — те же, что на экране `/usage`.
+#: Human names of the windows - the same as on the `/usage` screen.
 KIND_LABELS = {
     "session": "текущая сессия",
     "weekly_all": "неделя, все модели",
@@ -57,10 +57,10 @@ KIND_LABELS = {
 
 @dataclass
 class PlanLimits:
-    """Нормализованный ответ: проценты, время сброса и откуда взято."""
+    """A normalised answer: percentages, reset times and where it came from."""
 
     source: str  # api | cache | none
-    fetched_at: float | None  # unix-время получения
+    fetched_at: float | None  # unix time it was obtained
     plan: str | None  # max, pro…
     tier: str | None  # default_claude_max_5x…
     limits: list[dict[str, Any]]
@@ -78,7 +78,7 @@ class PlanLimits:
 
 
 def _keychain_credentials() -> dict[str, Any] | None:
-    """Достать запись Claude Code из связки ключей macOS."""
+    """Pull the Claude Code entry out of the macOS keychain."""
     try:
         result = subprocess.run(
             ["security", "find-generic-password", "-s", KEYCHAIN_SERVICE, "-w"],
@@ -87,22 +87,22 @@ def _keychain_credentials() -> dict[str, Any] | None:
             timeout=REQUEST_TIMEOUT,
         )
     except (OSError, subprocess.SubprocessError) as exc:
-        log.warning("связка ключей недоступна: %s", exc)
+        log.warning("the keychain is unavailable: %s", exc)
         return None
     if result.returncode != 0 or not result.stdout.strip():
         return None
     try:
         return dict(json.loads(result.stdout))
     except json.JSONDecodeError:
-        log.warning("запись связки ключей не разобрана")
+        log.warning("the keychain entry could not be parsed")
         return None
 
 
 def _normalize(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    """Привести ответ к списку окон с процентами.
+    """Reduce the answer to a list of windows with percentages.
 
-    Основной источник — массив `limits`; если его нет (старый ответ), окна
-    собираются из полей `five_hour` и `seven_day`.
+    The main source is the `limits` array; when it is missing (an old answer), the windows
+    are assembled from the `five_hour` and `seven_day` fields.
     """
     rows = payload.get("limits")
     if isinstance(rows, list) and rows:
@@ -144,11 +144,11 @@ def _label(row: dict[str, Any]) -> str:
 
 
 class RateLimited(Exception):
-    """Эндпоинт попросил подождать."""
+    """The endpoint asked us to wait."""
 
 
 def fetch_from_api() -> PlanLimits | None:
-    """Спросить лимиты у Anthropic. Токен берётся из связки ключей."""
+    """Ask Anthropic for the limits. The token comes from the keychain."""
     credentials = _keychain_credentials()
     oauth = (credentials or {}).get("claudeAiOauth") or {}
     token = oauth.get("accessToken")
@@ -161,14 +161,14 @@ def fetch_from_api() -> PlanLimits | None:
             timeout=REQUEST_TIMEOUT,
         )
     except httpx.HTTPError as exc:
-        log.warning("лимиты не запрошены: %s", exc)
+        log.warning("limits were not requested: %s", exc)
         return PlanLimits("none", None, oauth.get("subscriptionType"), None, [], str(exc))
     if response.status_code == 429:
         raise RateLimited(response.headers.get("retry-after", ""))
     if response.status_code != 200:
-        # Токен мог истечь: обновлять его умеет только Claude Code, поэтому
-        # молча уходим на кэш.
-        log.info("эндпоинт лимитов ответил %s", response.status_code)
+        # The token may have expired: only Claude Code can refresh it, so we
+        # fall back to the cache silently.
+        log.info("the limits endpoint answered %s", response.status_code)
         return None
     return PlanLimits(
         source="api",
@@ -180,7 +180,7 @@ def fetch_from_api() -> PlanLimits | None:
 
 
 def read_from_cache() -> PlanLimits | None:
-    """Прочитать кэш, который ведёт сам Claude Code (только чтение)."""
+    """Read the cache that Claude Code maintains itself (read-only)."""
     try:
         state = json.loads(CLAUDE_STATE.read_text())
     except (OSError, json.JSONDecodeError):
@@ -202,7 +202,7 @@ def read_from_cache() -> PlanLimits | None:
 
 
 class LimitsWatcher:
-    """Держит последние известные лимиты, обновляя их не чаще REFRESH_SECONDS."""
+    """Holds the last known limits, refreshing them no more often than REFRESH_SECONDS."""
 
     def __init__(self, refresh_seconds: float = REFRESH_SECONDS, use_api: bool = True) -> None:
         self.refresh_seconds = refresh_seconds
@@ -226,9 +226,9 @@ class LimitsWatcher:
                 value = fetch_from_api()
             except RateLimited as limited:
                 wait = _retry_after(str(limited))
-                log.info("лимиты запрошены слишком часто, ждём %.0f с", wait)
-        # Кэш Claude Code — запасной путь; последнее удачное значение лучше него,
-        # потому что кэш обновляется, только когда сам Claude Code открывает /usage.
+                log.info("limits requested too often, waiting %.0f s", wait)
+        # The Claude Code cache is a fallback; the last successful value beats it,
+        # because that cache refreshes only when Claude Code itself opens /usage.
         if value is None:
             value = (known if known and known.source == "api" else None) or read_from_cache()
         if value is None:
@@ -241,16 +241,16 @@ class LimitsWatcher:
         return value.as_dict()
 
     def refresh(self, now: float | None = None) -> dict[str, Any]:
-        """Спросить лимиты сейчас, не дожидаясь паузы: пользователь нажал сам.
+        """Ask for the limits now, without waiting out the pause: the user pressed it.
 
-        Нарваться на 429 при этом можно, и тогда останется последнее известное
-        значение, а следующая попытка отодвинется на `Retry-After`.
+        Running into a 429 is possible, and then the last known value stays while the
+        next attempt is pushed out by `Retry-After`.
         """
         return self.current(now, force=True)
 
 
 def _retry_after(header: str) -> float:
-    """Сколько ждать после 429: по заголовку, иначе — фиксированная пауза."""
+    """How long to wait after a 429: from the header, otherwise a fixed pause."""
     try:
         return max(float(header), REFRESH_SECONDS)
     except ValueError:

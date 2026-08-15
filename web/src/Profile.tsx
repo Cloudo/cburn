@@ -1,11 +1,11 @@
-// «На что уходят ходы»: метрики ТЗ §4 — профиль инструментов, доля моделей,
-// холостые ходы и оценка окна лимитов подписки.
+// "Where the turns go": the TZ §4 metrics - the tool profile, the model share,
+// idle turns and an estimate of the subscription limit window.
 
 import { agoLabel, compact, grouped, modelLabel, share, spent, toolLabel, usd } from "./format";
 import type { IdleTurns, Limits, ModelShare, Otel, Plan, ToolProfile } from "./api";
 import { translate, useLang, type Lang } from "./i18n";
 
-/** Список с полосками доли — одна форма для инструментов и bash-команд. */
+/** A list with share bars - one shape for tools and for bash commands. */
 function Ranked({ rows, total }: { rows: Array<{ name: string; calls: number }>; total: number }) {
   const peak = Math.max(...rows.map((row) => row.calls), 1);
   return (
@@ -86,20 +86,20 @@ export function Idle({ idle }: { idle: IdleTurns }) {
   );
 }
 
-/** С какого числа переключений режима разрешений об этом стоит говорить.
- *  Одно-два — обычная работа, а не признак того, что правила мешают. */
+/** From how many permission mode switches it is worth talking about.
+ *  One or two is ordinary work, not a sign that the rules are in the way. */
 const MODE_SWITCHES_WORTH_MENTIONING = 3;
 
-/** С какого времени хуки стоит показывать: быстрые укладываются в единицы
- *  миллисекунд, и шум от них ни о чём не говорит. */
+/** From what duration hooks are worth showing: fast ones fit into single
+ *  milliseconds, and their noise says nothing. */
 const HOOK_SECONDS_WORTH_MENTIONING = 5;
 
-/** Телеметрия Claude Code: то, чего в транскриптах нет (веха E).
+/** Claude Code telemetry: what the transcripts do not hold (milestone E).
  *
- *  Служебные запросы модель делает сама (например, придумывает название
- *  сессии) — в файлы истории они не попадают, поэтому остальные цифры
- *  дашборда на эту величину занижены. Подтверждения разрешений там же:
- *  каждое ручное останавливает работу до ответа человека. */
+ *  Service requests the model makes itself (inventing a session title, for
+ *  instance) never reach the history files, so the other dashboard numbers
+ *  are understated by that much. Permission confirmations are there too:
+ *  each manual one stops the work until the human answers. */
 export function Telemetry({ otel }: { otel?: Otel }) {
   const { t } = useLang();
   if (!otel?.active) {
@@ -112,7 +112,7 @@ export function Telemetry({ otel }: { otel?: Otel }) {
   }
   const { off_transcript: extra, permissions } = otel;
   const switches = (permissions.mode_switches ?? []).reduce((sum, row) => sum + row.switches, 0);
-  // Поля появились позже остальных: фронт мог обогнать запущенный сервер.
+  // The fields appeared later than the rest: the frontend could outrun the running server.
   const work = otel.work;
   const errors = otel.api?.errors ?? 0;
   const hooks = otel.hooks;
@@ -138,8 +138,8 @@ export function Telemetry({ otel }: { otel?: Otel }) {
           </span>
         </div>
       </div>
-      {/* Наблюдения — короткими строками: подробное объяснение уходит
-          в подсказку, иначе виджет не помещается на дашборде. */}
+      {/* Observations in short lines: the detailed explanation goes into
+          the tooltip, otherwise the widget does not fit on the dashboard. */}
       <ul className="telemetry-facts">
         {work && work.active_seconds > 0 && (
           <li title={t("otel.work.why")}>
@@ -257,7 +257,7 @@ export function LimitWindow({ limits, now }: { limits: Limits; now: string }) {
 
 const PLAN_LABELS: Record<string, string> = { max: "Max", pro: "Pro", team: "Team" };
 
-/** Лимиты подписки — те же проценты, что показывает `/usage` в Claude Code. */
+/** Subscription limits - the same percentages `/usage` shows in Claude Code. */
 export function PlanLimits({ plan }: { plan: Plan }) {
   const { lang, t } = useLang();
   if (plan.limits.length === 0) {
@@ -314,7 +314,7 @@ function localeOf(lang: Lang): string {
   return lang === "ru" ? "ru-RU" : "en-US";
 }
 
-/** «через 2 ч 10 мин» — как в самом Claude Code, а не голая дата. */
+/** "in 2 h 10 min" - as in Claude Code itself, rather than a bare date. */
 function resetLabel(iso: string, lang: Lang): string {
   const left = (new Date(iso).getTime() - Date.now()) / 1000;
   if (left <= 0) return translate(lang, "plan.soon");

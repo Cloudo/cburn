@@ -21,10 +21,10 @@ tauri-build = { version = "2.6.3", features = [] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-# `tray-icon` — иконка в меню-баре (задача F2).
+# `tray-icon` - the menu-bar icon (task F2).
 tauri = { version = "2.11.3", features = ["tray-icon"] }
 tauri-plugin-log = "2"
-# Опрос своего же API из трея: нужен самый простой синхронный клиент,
-# асинхронный рантайм ради одного запроса раз в пять секунд не нужен.
+# Polling our own API from the tray: the simplest synchronous client is what is needed,
+# an async runtime for one request every five seconds is not.
 ureq = { version = "2", features = ["json"] }
 tauri-plugin-autostart = "2.5.1"

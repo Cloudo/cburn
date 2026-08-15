@@ -1,10 +1,10 @@
-"""Collector: watchdog по ~/.claude/projects + инкрементальный парсер JSONL (TZ §3).
+"""Collector: watchdog over ~/.claude/projects + incremental JSONL parser (TZ §3).
 
-Разделение ответственности:
-  parser.py  — разбор одной строки транскрипта в записи turns/tool_calls/raw_events;
-  indexer.py — дочитывание хвоста файла по offset, первичная индексация истории;
-  watcher.py — подписка на события ФС и постановка файлов в очередь дочитывания.
+Split of responsibilities:
+  parser.py  - parse one transcript line into turns/tool_calls/raw_events records;
+  indexer.py - read the file tail from the stored offset, initial history indexing;
+  watcher.py - subscribe to FS events and queue files for reading.
 
-Инварианты: ~/.claude только на чтение; битая строка не останавливает обход
-(строка в лог, offset двигается дальше); незнакомые типы записей — в raw_events.
+Invariants: ~/.claude is read-only; a broken line does not stop the walk
+(the line goes to the log, the offset moves on); unknown record types go to raw_events.
 """

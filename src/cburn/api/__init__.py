@@ -1,1 +1,1 @@
-"""API-сервер (FastAPI) и раздача собранного фронта: HTTP + WebSocket на 127.0.0.1 (TZ §3, M2)."""
+"""API server (FastAPI) and static frontend: HTTP + WebSocket on 127.0.0.1 (TZ §3, M2)."""

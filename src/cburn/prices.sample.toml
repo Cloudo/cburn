@@ -1,10 +1,10 @@
-# Заготовка тарифов для `cburn prices --init`: копируется в
-# ~/.config/cburn/config.toml, оттуда и берётся расчёт. Сам файл в
-# подсчёте расхода не участвует.
+# The rate template for `cburn prices --init`: it is copied into
+# ~/.config/cburn/config.toml, and the math takes them from there. This file itself
+# takes no part in counting the spend.
 #
-# Снимок цен Claude API на 2026-08-13, доллары за миллион токенов.
-# Источник: https://platform.claude.com/docs/en/about-claude/pricing
-# Цены меняются — сверяйтесь с источником и правьте свой конфиг.
+# A snapshot of Claude API prices as of 2026-08-13, dollars per million tokens.
+# Source: https://platform.claude.com/docs/en/about-claude/pricing
+# Prices change - check against the source and edit your own config.
 
 [prices."claude-opus-5"]
 input = 5.0

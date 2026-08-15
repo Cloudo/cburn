@@ -1,23 +1,23 @@
-"""Поиск процессов Claude Code (кнопка «закрыть сессию»).
+"""Finding Claude Code processes (the "close session" button).
 
-Точную связку `sessionId` → pid даёт сам Claude Code: `claude agents --json`
-печатает активные сессии, включая интерактивные. В самом процессе `sessionId`
-не найти — его нет ни в аргументах, ни в открытых дескрипторах: транскрипт
-дописывается и сразу закрывается.
+The exact `sessionId` -> pid link comes from Claude Code itself: `claude agents --json`
+prints the active sessions, interactive ones included. The `sessionId` cannot be found
+in the process itself - it is neither in the arguments nor in the open descriptors: the
+transcript is appended to and closed right away.
 
-Про занятость. Отличить работающий инструмент от висящего запроса разрешения
-по транскрипту нельзя: и там, и там последняя запись - запрос инструмента без
-ответа. Разница видна в процессах: долгий Bash - это живой потомок процесса
-сессии, а на вопросе "разрешить?" процесс просто ждёт человека. Постоянные
-потомки (MCP-серверы) стартуют вместе с сессией, поэтому смотрим на самого
-молодого: относится он к текущему запросу или нет, решает `metrics`.
+On being busy. A running tool cannot be told from a hanging permission request by the
+transcript: in both cases the last record is a tool request without an answer. The
+difference shows up in processes: a long Bash is a live child of the session process,
+while on a "allow?" question the process simply waits for the human. Permanent children
+(MCP servers) start together with the session, so we look at the youngest one: whether it
+belongs to the current request is decided by `metrics`.
 
-Про завершение. Своего обработчика сигналов у Claude Code нет: зарегистри-
-рованные `SIGINT`/`SIGHUP`/`SIGTERM` вызывают немедленный `process.exit()`,
-тогда как хуки `SessionEnd` выполняются асинхронно на штатном выходе (`/exit`,
-Ctrl+D, `/clear`, logout). Поэтому SIGTERM закрывает сессию, но хуки
-`SessionEnd` при этом, скорее всего, не отработают — об этом честно
-предупреждает дашборд. Команды «закрыть чужую сессию» в CLI нет.
+On termination. Claude Code has no signal handler of its own: registered
+`SIGINT`/`SIGHUP`/`SIGTERM` cause an immediate `process.exit()`, while `SessionEnd`
+hooks run asynchronously on a regular exit (`/exit`, Ctrl+D, `/clear`, logout).
+So SIGTERM closes the session, but the `SessionEnd` hooks most likely will not run -
+the dashboard warns about that honestly. There is no "close someone else's session"
+command in the CLI.
 """
 
 from __future__ import annotations
@@ -34,21 +34,21 @@ from datetime import UTC, datetime, timedelta
 
 log = logging.getLogger(__name__)
 
-#: Запуск бинаря небыстрый (около 1,3 с), поэтому список кэшируется.
+#: Running the binary is slow (about 1.3 s), so the list is cached.
 TIMEOUT = 30.0
 
-#: Столько живёт кэш списка сессий: сессии не появляются чаще.
+#: How long the session list cache lives: sessions do not appear more often than that.
 CACHE_SECONDS = 15.0
 
 CLAUDE_BINARY = "claude"
 
-#: (момент запроса, ответ). None в ответе — спросить не удалось.
+#: (moment of the request, answer). None in the answer means asking failed.
 _cache: tuple[float, list[ClaudeSession] | None] = (0.0, None)
 
 
 @dataclass(frozen=True)
 class ClaudeSession:
-    """Активная сессия Claude Code, как её видит сам Claude Code."""
+    """An active Claude Code session as Claude Code itself sees it."""
 
     pid: int
     session_id: str
@@ -58,20 +58,20 @@ class ClaudeSession:
 
 
 def active_sessions(*, use_cache: bool = False) -> list[ClaudeSession]:
-    """Спросить у Claude Code список его сессий.
+    """Ask Claude Code for the list of its sessions.
 
-    Пустой список означает и «сессий нет», и «спросить не удалось». Там, где
-    разница важна, берите `active_session_ids`.
+    An empty list means both "no sessions" and "asking failed". Where the difference
+    matters, use `active_session_ids`.
     """
     return _ask(use_cache=use_cache) or []
 
 
 def live_state(*, use_cache: bool = True) -> dict[str, datetime | None] | None:
-    """Живые сессии и момент запуска самого молодого потомка каждой.
+    """Live sessions and the start moment of the youngest child of each.
 
-    None вместо словаря — спросить не удалось; отличать это от «сессий нет»
-    обязательно: молчащий `claude` не повод объявить все сессии завершёнными.
-    None у сессии — потомков нет, то есть процесс ничего не выполняет.
+    None instead of a dict means asking failed; telling that apart from "no sessions"
+    is mandatory: a silent `claude` is no reason to declare every session finished.
+    None for a session means no children, that is, the process runs nothing.
     """
     sessions = _ask(use_cache=use_cache)
     if sessions is None:
@@ -81,10 +81,10 @@ def live_state(*, use_cache: bool = True) -> dict[str, datetime | None] | None:
 
 
 def youngest_children(pids: Iterable[int]) -> dict[int, datetime]:
-    """Момент запуска самого позднего прямого потомка для каждого из `pids`.
+    """The start moment of the latest direct child for each of `pids`.
 
-    Процессы без потомков в ответ не попадают. Возраст берётся у `ps` (`etime`),
-    а не время старта (`lstart`): формат `etime` не зависит от локали.
+    Processes without children do not show up in the answer. The age comes from `ps` (`etime`),
+    not from the start time (`lstart`): the `etime` format does not depend on the locale.
     """
     wanted = set(pids)
     if not wanted:
@@ -98,7 +98,7 @@ def youngest_children(pids: Iterable[int]) -> dict[int, datetime]:
             timeout=TIMEOUT,
         )
     except (OSError, subprocess.SubprocessError) as exc:
-        log.warning("не удалось получить список процессов: %s", exc)
+        log.warning("could not get the process list: %s", exc)
         return {}
     starts: dict[int, datetime] = {}
     for line in result.stdout.splitlines():
@@ -116,7 +116,7 @@ def youngest_children(pids: Iterable[int]) -> dict[int, datetime]:
 
 
 def _parse_etime(value: str) -> timedelta | None:
-    """`[[dd-]hh:]mm:ss` из `ps` в длительность."""
+    """`[[dd-]hh:]mm:ss` from `ps` into a duration."""
     days, _, clock = value.rpartition("-")
     chunks = clock.split(":")
     if not all(chunk.isdigit() for chunk in chunks) or not 2 <= len(chunks) <= 3:
@@ -147,12 +147,12 @@ def _run() -> list[ClaudeSession] | None:
             timeout=TIMEOUT,
         )
     except (OSError, subprocess.SubprocessError) as exc:
-        log.warning("не удалось получить список сессий Claude Code: %s", exc)
+        log.warning("could not get the Claude Code session list: %s", exc)
         return None
     try:
         rows = json.loads(result.stdout or "[]")
     except json.JSONDecodeError as exc:
-        log.warning("список сессий Claude Code не разобран: %s", exc)
+        log.warning("could not parse the Claude Code session list: %s", exc)
         return None
     sessions = []
     for row in rows if isinstance(rows, list) else []:
@@ -171,15 +171,15 @@ def _run() -> list[ClaudeSession] | None:
 
 
 def process_for_session(session_id: str) -> ClaudeSession | None:
-    """Процесс сессии по её идентификатору. Кэш не используется: закрываем по нему."""
+    """The session process by its id. The cache is not used: we close by it."""
     return next((s for s in active_sessions() if s.session_id == session_id), None)
 
 
 def terminate(pid: int) -> bool:
-    """Попросить процесс завершиться (SIGTERM). Насильно не убиваем."""
+    """Ask the process to finish (SIGTERM). We never kill by force."""
     try:
         os.kill(pid, signal.SIGTERM)
     except (ProcessLookupError, PermissionError) as exc:
-        log.warning("не удалось завершить процесс %s: %s", pid, exc)
+        log.warning("could not terminate process %s: %s", pid, exc)
         return False
     return True

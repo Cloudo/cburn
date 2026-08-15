@@ -1,7 +1,7 @@
-"""Запросы к БД. Тяжёлые агрегаты считаются в SQL, не в Python.
+"""Database queries. Heavy aggregates are computed in SQL, not in Python.
 
-Пока здесь только то, что нужно для сверки цифр по сессии (задача A3);
-метрики ТЗ §4 — burn rate по окнам, доля моделей, холостые ходы — задача B3.
+For now this holds only what is needed to reconcile the numbers of a session (task A3);
+the TZ §4 metrics - burn rate per window, model share, idle turns - are task B3.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from typing import Any
 
 @dataclass(frozen=True)
 class SessionSummary:
-    """Итоги по одной сессии."""
+    """Totals for one session."""
 
     session_id: str
     project: str | None
@@ -44,7 +44,7 @@ class SessionSummary:
 
 
 def session_summary(conn: sqlite3.Connection, session_id: str) -> SessionSummary | None:
-    """Суммы по сессии. Считаются из `turns`, а не из кэша в `sessions`."""
+    """Session totals. Computed from `turns`, not from the cache in `sessions`."""
     row = conn.execute(
         """
         SELECT s.id                                        AS session_id,
@@ -60,7 +60,7 @@ def session_summary(conn: sqlite3.Connection, session_id: str) -> SessionSummary
                COALESCE(SUM(t.cache_write_5m), 0)          AS cache_write_5m,
                COALESCE(SUM(t.cache_write_1h), 0)          AS cache_write_1h,
                COALESCE(SUM(t.cost_usd), 0)                AS cost_usd,
-               -- Расход сабагентов входит в сессию и виден отдельной строкой (ТЗ §4).
+               -- Subagent spend belongs to the session and shows as its own row (TZ §4).
                COALESCE(SUM(t.is_sidechain * (t.input_tokens + t.output_tokens + t.cache_read
                           + t.cache_write_5m + t.cache_write_1h)), 0) AS sidechain_tokens,
                COALESCE(SUM(t.is_sidechain * t.cost_usd), 0) AS sidechain_cost_usd,
@@ -80,7 +80,7 @@ def session_summary(conn: sqlite3.Connection, session_id: str) -> SessionSummary
 
 
 def session_models(conn: sqlite3.Connection, session_id: str) -> list[tuple[str, int, int]]:
-    """Распределение ходов и выходных токенов по моделям."""
+    """Distribution of turns and output tokens across models."""
     return [
         (row["model"] or "—", row["turns"], row["output_tokens"])
         for row in conn.execute(
@@ -97,7 +97,7 @@ def session_models(conn: sqlite3.Connection, session_id: str) -> list[tuple[str,
 def session_tools(
     conn: sqlite3.Connection, session_id: str, limit: int = 10
 ) -> list[tuple[str, int]]:
-    """Профиль инструментов сессии: для Bash детализация — задача B3."""
+    """The session tool profile: the Bash breakdown is task B3."""
     return [
         (row["tool"], row["calls"])
         for row in conn.execute(
@@ -113,11 +113,11 @@ def session_tools(
 
 
 def session_tool_times(conn: sqlite3.Connection, session_id: str, limit: int = 10) -> list[dict]:
-    """Сколько времени сессия провела в каждом инструменте (веха E).
+    """How much time the session spent inside each tool (milestone E).
 
-    Длительность знает только телеметрия: в транскрипте между запросом
-    инструмента и его результатом нет ничего, кроме двух отметок времени, а они
-    включают и ожидание разрешения. `duration_ms` приходит строкой, отсюда CAST.
+    Only telemetry knows the duration: in the transcript there is nothing between a tool
+    request and its result except two timestamps, and those include waiting for a
+    permission. `duration_ms` arrives as a string, hence the CAST.
     """
     return [
         dict(row)
@@ -127,8 +127,8 @@ def session_tool_times(conn: sqlite3.Connection, session_id: str, limit: int = 1
                    COUNT(*)                                              AS calls,
                    SUM(CAST(json_extract(attrs, '$.duration_ms') AS REAL)) / 1000.0 AS seconds,
                    MAX(CAST(json_extract(attrs, '$.duration_ms') AS REAL)) / 1000.0 AS slowest,
-                   -- Атрибут `success` приходит строкой, а у части событий его
-                   -- нет вовсе: без COALESCE сумма схлопнулась бы в NULL.
+                   -- The `success` attribute arrives as a string, and some events lack
+                   -- it entirely: without COALESCE the sum would collapse into NULL.
                    SUM(COALESCE(json_extract(attrs, '$.success') IN ('false', 0), 0)) AS failures
               FROM otel_events
              WHERE name = 'tool_result' AND session_id = ?
@@ -145,7 +145,7 @@ def recent_sessions(
     project: str | None = None,
     since: datetime | None = None,
 ) -> list[sqlite3.Row]:
-    """Последние сессии по активности, с фильтрами по проекту и периоду (B7)."""
+    """The latest sessions by activity, with project and period filters (B7)."""
     clause = ""
     params: list[Any] = []
     if project:
@@ -172,9 +172,9 @@ def recent_sessions(
 
 
 def period_start(period: str | None) -> datetime | None:
-    """Начало периода: `today`, `24h`, `7d`, `all`, дата. None — вся история.
+    """The start of a period: `today`, `24h`, `7d`, `all`, a date. None means all history.
 
-    Живёт здесь, а не в CLI: тем же разбором пользуется экран «Сессии».
+    It lives here, not in the CLI: the "Sessions" screen uses the same parsing.
     """
     value = (period or "all").strip().lower()
     now = datetime.now(UTC)
@@ -189,7 +189,7 @@ def period_start(period: str | None) -> datetime | None:
 
 
 def known_projects(conn: sqlite3.Connection) -> list[dict]:
-    """Проекты со счётчиком сессий — для выпадашки фильтра."""
+    """Projects with a session count - for the filter dropdown."""
     return [
         dict(row)
         for row in conn.execute(
@@ -207,11 +207,11 @@ def known_projects(conn: sqlite3.Connection) -> list[dict]:
 
 
 def session_turns(conn: sqlite3.Connection, session_id: str, limit: int = 500) -> list[dict]:
-    """Ходы сессии по порядку — для графика контекста и ленты (задача C2).
+    """Session turns in order - for the context chart and the feed (task C2).
 
-    Холостой ход считается тем же порогом, что и в сводке (ТЗ §6): короткий
-    ответ при большом контексте. Флаг вычисляется в запросе, а не хранится,
-    чтобы правка порога не требовала переиндексации.
+    An idle turn is decided by the same threshold as in the summary (TZ §6): a short
+    answer on a large context. The flag is computed in the query rather than stored,
+    so that changing the threshold needs no reindex.
     """
     return [
         dict(row)
@@ -240,10 +240,10 @@ def session_turns(conn: sqlite3.Connection, session_id: str, limit: int = 500) -
 
 
 def session_events(conn: sqlite3.Connection, session_id: str) -> list[dict]:
-    """Заметные моменты сессии: автосуммаризации и точки ветвления resume.
+    """Notable moments of a session: auto-compactions and resume branch points.
 
-    Форк — это не запись в транскрипте, а связь между сессиями, поэтому он
-    собирается из `parent_session_id`, а не из `session_events`.
+    A fork is not a record in the transcript but a link between sessions, so it is
+    assembled from `parent_session_id`, not from `session_events`.
     """
     marks = [
         dict(row)
@@ -263,12 +263,12 @@ def session_events(conn: sqlite3.Connection, session_id: str) -> list[dict]:
     return sorted(marks, key=lambda mark: mark["ts"] or "")
 
 
-#: Статусы совета: новый, принят к работе, отклонён (задача D6).
+#: Tip statuses: new, accepted, dismissed (task D6).
 ADVICE_STATUSES = ("new", "accepted", "rejected")
 
 
 def advice_history(conn: sqlite3.Connection, limit: int = 20) -> list[dict]:
-    """История разборов со вложенными советами (экран «Советы», задача D6)."""
+    """Analysis history with nested tips (the "Advice" screen, task D6)."""
     runs = [
         dict(row)
         for row in conn.execute(
@@ -298,17 +298,17 @@ def advice_history(conn: sqlite3.Connection, limit: int = 20) -> list[dict]:
     return runs
 
 
-#: Как советчик ссылается на сессию: коротким идентификатором из дайджеста.
-#: Полный uuid он не видит — в дайджест уходит тот же короткий вид.
+#: How the advisor refers to a session: by the short id from the digest.
+#: It never sees the full uuid - the digest carries the same short form.
 _SESSION_MENTION = re.compile(r"\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b|\b[0-9a-f]{8}\b")
 
 
 def _attach_mentioned_sessions(conn: sqlite3.Connection, items: list[dict]) -> None:
-    """Развернуть упомянутые в совете идентификаторы в имя сессии и проект.
+    """Expand the ids mentioned in a tip into a session name and a project.
 
-    Название сессии в дайджест не уходит — это пересказ переписки (ТЗ §7).
-    Но на экране оно нужно: «b2ae5a8a» человеку ничего не говорит. Поэтому
-    разворачиваем здесь, при показе, и название с машины никуда не уезжает.
+    The session title never reaches the digest - it is a retelling of the conversation
+    (TZ §7). On screen it is needed though: "b2ae5a8a" tells a human nothing. So we
+    expand it here, at display time, and the title never leaves the machine.
     """
     prefixes = {
         mention[:8]
@@ -344,27 +344,27 @@ def _attach_mentioned_sessions(conn: sqlite3.Connection, items: list[dict]) -> N
 
 
 def set_advice_status(conn: sqlite3.Connection, item_id: int, status: str) -> bool:
-    """Отметить совет принятым, отклонённым или вернуть в новые.
+    """Mark a tip as accepted, dismissed or put it back to new.
 
-    Отклонённый уезжает в промпт следующего такта пометкой «не повторять» —
-    этим и ценен статус (ТЗ §5).
+    A dismissed one travels into the next tick's prompt marked "do not repeat" -
+    that is what makes the status valuable (TZ §5).
     """
     if status not in ADVICE_STATUSES:
-        raise ValueError(f"неизвестный статус совета: {status}")
+        raise ValueError(f"unknown tip status: {status}")
     with conn:
         cursor = conn.execute("UPDATE advice_items SET status = ? WHERE id = ?", (status, item_id))
     return cursor.rowcount > 0
 
 
-#: Сколько точек в спарклайне расхода сессии: столбик шире пары пикселей на
-#: экране всё равно не разглядеть, а данных на каждую точку нужно тем меньше,
-#: чем их больше.
+#: How many points the session spend sparkline holds: a bar narrower than a couple of
+#: pixels cannot be made out on screen anyway, and the more points there are the less
+#: data each one needs.
 SPARK_POINTS = 24
 
 
-#: Что телеметрия знает о сессии: когда по ней было последнее событие вообще и
-#: когда — последнее решение по разрешению. Оба списка сессий берут эти колонки,
-#: чтобы статус считался одним правилом (веха E).
+#: What telemetry knows about a session: when it last saw any event for it and when
+#: the last permission decision came. Both session lists take these columns so that the
+#: status follows a single rule (milestone E).
 OTEL_SESSION_COLUMNS = """
                    (SELECT MAX(e.ts) FROM otel_events AS e
                      WHERE e.session_id = s.id)                        AS otel_seen_at,
@@ -383,11 +383,11 @@ def sessions_page(
     limit: int = 100,
     now: datetime | None = None,
 ) -> list[dict]:
-    """Экран «Сессии»: список с фильтрами, спарклайном и связью resume (задача C1).
+    """The "Sessions" screen: a list with filters, a sparkline and the resume link (task C1).
 
-    Статус считается тем же правилом, что и на «Обзоре», но фильтруется уже
-    в Python: он выводится из нескольких полей, и переносить это в SQL значит
-    задвоить правило.
+    The status follows the same rule as on "Overview", but the filtering happens in
+    Python: it is derived from several fields, and moving that into SQL would mean
+    duplicating the rule.
     """
     moment = now or datetime.now(UTC)
     clause = ""
@@ -430,7 +430,7 @@ def sessions_page(
 
 
 def _attach_sparklines(conn: sqlite3.Connection, rows: list[dict]) -> None:
-    """Дорисовать каждой сессии её расход по времени — одним запросом на всех."""
+    """Draw each session's spend over time - in a single query for all of them."""
     for row in rows:
         row["spark"] = []
     by_id = {row["id"]: row for row in rows}
@@ -466,15 +466,15 @@ def _attach_sparklines(conn: sqlite3.Connection, rows: list[dict]) -> None:
         by_id[session_id]["spark"] = spark
 
 
-# --- обзор (задача A5) -------------------------------------------------------
+# --- overview (task A5) -------------------------------------------------------
 
-#: Окна burn rate в секундах. Десятисекундное — «что происходит прямо сейчас»:
-#: ход добавляет в окно сотни тысяч токенов разом, и в минутном усреднении это
-#: видно как ступенька длиной в минуту (ТЗ §4).
+#: Burn rate windows in seconds. The ten-second one is "what is happening right now":
+#: a turn drops hundreds of thousands of tokens into the window at once, and in a
+#: one-minute average that shows up as a minute-long step (TZ §4).
 BURN_WINDOWS = (10, 60, 300, 3600)
 
-#: Формат времени в транскриптах: UTC с Z. Строковое сравнение здесь корректно
-#: и позволяет фильтровать по времени прямо в SQL, без разбора дат.
+#: The time format in transcripts: UTC with Z. String comparison is correct here and
+#: lets us filter by time right in SQL, without parsing dates.
 TS_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
 
 
@@ -483,10 +483,10 @@ def _utc_stamp(moment: datetime) -> str:
 
 
 def project_filter(project: str | None, column: str = "session_id") -> tuple[str, list[str]]:
-    """Условие «сессия из этого проекта» и его параметры (задача B7).
+    """The "session from this project" condition and its parameters (task B7).
 
-    Ищется подстрокой в slug — имени каталога транскриптов: оно содержит весь
-    путь, поэтому `myapp` находит `-Users-me-code-myapp`.
+    The search is a substring of the slug - the transcript directory name: it holds the
+    whole path, so `myapp` finds `-Users-me-code-myapp`.
     """
     if not project:
         return "", []
@@ -498,12 +498,12 @@ def project_filter(project: str | None, column: str = "session_id") -> tuple[str
 
 
 def advisor_cost(conn: sqlite3.Connection, since: datetime) -> dict:
-    """Во что обошёлся сам советчик за период (задача C4, ТЗ §10).
+    """What the advisor itself cost over the period (task C4, TZ §10).
 
-    Прибор, который стоит дороже того, что он экономит, — плохой прибор,
-    поэтому собственный расход виден рядом с чужим. Такт на haiku стоит около
-    $0.07: почти всё это запись системного промпта Claude Code в кэш, и
-    подрезать её нечем (см. CLAUDE.md про `claude -p`).
+    An instrument that costs more than it saves is a bad instrument, so its own spend
+    is shown next to everyone else's. A tick on haiku costs about $0.07: almost all of
+    it is writing the Claude Code system prompt into the cache, and there is nothing
+    left to trim (see CLAUDE.md on `claude -p`).
     """
     row = conn.execute(
         "SELECT COUNT(*) AS ticks, COALESCE(SUM(cost_usd), 0) AS cost_usd,"
@@ -528,7 +528,7 @@ def window_usage(
     until: datetime | None = None,
     project: str | None = None,
 ) -> dict:
-    """Суммы по ходам в интервале времени."""
+    """Totals over the turns inside a time interval."""
     params: list[str] = [_utc_stamp(since)]
     clause = "ts >= ?"
     if until is not None:
@@ -548,12 +548,12 @@ def window_usage(
                COALESCE(SUM(cache_write_1h), 0)    AS cache_write_1h,
                COALESCE(SUM(cost_usd), 0)          AS cost_usd
           FROM turns WHERE {clause}
-        """,  # noqa: S608 — параметры подставляются через плейсхолдеры
+        """,  # noqa: S608 - parameters are bound through placeholders
         params,
     ).fetchone()
     usage = dict(row)
     usage["cache_write"] = usage["cache_write_5m"] + usage["cache_write_1h"]
-    # Полный объём токенов, прошедших через модель: им и живёт стрелка спидометра.
+    # The full volume of tokens that went through the model: that is what drives the needle.
     usage["tokens"] = (
         usage["input_tokens"] + usage["output_tokens"] + usage["cache_read"] + usage["cache_write"]
     )
@@ -561,12 +561,12 @@ def window_usage(
 
 
 def window_key(seconds: int) -> str:
-    """Ключ окна в ответе API: 10s, 1m, 5m, 60m."""
+    """The window key in the API answer: 10s, 1m, 5m, 60m."""
     return f"{seconds}s" if seconds < 60 else f"{seconds // 60}m"
 
 
 def burn_rates(conn: sqlite3.Connection, now: datetime) -> dict[str, dict]:
-    """Burn rate по окнам ТЗ §4 — всегда в токенах в минуту, окна разной длины."""
+    """Burn rate over the TZ §4 windows - always tokens per minute, windows of different lengths."""
     rates: dict[str, dict] = {}
     for seconds in BURN_WINDOWS:
         usage = window_usage(conn, now - timedelta(seconds=seconds))
@@ -574,70 +574,70 @@ def burn_rates(conn: sqlite3.Connection, now: datetime) -> dict[str, dict]:
         rates[window_key(seconds)] = {
             "tokens_per_min": usage["tokens"] / minutes,
             "output_per_min": usage["output_tokens"] / minutes,
-            "cost_per_hour": usage["cost_usd"] / minutes * 60,  # цены — задача B1
+            "cost_per_hour": usage["cost_usd"] / minutes * 60,  # prices are task B1
             "turns": usage["turns"],
             "sessions": usage["sessions"],
             "window_seconds": seconds,
-            # Абсолютные суммы за окно: из них считается разбивка по
-            # составляющим, и она должна уметь показывать любое окно.
+            # Absolute totals for the window: the per-part breakdown is computed
+            # from them, and it must be able to show any window.
             "usage": usage,
         }
     return rates
 
 
-#: Сколько живых сессий показывать на дашборде.
+#: How many live sessions to show on the dashboard.
 LIVE_LIMIT = 5
 
-#: Окно, в котором сессия ещё считается недавней и попадает на дашборд.
+#: The window in which a session still counts as recent and makes it to the dashboard.
 LIVE_WINDOW_SECONDS = 3600
 
-#: После этой паузы сессия перестаёт быть «сейчас» и уходит в простой.
+#: After this pause a session stops being "now" and goes idle.
 IDLE_AFTER_SECONDS = 120
 
-#: Столько ждём ответа инструмента, прежде чем смотреть на процессы: до этого
-#: любой инструмент считается работающим, разрешение так быстро не спрашивают.
+#: How long we wait for a tool answer before looking at processes: until then any
+#: tool counts as running, nobody asks for a permission that fast.
 PERMISSION_AFTER_SECONDS = 25
 
-#: Насколько потомок может оказаться старше записи о запросе инструмента:
-#: транскрипт дописывается порциями раз в 2-6 с и отстаёт от запуска процесса.
+#: How much older than the tool request record a child may turn out to be:
+#: the transcript is appended in bursts every 2-6 s and lags behind the process start.
 CHILD_LAG_SECONDS = 10
 
-#: То же ожидание, когда работает телеметрия: решение по разрешению приходит
-#: событием, и ждать четверть минуты незачем — событий хватает через секунды.
-#: Порог всё же не нулевой: логи экспортируются пачкой раз в несколько секунд.
+#: The same wait when telemetry works: the permission decision arrives as an event,
+#: and waiting a quarter of a minute is pointless - events show up within seconds.
+#: The threshold is still not zero: logs are exported in batches every few seconds.
 OTEL_PERMISSION_AFTER_SECONDS = 10
 
-#: Насколько события могут отстать от хода, прежде чем телеметрия считается
-#: замолчавшей (её могли выключить, перезапустив Claude Code без переменных).
+#: How far events may lag behind a turn before telemetry counts as having gone
+#: quiet (it could have been switched off by restarting Claude Code without the variables).
 OTEL_STALE_SECONDS = 60
 
-#: Статусы сессии — по тому, кого она в этот момент ждёт.
-STATUS_WORKING = "working"  # ход не завершён: модель думает или гоняет инструменты
-STATUS_PERMISSION = "permission"  # инструмент запрошен, ответа нет — висит разрешение
-STATUS_ANSWERED = "answered"  # модель ответила и ждёт человека
-STATUS_IDLE = "idle"  # тишина дольше IDLE_AFTER_SECONDS, но процесс жив
-STATUS_DONE = "done"  # процесса нет: в эту сессию больше не пишут
+#: Session statuses - by whom the session is waiting for at that moment.
+STATUS_WORKING = "working"  # the turn is unfinished: the model thinks or drives tools
+STATUS_PERMISSION = "permission"  # a tool was requested, no answer - a permission hangs
+STATUS_ANSWERED = "answered"  # the model answered and waits for the human
+STATUS_IDLE = "idle"  # silence longer than IDLE_AFTER_SECONDS, but the process lives
+STATUS_DONE = "done"  # no process: nothing will be written into this session again
 
 
 def session_status(row: dict, now: datetime) -> str:
-    """Кого сессия ждёт прямо сейчас.
+    """Whom the session is waiting for right now.
 
-    Ход не завершён — работает модель: и когда она думает над промптом, и когда
-    крутит инструменты. Завершённый ход означает обратное: ждут человека.
-    Отдельный случай — инструмент запрошен, а результата нет: это либо долгий
-    инструмент, либо висящий запрос разрешения, и в транскрипте они выглядят
-    одинаково. Разводит их `_tool_is_running` — по процессам.
+    An unfinished turn means the model is working: both while it thinks over the prompt
+    and while it drives tools. A finished turn means the opposite: the human is awaited.
+    A special case is a requested tool with no result: that is either a long tool or a
+    hanging permission request, and in the transcript the two look exactly the same.
+    `_tool_is_running` tells them apart - by processes.
 
-    Тишина сама по себе не отличает паузу от конца работы: транскрипт не знает,
-    что сессия закрылась. Это знает `is_live` — флаг ставится по списку
-    процессов Claude Code (задача B4). Отсутствие процесса засчитывается только
-    после `IDLE_AFTER_SECONDS`: флаг обновляется не мгновенно, и живая сессия
-    не должна мигать «закончилась» между опросами.
+    Silence on its own does not separate a pause from the end of work: the transcript
+    does not know the session was closed. `is_live` knows that - the flag is set from the
+    list of Claude Code processes (task B4). A missing process counts only after
+    `IDLE_AFTER_SECONDS`: the flag is not refreshed instantly, and a live session
+    must not blink "finished" between polls.
 
-    Где включена телеметрия, догадка по процессам не нужна вовсе: решение по
-    разрешению приходит событием `tool_decision` (веха E). Тогда «инструмент
-    работает» — это факт, а не вывод из дерева процессов, и инструменты без
-    своего процесса (MCP-вызовы, `WebFetch`) больше не выглядят ожиданием.
+    Where telemetry is on, guessing by processes is not needed at all: the permission
+    decision arrives as a `tool_decision` event (milestone E). Then "the tool is running"
+    is a fact rather than an inference from the process tree, and tools without a process
+    of their own (MCP calls, `WebFetch`) stop looking like waiting.
     """
     quiet = _seconds_since(row.get("last_record_at") or row.get("last_at"), now)
     kind = row.get("last_record_kind")
@@ -647,7 +647,7 @@ def session_status(row: dict, now: datetime) -> str:
             return STATUS_WORKING
         if quiet < _permission_delay(row):
             return STATUS_WORKING
-        if _otel_active(row):  # телеметрия молчит о решении — значит его и нет
+        if _otel_active(row):  # telemetry is quiet about a decision - so there is none
             return STATUS_PERMISSION
         if _tool_is_running(row):
             return STATUS_WORKING
@@ -660,16 +660,16 @@ def session_status(row: dict, now: datetime) -> str:
 
 
 def _permission_delay(row: dict) -> float:
-    """Сколько ждать ответа инструмента, прежде чем считать это разрешением."""
+    """How long to wait for a tool answer before calling it a permission."""
     return OTEL_PERMISSION_AFTER_SECONDS if _otel_active(row) else PERMISSION_AFTER_SECONDS
 
 
 def _otel_active(row: dict) -> bool:
-    """Шлёт ли эта сессия телеметрию прямо сейчас.
+    """Whether this session is sending telemetry right now.
 
-    Одних старых событий мало: телеметрию могли выключить посреди работы, и
-    тогда молчание значило бы не «решения нет», а «данных нет». События идут
-    на каждый ход, поэтому свежесть проверяется по последнему ходу.
+    Old events alone are not enough: telemetry could have been switched off mid-work, and
+    then silence would mean not "there is no decision" but "there is no data". Events come
+    on every turn, so freshness is checked against the last turn.
     """
     seen = _moment(row.get("otel_seen_at"))
     if seen is None:
@@ -679,12 +679,12 @@ def _otel_active(row: dict) -> bool:
 
 
 def _tool_is_allowed(row: dict) -> bool:
-    """Разрешён ли уже инструмент, о котором просит модель (веха E).
+    """Whether the tool the model asks for has already been allowed (milestone E).
 
-    Событие `tool_decision` приходит и на автоматическое разрешение, и на
-    ответ человека, поэтому решение позже запроса означает одно: сессия не
-    ждёт, а работает. Отставание то же, что у процессов: транскрипт пишется
-    порциями, а события уезжают пачкой раз в несколько секунд.
+    The `tool_decision` event arrives both for an automatic allow and for a human answer,
+    so a decision later than the request means one thing: the session is not waiting, it
+    is working. The lag is the same as with processes: the transcript is written in
+    bursts, and events leave in batches every few seconds.
     """
     decided, asked = _moment(row.get("tool_decided_at")), _moment(row.get("last_record_at"))
     if decided is None or asked is None:
@@ -693,13 +693,13 @@ def _tool_is_allowed(row: dict) -> bool:
 
 
 def _tool_is_running(row: dict) -> bool:
-    """Гоняет ли сессия инструмент прямо сейчас — по процессам (задача B4).
+    """Whether the session drives a tool right now - by processes (task B4).
 
-    Признак работы — потомок процесса сессии, запущенный не раньше запроса
-    инструмента. Постоянные потомки (MCP-серверы) и фоновые команды стартовали
-    раньше и не в счёт, поэтому сравнение по времени, а не «есть потомки».
-    Пока процессы не опрашивали (`is_live IS NULL`), признака нет — тогда
-    остаётся прежняя догадка про висящее разрешение.
+    The sign of work is a child of the session process started no earlier than the tool
+    request. Permanent children (MCP servers) and background commands started earlier and
+    do not count, hence the comparison by time rather than "there are children".
+    While processes have not been polled (`is_live IS NULL`) there is no sign - then the
+    old guess about a hanging permission is what is left.
     """
     if row.get("is_live") is None:
         return False
@@ -728,9 +728,9 @@ def live_sessions(
     seconds: int = LIVE_WINDOW_SECONDS,
     limit: int = 40,
 ) -> list[dict]:
-    """Недавние сессии с их статусами (уточнение живости — задача B4).
+    """Recent sessions with their statuses (liveness refinement is task B4).
 
-    Скрытые вручную не показываются, порядок — по последней активности.
+    Manually hidden ones are not shown, the order is by last activity.
     """
     rows = [
         dict(row)
@@ -760,12 +760,12 @@ def live_sessions(
 
 
 def session_chain(conn: sqlite3.Connection, session_id: str) -> dict:
-    """Вся линия работы, к которой принадлежит сессия (задача B5).
+    """The whole work line the session belongs to (task B5).
 
-    Resume копирует историю в новый `sessionId`, поэтому одна работа
-    рассыпана по нескольким сессиям. Линия строится от корня цепочки вниз;
-    ходы при этом не задваиваются — копии гасятся дедупликацией по
-    `message_id` ещё при импорте.
+    Resume copies the history into a new `sessionId`, so one piece of work is scattered
+    over several sessions. The line is built from the root of the chain downwards;
+    turns are not doubled in the process - the copies were swallowed by deduplication
+    on `message_id` back at import time.
     """
     rows = conn.execute(
         """
@@ -801,12 +801,12 @@ def session_chain(conn: sqlite3.Connection, session_id: str) -> dict:
 
 
 def refresh_liveness(conn: sqlite3.Connection, active: Mapping[str, datetime | None] | None) -> int:
-    """Проставить `is_live` и `busy_since` по живым сессиям Claude Code (задача B4).
+    """Set `is_live` and `busy_since` from the live Claude Code sessions (task B4).
 
-    `active=None` означает «спросить не удалось» — тогда флаги остаются как
-    были: лучше устаревшая живость, чем ложное «закончилась» на всех. Значение
-    сессии — момент запуска её самого молодого потомка (см. `processes`).
-    Возвращает число изменённых строк.
+    `active=None` means "asking failed" - then the flags stay as they were: a stale
+    liveness beats a false "finished" on everything. A session's value is the start
+    moment of its youngest child (see `processes`).
+    Returns the number of changed rows.
     """
     if active is None:
         return 0
@@ -814,7 +814,7 @@ def refresh_liveness(conn: sqlite3.Connection, active: Mapping[str, datetime | N
     holes = ",".join("?" * len(ids))
     changed = 0
     with conn:
-        # Умершие: живость гаснет вместе с занятостью — процесса нет.
+        # The dead ones: liveness goes out together with busyness - there is no process.
         changed += conn.execute(
             f"UPDATE sessions SET is_live = 0, busy_since = NULL"  # noqa: S608
             f" WHERE (is_live IS NOT 0 OR busy_since IS NOT NULL)"
@@ -832,7 +832,7 @@ def refresh_liveness(conn: sqlite3.Connection, active: Mapping[str, datetime | N
 
 
 def top_sessions(conn: sqlite3.Connection, since: datetime, limit: int = 5) -> list[dict]:
-    """Самые расходные сессии периода."""
+    """The most expensive sessions of the period."""
     return [
         dict(row)
         for row in conn.execute(
@@ -856,18 +856,18 @@ def top_sessions(conn: sqlite3.Connection, since: datetime, limit: int = 5) -> l
 
 
 def local_day_start(now: datetime) -> datetime:
-    """Начало сегодняшнего дня по местному времени: «за сегодня» — про человека."""
+    """The start of today in local time: "today" is about the human."""
     local = now.astimezone()
     return local.replace(hour=0, minute=0, second=0, microsecond=0)
 
 
-#: Чем телеметрия помечает служебные запросы Claude Code. Основная работа идёт
-#: как `main`, сабагенты — как `subagent`, и те и другие видны в транскрипте.
-#: `auxiliary` не виден там вовсе: это, например, генерация названия сессии.
+#: How telemetry marks Claude Code service requests. The main work goes as `main`,
+#: subagents as `subagent`, and both are visible in the transcript.
+#: `auxiliary` is not visible there at all: session title generation, for instance.
 OTEL_OFF_TRANSCRIPT = "auxiliary"
 
-#: Источники решения по разрешению, означающие ответ человека, — остальные
-#: (`config`, `hook`) отработали сами и внимания не требуют.
+#: Permission decision sources that mean a human answer - the rest
+#: (`config`, `hook`) worked on their own and need no attention.
 OTEL_MANUAL_SOURCES = ("user_permanent", "user_temporary", "user_abort", "user_reject")
 
 
@@ -877,11 +877,11 @@ def otel_usage(
     until: datetime | None = None,
     project: str | None = None,
 ) -> dict:
-    """Расход, которого нет в транскриптах (веха E).
+    """Spend that is absent from transcripts (milestone E).
 
-    Служебные запросы Claude Code — отдельные вызовы модели, и в JSONL от них
-    не остаётся ничего: расход по ним дашборд занижает ровно на эту величину.
-    Считается только по телеметрии; без неё все цифры нулевые.
+    Claude Code service requests are separate model calls, and nothing of them remains
+    in the JSONL: the dashboard understates the spend by exactly this much.
+    It is counted from telemetry alone; without it every number is zero.
     """
     clause = "ts >= ?"
     params: list[Any] = [_utc_stamp(since)]
@@ -913,8 +913,8 @@ def otel_usage(
         f" AND json_extract(attrs, '$.query_source') <> ?",
         (*params, OTEL_OFF_TRANSCRIPT),
     ).fetchone()[0]
-    # Виды служебных запросов известны только событиям: в метриках все они
-    # свалены в `auxiliary`, а `api_request` называет каждый по имени.
+    # The kinds of service requests are known only to events: in the metrics they are
+    # all lumped into `auxiliary`, while `api_request` names each one.
     kinds = [
         dict(row)
         for row in conn.execute(
@@ -932,15 +932,15 @@ def otel_usage(
         "cache_read": tokens.get("cacheRead", 0),
         "cache_write": tokens.get("cacheCreation", 0),
         "cost_usd": cost,
-        # Доля служебного в том, что телеметрия видела за тот же период.
+        # The share of service work in what telemetry saw over the same period.
         "share": cost / (cost + main_cost) if cost + main_cost else 0.0,
         "request_kinds": kinds,
     }
 
 
-#: Сколько инструментов показывать в разбивке подтверждений. Дальше хвост
-#: ничего не решает, а в дайджесте советчика он ест бюджет: MCP-инструментов
-#: на машине бывают десятки.
+#: How many tools to show in the confirmation breakdown. Beyond that the tail decides
+#: nothing, while in the advisor digest it eats budget: a machine can carry dozens of
+#: MCP tools.
 PERMISSION_TOOLS = 12
 
 
@@ -951,12 +951,12 @@ def otel_permissions(
     project: str | None = None,
     limit: int = PERMISSION_TOOLS,
 ) -> dict:
-    """Решения по запросам разрешений (веха E).
+    """Decisions on permission requests (milestone E).
 
-    В транскрипт Claude Code не пишет ни запрос «разрешить?», ни ответ на него,
-    поэтому до телеметрии этой цифры не было вовсе. Ручные подтверждения —
-    прямой повод поправить `permissions` в настройках: каждое из них
-    останавливает работу и ждёт человека.
+    Claude Code writes neither the "allow?" question nor the answer to it into the
+    transcript, so before telemetry this number did not exist at all. Manual
+    confirmations are a direct reason to fix `permissions` in the settings: each of them
+    stops the work and waits for the human.
     """
     clause = "ts >= ?"
     params: list[Any] = [_utc_stamp(since)]
@@ -990,8 +990,8 @@ def otel_permissions(
             manual_total += row["decisions"]
             tool = row["tool"] or "—"
             manual[tool] = manual.get(tool, 0) + row["decisions"]
-    # Переключения режима — та же тема с другой стороны: если человек раз за
-    # разом уходит в acceptEdits, значит правила разрешений ему мешают.
+    # Mode switches are the same subject from the other side: if a human goes into
+    # acceptEdits over and over, the permission rules are in their way.
     modes = [
         dict(row)
         for row in conn.execute(
@@ -1015,11 +1015,11 @@ def otel_permissions(
 
 
 def otel_errors(conn: sqlite3.Connection, since: datetime) -> dict:
-    """Ошибки и отказы API за период (веха E).
+    """API errors and refusals over the period (milestone E).
 
-    В транскрипт неудавшийся запрос не попадает вовсе: там видно только то,
-    что в итоге ответила модель. Повторы после 429 или 529 при этом стоят
-    времени, и знать о них полезно.
+    A failed request does not reach the transcript at all: there you only see what the
+    model answered in the end. Retries after a 429 or a 529 cost time in the meantime,
+    and knowing about them is useful.
     """
     rows = [
         dict(row)
@@ -1031,8 +1031,8 @@ def otel_errors(conn: sqlite3.Connection, since: datetime) -> dict:
             (_utc_stamp(since),),
         )
     ]
-    # Сбой внутри самого Claude Code — другая беда, чем отказ сети: работа
-    # обрывается на середине, и потраченные на неё токены уже не вернуть.
+    # A failure inside Claude Code itself is a different trouble than a network refusal:
+    # the work breaks off midway, and the tokens spent on it are not coming back.
     internal = [
         dict(row)
         for row in conn.execute(
@@ -1056,13 +1056,13 @@ def otel_mcp(
     until: datetime | None = None,
     project: str | None = None,
 ) -> dict:
-    """Во что обходятся MCP-серверы на старте сессии (веха E).
+    """What MCP servers cost at session start (milestone E).
 
-    Событие `mcp_server_connection` знает время подключения и его исход, а
-    транскрипт — только вызовы инструментов. Сервер, который подключается
-    секунды при каждом запуске и ни разу не пригодился, виден только так.
-    Имя приходит из `server_name` (при `OTEL_LOG_TOOL_DETAILS=1`) или из
-    `plugin.name` у серверов от плагинов.
+    The `mcp_server_connection` event knows the connection time and its outcome, while
+    the transcript knows only tool calls. A server that takes seconds to connect on every
+    start and was never useful is visible only this way.
+    The name comes from `server_name` (with `OTEL_LOG_TOOL_DETAILS=1`) or from
+    `plugin.name` for servers that come from plugins.
     """
     clause = "ts >= ?"
     params: list[Any] = [_utc_stamp(since)]
@@ -1075,8 +1075,8 @@ def otel_mcp(
     rows = [
         dict(row)
         for row in conn.execute(
-            # Ключ с точкой внутри имени: без кавычек путь читался бы как
-            # вложенный объект `plugin` с полем `name`.
+            # A key with a dot inside the name: without quotes the path would read as
+            # a nested object `plugin` with a field `name`.
             f"SELECT COALESCE(json_extract(attrs, '$.server_name'),"
             f"                json_extract(attrs, '$.\"plugin.name\"'), '—') AS server,"
             f"       json_extract(attrs, '$.status')                      AS status,"
@@ -1095,8 +1095,8 @@ def otel_mcp(
         )
         if row["status"] == "connected":
             entry["connects"] += row["events"]
-            # Время подключения; у `disconnected` та же величина означает
-            # прожитое соединение, и складывать их вместе нельзя.
+            # The connection time; for `disconnected` the same value means the
+            # lifetime of the connection, and adding them together is wrong.
             entry["seconds"] += row["seconds"] or 0.0
         elif row["status"] == "failed":
             entry["failures"] += row["events"]
@@ -1109,8 +1109,8 @@ def otel_mcp(
     return {
         "servers": sorted(servers.values(), key=lambda item: -item["seconds"]),
         "connect_seconds": total,
-        # Во что подключение обходится одному запуску: серверы стартуют заново
-        # в каждой сессии, и суммарная цифра без этого мало что говорит.
+        # What connecting costs one start: servers restart anew in every session,
+        # and a total figure without that says little.
         "seconds_per_session": total / sessions if sessions else 0.0,
         "failures": sum(entry["failures"] for entry in servers.values()),
     }
@@ -1123,11 +1123,11 @@ def otel_prompts(
     project: str | None = None,
     limit: int = 12,
 ) -> dict:
-    """Промпты и слэш-команды за период (веха E).
+    """Prompts and slash commands over the period (milestone E).
 
-    В транскрипте слэш-команда — это блоки `<command-name>` вместо живого
-    текста, и парсер их не разбирает; телеметрия называет команду прямо.
-    Из самого промпта берётся только длина: текста у нас нет и не будет.
+    In the transcript a slash command is `<command-name>` blocks instead of live text,
+    and the parser does not unpack them; telemetry names the command directly.
+    Only the length is taken from the prompt itself: we do not have the text and never will.
     """
     clause = "ts >= ?"
     params: list[Any] = [_utc_stamp(since)]
@@ -1162,8 +1162,8 @@ def otel_prompts(
     }
 
 
-#: Сколько секунд суммарно должны отнять хуки, чтобы об этом стоило говорить.
-#: Быстрые хуки укладываются в единицы миллисекунд, и шум от них не нужен.
+#: How many seconds hooks must eat in total before it is worth talking about.
+#: Fast hooks fit into single milliseconds, and their noise is not wanted.
 HOOKS_WORTH_MENTIONING = 5.0
 
 
@@ -1173,12 +1173,12 @@ def otel_hooks(
     until: datetime | None = None,
     project: str | None = None,
 ) -> dict:
-    """Сколько времени съедают хуки Claude Code (веха E).
+    """How much time Claude Code hooks eat (milestone E).
 
-    Хук выполняется между ходами и в транскрипт не попадает вовсе: там между
-    промптом и ответом просто пауза. Между тем HTTP-хук, ждущий недоступный
-    сервис, отнимает десятки секунд на каждом промпте — и заметить это можно
-    только здесь.
+    A hook runs between turns and never reaches the transcript: there is just a pause
+    between a prompt and an answer. Meanwhile an HTTP hook waiting on an unreachable
+    service takes tens of seconds on every prompt - and noticing that is possible
+    only here.
     """
     clause = "ts >= ?"
     params: list[Any] = [_utc_stamp(since)]
@@ -1205,8 +1205,8 @@ def otel_hooks(
             params,
         )
     ]
-    # Что вообще объявлено: хуки регистрируются заново в каждой сессии, поэтому
-    # считаются уникальные пары «событие + тип», а не сумма регистраций.
+    # What is declared at all: hooks are registered anew in every session, so unique
+    # "event + type" pairs are counted rather than the sum of registrations.
     registered = [
         dict(row)
         for row in conn.execute(
@@ -1231,11 +1231,11 @@ def otel_plugins(
     until: datetime | None = None,
     project: str | None = None,
 ) -> list[dict]:
-    """Плагины, которые грузятся в каждую сессию (веха E).
+    """Plugins that load in every session (milestone E).
 
-    Плагин сам по себе бесплатен, а вот что он приносит — нет: MCP-сервер
-    подключается секунды при каждом запуске, скиллы и команды занимают место
-    в контексте. В транскрипте следов загрузки нет вовсе.
+    A plugin is free on its own, but what it brings along is not: an MCP server takes
+    seconds to connect on every start, skills and commands take up room in the context.
+    The transcript carries no trace of the loading at all.
     """
     clause = "ts >= ?"
     params: list[Any] = [_utc_stamp(since)]
@@ -1249,8 +1249,8 @@ def otel_plugins(
         dict(row)
         for row in conn.execute(
             f"SELECT COALESCE(json_extract(attrs, '$.\"plugin.name\"'), '—') AS plugin,"
-            # Признака может не быть вовсе: без COALESCE MAX(NULL) даёт NULL,
-            # и «нет хуков» стало бы неотличимо от «неизвестно».
+            # The sign may be missing entirely: without COALESCE MAX(NULL) gives NULL,
+            # and "no hooks" would become indistinguishable from "unknown".
             f"       COALESCE(MAX(json_extract(attrs, '$.has_mcp') IN (1, 'true')), 0)"
             f"         AS mcp,"
             f"       COALESCE(MAX(json_extract(attrs, '$.has_hooks') IN (1, 'true')), 0)"
@@ -1267,13 +1267,13 @@ def otel_plugins(
 
 
 def otel_sessions(conn: sqlite3.Connection, since: datetime) -> dict:
-    """Сессии глазами телеметрии и глазами парсера (веха E).
+    """Sessions through the eyes of telemetry and through the eyes of the parser (milestone E).
 
-    Метрика `session.count` размечает запуски по `start_type`: свежий,
-    продолженный (`resume`, `continue`) или открытый из списка агентов.
-    Транскрипт такой разметки не несёт — там resume виден только по копиям
-    ходов. Рядом стоит число сессий, дошедших до парсера: расхождение значит,
-    что один из каналов чего-то не видит, и это повод посмотреть внимательнее.
+    The `session.count` metric marks starts by `start_type`: fresh, continued
+    (`resume`, `continue`) or opened from the agents list.
+    The transcript carries no such marking - there resume is visible only through copied
+    turns. Next to it stands the number of sessions that reached the parser: a mismatch
+    means one of the channels misses something, and that is worth a closer look.
     """
     starts = [
         dict(row)
@@ -1309,11 +1309,11 @@ def otel_work(
     until: datetime | None = None,
     project: str | None = None,
 ) -> dict:
-    """Что получилось за расход: строки кода и активное время (веха E).
+    """What came out of the spend: lines of code and active time (milestone E).
 
-    Обе величины считает сам Claude Code, и в транскриптах их нет: строки —
-    результат правок, а активное время исключает паузы, поэтому оно короче
-    промежутка между первым и последним ходом.
+    Claude Code counts both itself, and transcripts hold neither: the lines are the
+    result of edits, and the active time excludes pauses, so it is shorter than the
+    span between the first and the last turn.
     """
     clause = "ts >= ?"
     params: list[Any] = [_utc_stamp(since)]
@@ -1339,8 +1339,8 @@ def otel_work(
     return {
         "lines_added": rows.get((lines, "added"), 0),
         "lines_removed": rows.get((lines, "removed"), 0),
-        # `type` у активного времени: user — человек за клавиатурой,
-        # cli — работа инструментов и генерация ответа.
+        # The `type` of active time: user is the human at the keyboard,
+        # cli is tool work and answer generation.
         "active_seconds": sum(value for (name, _), value in rows.items() if name == active),
         "waiting_seconds": rows.get((active, "cli"), 0),
         "commits": rows.get(("claude_code.commit.count", None), 0),
@@ -1348,7 +1348,7 @@ def otel_work(
 
 
 def otel_state(conn: sqlite3.Connection, since: datetime) -> dict:
-    """Срез телеметрии для обзора: работает ли она и что видит (веха E)."""
+    """A telemetry slice for the overview: whether it works and what it sees (milestone E)."""
     last_at = conn.execute(
         "SELECT MAX(last) FROM (SELECT MAX(ts) AS last FROM otel_metrics"
         " UNION ALL SELECT MAX(ts) FROM otel_events)"
@@ -1367,11 +1367,11 @@ def otel_state(conn: sqlite3.Connection, since: datetime) -> dict:
 def overview(
     conn: sqlite3.Connection, now: datetime | None = None, *, otel: dict | None = None
 ) -> dict:
-    """Сводка для главного экрана (ТЗ §5, «Обзор»).
+    """The summary for the main screen (TZ §5, "Overview").
 
-    Готовый срез телеметрии можно передать снаружи: он считается по десяткам
-    тысяч событий и стоит около 20 мс против 2 мс у всего остального обзора,
-    а обновляется не чаще, чем экспортёр шлёт посылки (`tools/otel_bench.py`).
+    A ready telemetry slice can be passed in from outside: it is computed over tens of
+    thousands of events and costs about 20 ms against 2 ms for all the rest of the
+    overview, while refreshing no more often than the exporter sends (`tools/otel_bench.py`).
     """
     moment = now or datetime.now(UTC)
     day_start = local_day_start(moment)
@@ -1399,8 +1399,8 @@ def overview(
         "stamps": data_stamps(conn, moment),
         "pending_sessions": pending_sessions(conn, moment),
         "otel": otel if otel is not None else otel_state(conn, day_start),
-        # Свой расход рядом с чужим: советчик не должен съедать больше, чем
-        # экономит (задача C4).
+        # Our own spend next to everyone else's: the advisor must not eat more than
+        # it saves (task C4).
         "advisor": advisor_cost(conn, day_start),
         "series_bucket_seconds": SERIES_BUCKET_SECONDS,
         "totals": dict(totals),
@@ -1408,12 +1408,12 @@ def overview(
 
 
 def data_stamps(conn: sqlite3.Connection, now: datetime) -> dict[str, str | None]:
-    """Время самого свежего события в каждом срезе обзора.
+    """The time of the freshest event in each slice of the overview.
 
-    Виджет показывает не момент пересчёта (он идёт раз в секунду и без новых
-    ходов), а время данных, на которых он стоит: в паузе метка честно замирает.
-    Срезы разные, поэтому и времена разные: у ленты — последний ход вообще,
-    у дневных виджетов — последний ход с местной полуночи.
+    The widget shows not the moment of recomputation (that happens every second and
+    without new turns) but the time of the data it stands on: in a pause the mark honestly
+    freezes. The slices differ, so the times differ too: the feed has the last turn of all,
+    the daily widgets have the last turn since local midnight.
     """
     row = conn.execute(
         """
@@ -1436,7 +1436,7 @@ def data_stamps(conn: sqlite3.Connection, now: datetime) -> dict[str, str | None
 
 
 def recent_turns(conn: sqlite3.Connection, limit: int = 25) -> list[dict]:
-    """Лента последних ходов с инструментами, которые в них вызывались."""
+    """A feed of the latest turns with the tools they called."""
     return [
         dict(row)
         for row in conn.execute(
@@ -1457,9 +1457,9 @@ def recent_turns(conn: sqlite3.Connection, limit: int = 25) -> list[dict]:
     ]
 
 
-#: Шаг самописца. Мельче предела не сделать: Claude Code дописывает транскрипт
-#: порциями раз в 2–6 секунд, а расход хода известен только по его завершении,
-#: так что на двух секундах всплески уже разделяются пустыми корзинами.
+#: The chart recorder step. Finer than the limit is impossible: Claude Code appends the
+#: transcript in bursts every 2-6 seconds, and a turn's spend is known only once it
+#: finishes, so at two seconds bursts already separate into empty buckets.
 SERIES_BUCKET_SECONDS = 2
 SERIES_SPAN_MINUTES = 5
 
@@ -1471,10 +1471,10 @@ def burn_series(
     bucket_seconds: int = SERIES_BUCKET_SECONDS,
     span_minutes: int = SERIES_SPAN_MINUTES,
 ) -> list[dict]:
-    """Расход по корзинам времени — лента самописца за последние минуты.
+    """Spend by time buckets - the chart recorder tape of the last minutes.
 
-    Пустые корзины заполняются нулями: без них провал в работе выглядел бы
-    как непрерывная нагрузка, только с редкими точками.
+    Empty buckets are filled with zeros: without them a gap in work would look like
+    a continuous load with rare points.
     """
     start = now - timedelta(minutes=span_minutes)
     edge = int(start.timestamp()) // bucket_seconds * bucket_seconds
@@ -1510,10 +1510,10 @@ def burn_series(
 
 
 def pending_sessions(conn: sqlite3.Connection, now: datetime, minutes: int = 10) -> list[str]:
-    """Сессии, в которых модель работает прямо сейчас (ТЗ §4).
+    """Sessions where the model is working right now (TZ §4).
 
-    Токены такого запроса ещё неизвестны: они появятся в транскрипте только
-    вместе с завершённым ходом.
+    The tokens of such a request are not known yet: they show up in the transcript only
+    together with the finished turn.
     """
     return [
         session["id"] for session in live_sessions(conn, now) if session["status"] == STATUS_WORKING
@@ -1521,7 +1521,7 @@ def pending_sessions(conn: sqlite3.Connection, now: datetime, minutes: int = 10)
 
 
 def set_hidden(conn: sqlite3.Connection, session_id: str, hidden: bool) -> bool:
-    """Убрать сессию с дашборда или вернуть обратно. В транскриптах ничего не меняется."""
+    """Remove a session from the dashboard or bring it back. Nothing changes in the transcripts."""
     with conn:
         cursor = conn.execute(
             "UPDATE sessions SET hidden = ? WHERE id = ?", (int(hidden), session_id)
@@ -1529,17 +1529,17 @@ def set_hidden(conn: sqlite3.Connection, session_id: str, hidden: bool) -> bool:
     return cursor.rowcount > 0
 
 
-# --- метрики ТЗ §4 (задача B3) -----------------------------------------------
+# --- TZ §4 metrics (task B3) -----------------------------------------------
 
-#: Холостой ход: модель ответила почти ничего, хотя контекст уже большой —
-#: случай «жду» из отчёта (ТЗ §4). Пороги вынесены сюда, а не в конфиг:
-#: это определение метрики, а не настройка.
+#: An idle turn: the model answered almost nothing although the context is already large -
+#: the "waiting" case from the report (TZ §4). The thresholds live here rather than in the
+#: config: this is the definition of a metric, not a setting.
 IDLE_MAX_OUTPUT = 10
 IDLE_MIN_CONTEXT = 50_000
 
-#: Окно лимитов подписки: 5 часов с первого хода серии. Точку отсчёта Claude
-#: Code в транскрипт не пишет, поэтому окно восстанавливается по данным и
-#: помечается приближением (уточнение по OTel — веха E).
+#: The subscription limit window: 5 hours from the first turn of a series. Claude Code
+#: does not write the starting point into the transcript, so the window is reconstructed
+#: from the data and marked as an approximation (refined over OTel - milestone E).
 LIMIT_WINDOW_HOURS = 5
 WEEK_HOURS = 24 * 7
 
@@ -1547,7 +1547,7 @@ WEEK_HOURS = 24 * 7
 def model_share(
     conn: sqlite3.Connection, since: datetime, project: str | None = None
 ) -> list[dict]:
-    """Доля моделей за период: ходы и токены (ТЗ §4)."""
+    """Model share over the period: turns and tokens (TZ §4)."""
     clause, params = project_filter(project)
     return [
         dict(row)
@@ -1569,7 +1569,7 @@ def model_share(
 def tool_profile(
     conn: sqlite3.Connection, since: datetime, limit: int = 8, project: str | None = None
 ) -> dict:
-    """Профиль инструментов за период; внутри Bash — по нормализованным командам."""
+    """The tool profile over the period; inside Bash - by normalised commands."""
     clause, params = project_filter(project, "t.session_id")
     tools = [
         dict(row)
@@ -1603,7 +1603,7 @@ def tool_profile(
 
 
 def idle_turns(conn: sqlite3.Connection, since: datetime, project: str | None = None) -> dict:
-    """Холостые ходы за период: сколько их и во что обошлись."""
+    """Idle turns over the period: how many and what they cost."""
     clause, params = project_filter(project)
     row = conn.execute(
         f"""
@@ -1627,13 +1627,13 @@ def idle_turns(conn: sqlite3.Connection, since: datetime, project: str | None = 
 
 
 def limit_window(conn: sqlite3.Connection, now: datetime) -> dict:
-    """Оценка окна лимитов подписки — приближение (ТЗ §4).
+    """An estimate of the subscription limit window - an approximation (TZ §4).
 
-    Claude Code не пишет в транскрипт ни границ окна, ни самих лимитов, так
-    что окно восстанавливается по ходам: оно начинается с первого хода после
-    паузы длиннее пяти часов и столько же длится. Считаем расход внутри
-    текущего окна и за скользящую неделю; «сколько осталось» без лимитов
-    сказать нельзя, поэтому отдаём объём, а не проценты.
+    Claude Code writes neither the window bounds nor the limits themselves into the
+    transcript, so the window is reconstructed from the turns: it starts with the first
+    turn after a pause longer than five hours and lasts just as long. We count the spend
+    inside the current window and over a rolling week; "how much is left" cannot be said
+    without the limits, so we return volume rather than percentages.
     """
     window_start = _current_window_start(conn, now)
     window = window_usage(conn, window_start) if window_start else None
@@ -1653,7 +1653,7 @@ def limit_window(conn: sqlite3.Connection, now: datetime) -> dict:
 
 
 def _current_window_start(conn: sqlite3.Connection, now: datetime) -> datetime | None:
-    """Начало текущего пятичасового окна: первый ход после паузы длиннее окна."""
+    """The start of the current five-hour window: the first turn after a pause longer than it."""
     rows = conn.execute(
         """
         SELECT ts FROM turns
@@ -1667,7 +1667,7 @@ def _current_window_start(conn: sqlite3.Connection, now: datetime) -> datetime |
     start = _parse_stamp(rows[0]["ts"])
     for row in rows[1:]:
         moment = _parse_stamp(row["ts"])
-        if moment - start >= span:  # прошлое окно закрылось, началось новое
+        if moment - start >= span:  # the previous window closed, a new one began
             start = moment
     return start
 

@@ -1,9 +1,9 @@
-"""Куда уходит сообщение: бридж, Bot API или никуда (задача D5, ТЗ §7).
+"""Where a message goes: the bridge, the Bot API or nowhere (task D5, TZ §7).
 
-Основной канал — соседний `cc-tg-bridge`: он уже умеет темы, кнопки и знает,
-кому писать, а нам достаточно послать текст. Прямой Bot API остаётся запасным
-для тех, у кого бриджа нет. `off` выключает отправку целиком — прибор
-продолжает считать, просто молчит.
+The main channel is the neighbouring `cc-tg-bridge`: it already knows topics, buttons and
+whom to write to, and all we have to do is send text. The direct Bot API stays as a
+fallback for those without the bridge. `off` disables sending entirely - the instrument
+keeps counting, it just stays quiet.
 """
 
 from __future__ import annotations
@@ -15,13 +15,13 @@ import httpx
 
 log = logging.getLogger(__name__)
 
-#: Сколько ждать телеграм: дольше держать такт советчика незачем, а сообщение
-#: не настолько важно, чтобы ради него тормозить всё остальное.
+#: How long to wait for telegram: holding the advisor tick longer is pointless, and the
+#: message is not important enough to slow everything else down for it.
 TIMEOUT = 5.0
 
 
 class Channel:
-    """Отправка одного текста. Ошибку не глотает — возвращает её словами."""
+    """Sending one text. It does not swallow the error - it returns it in words."""
 
     def __init__(self, config: dict[str, Any]) -> None:
         telegram = config.get("telegram") or {}
@@ -29,8 +29,8 @@ class Channel:
         self.bridge_url: str = (telegram.get("bridge_url") or "").rstrip("/")
         self.bot_token: str = telegram.get("bot_token") or ""
         self.chat_id: str = str(telegram.get("chat_id") or "")
-        # Токен бриджа лежит в его собственном конфиге: дублировать секрет
-        # в двух местах нельзя, поэтому читаем оттуда же, откуда читает он.
+        # The bridge token lives in its own config: duplicating a secret in two
+        # places is not allowed, so we read it where the bridge reads it.
         self.hook_token: str = telegram.get("bridge_token") or _bridge_token()
 
     @property
@@ -38,20 +38,20 @@ class Channel:
         return self.mode in {"bridge", "bot"}
 
     def send(self, text: str, severity: str = "info", silent: bool | None = None) -> str | None:
-        """Отправить; вернуть None при успехе или описание ошибки."""
+        """Send; return None on success or a description of the error."""
         if not self.enabled:
             return None
         try:
             if self.mode == "bridge":
                 return self._send_bridge(text, severity, silent)
             return self._send_bot(text, severity, silent)
-        except Exception as error:  # сеть, таймаут, неверный ответ
-            log.warning("уведомление не ушло (%s): %s", self.mode, error)
+        except Exception as error:  # network, timeout, bad answer
+            log.warning("notification did not go out (%s): %s", self.mode, error)
             return str(error)
 
     def _send_bridge(self, text: str, severity: str, silent: bool | None) -> str | None:
         if not self.bridge_url:
-            return "не задан telegram.bridge_url"
+            return "telegram.bridge_url is not set"
         payload: dict[str, Any] = {"text": text, "severity": severity}
         if silent is not None:
             payload["silent"] = silent
@@ -60,12 +60,12 @@ class Channel:
             f"{self.bridge_url}/notify", json=payload, headers=headers, timeout=TIMEOUT
         )
         if response.status_code >= 400:
-            return f"бридж ответил {response.status_code}: {response.text[:200]}"
+            return f"the bridge answered {response.status_code}: {response.text[:200]}"
         return None
 
     def _send_bot(self, text: str, severity: str, silent: bool | None) -> str | None:
         if not self.bot_token or not self.chat_id:
-            return "не заданы telegram.bot_token и chat_id"
+            return "telegram.bot_token and telegram.chat_id are not set"
         quiet = silent if silent is not None else severity == "info"
         response = httpx.post(
             f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
@@ -78,12 +78,12 @@ class Channel:
             timeout=TIMEOUT,
         )
         if response.status_code >= 400:
-            return f"Bot API ответил {response.status_code}: {response.text[:200]}"
+            return f"the Bot API answered {response.status_code}: {response.text[:200]}"
         return None
 
 
 def _bridge_token() -> str:
-    """Токен бриджа из его конфига: `~/.config/cc-tg-bridge/config.json`."""
+    """The bridge token from its own config: `~/.config/cc-tg-bridge/config.json`."""
     import json
     from pathlib import Path
 

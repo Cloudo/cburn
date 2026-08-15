@@ -1,13 +1,12 @@
-"""Импорт транскриптов в SQLite (задача A2).
+"""Importing transcripts into SQLite (task A2).
 
-Файл читается только с сохранённого offset и только до последнего полного
-переноса строки: недописанный хвост остаётся до следующего прохода. Offset
-сбрасывается, когда файл пересоздан (сменился inode) или усечён (size меньше
-запомненного).
+A file is read only from the stored offset and only up to the last complete newline:
+an unfinished tail waits for the next pass. The offset is reset when the file has been
+recreated (the inode changed) or truncated (the size is smaller than remembered).
 
-Импорт идемпотентен: ход опознаётся по `message_id`, вызов инструмента — по
-`tool_use_id`, оба поля UNIQUE. Это же гасит копии ходов, которые Claude Code
-переносит в новый файл при resume.
+The import is idempotent: a turn is identified by `message_id`, a tool call by
+`tool_use_id`, both fields UNIQUE. That also swallows the turn copies Claude Code
+carries into a new file on resume.
 """
 
 from __future__ import annotations
@@ -24,30 +23,30 @@ from .parser import ParsedRecord, RecordKind, Usage, parse_line
 
 log = logging.getLogger(__name__)
 
-#: Служебные ответы Claude Code («No response requested», упирание в лимит):
-#: нулевой usage и отсутствующий requestId, расходом не являются.
+#: Claude Code service answers ("No response requested", hitting the limit):
+#: zero usage and no requestId, they are not spend.
 SYNTHETIC_MODEL = "<synthetic>"
 
 
 @dataclass
 class IngestStats:
-    """Что дал проход по одному файлу."""
+    """What one pass over a single file produced."""
 
     path: str
     lines: int = 0
     turns_new: int = 0
-    turns_known: int = 0  # уже были в БД: повтор хвоста или копия при resume
+    turns_known: int = 0  # already in the database: a re-read tail or a resume copy
     tools_new: int = 0
     prompts: int = 0
     unknown: int = 0
     sessions: int = 0
     offset: int = 0
-    restarted: bool = False  # offset сбрасывался: файл пересоздан или усечён
+    restarted: bool = False  # the offset was reset: the file was recreated or truncated
 
 
 @dataclass
 class _Turn:
-    """Ход, собираемый из нескольких записей с одним `message_id`."""
+    """A turn assembled from several records sharing one `message_id`."""
 
     message_id: str
     session_id: str
@@ -63,29 +62,29 @@ class _Turn:
 
 @dataclass
 class _Session:
-    """Метаданные сессии, накопленные по её записям в файле."""
+    """Session metadata accumulated over its records in the file."""
 
     session_id: str
     started_at: str | None = None
     last_at: str | None = None
     first_prompt: str | None = None
     cwd: str | None = None
-    last_record_kind: str | None = None  # чем сессия заканчивается на этой записи
+    last_record_kind: str | None = None  # what the session ends with at this record
     last_record_at: str | None = None
     title: str | None = None
     title_source: str | None = None
     last_prompt: str | None = None
     last_stop_reason: str | None = None
-    last_turn_at: str | None = None  # время хода, чей stop_reason запомнен
+    last_turn_at: str | None = None  # the time of the turn whose stop_reason is remembered
 
 
 def ingest_file(conn: sqlite3.Connection, path: Path) -> IngestStats:
-    """Дочитать файл транскрипта с сохранённого offset и записать в БД."""
+    """Read a transcript file from the stored offset and write it into the database."""
     stats = IngestStats(path=str(path))
     try:
         file_stat = path.stat()
     except OSError as exc:
-        log.warning("файл транскрипта недоступен (%s): %s", path, exc)
+        log.warning("transcript file unavailable (%s): %s", path, exc)
         return stats
 
     offset, stats.restarted = _resume_offset(conn, path, file_stat.st_ino, file_stat.st_size)
@@ -103,13 +102,13 @@ def ingest_file(conn: sqlite3.Connection, path: Path) -> IngestStats:
             continue
         if record.kind is RecordKind.UNKNOWN:
             unknown.append((line_no, record, raw))
-        # Автосуммаризация: после неё контекст обваливается, и на графике
-        # должно быть видно, почему (задача C2).
+        # Auto-compaction: after it the context collapses, and the chart must show
+        # why (task C2).
         if record.is_compact_summary and record.session_id and record.ts:
             events.append((record.session_id, record.ts, "compact"))
         _collect(record, turns, sessions, stats)
 
-    with conn:  # одна транзакция на файл: либо файл учтён, либо offset не сдвинут
+    with conn:  # one transaction per file: either the file is counted or the offset stays
         project_id = _upsert_project(conn, path, sessions)
         _upsert_sessions(conn, sessions, project_id)
         _insert_turns(conn, turns, stats)
@@ -131,11 +130,11 @@ def ingest_tree(
     root: Path,
     on_file: Callable[[int, int, Path], None] | None = None,
 ) -> list[IngestStats]:
-    """Обойти каталог транскриптов целиком (задача B2).
+    """Walk the whole transcript directory (task B2).
 
-    `on_file(готово, всего, путь)` вызывается после каждого файла — CLI рисует
-    по нему прогресс. Отдельная фоновая задача не понадобилась: полный обход
-    639 МБ занимает секунды, см. README.
+    `on_file(done, total, path)` is called after each file - the CLI draws progress from
+    it. A separate background job was never needed: a full walk over 639 MB takes
+    seconds, see README.
     """
     paths_to_read = sorted(root.rglob("*.jsonl"))
     results = []
@@ -146,7 +145,7 @@ def ingest_tree(
     return results
 
 
-# --- чтение хвоста ----------------------------------------------------------
+# --- reading the tail --------------------------------------------------------
 
 
 def _resume_offset(conn: sqlite3.Connection, path: Path, inode: int, size: int) -> tuple[int, bool]:
@@ -156,16 +155,16 @@ def _resume_offset(conn: sqlite3.Connection, path: Path, inode: int, size: int) 
     if row is None:
         return 0, False
     if row["inode"] != inode or size < row["size"]:
-        log.info("файл пересоздан или усечён, читаем сначала: %s", path)
+        log.info("file recreated or truncated, reading from the start: %s", path)
         return 0, True
     return int(row["offset"]), False
 
 
 def _read_complete_lines(path: Path, offset: int) -> tuple[list[str], int]:
-    """Прочитать от offset только полные строки; вернуть их и новый offset.
+    """Read only complete lines from the offset; return them and the new offset.
 
-    Недописанная последняя строка (без перевода строки) не отдаётся и не
-    сдвигает offset — Claude Code допишет её в следующий момент.
+    An unfinished last line (without a newline) is not returned and does not move
+    the offset - Claude Code will finish writing it in a moment.
     """
     lines: list[str] = []
     position = offset
@@ -179,7 +178,7 @@ def _read_complete_lines(path: Path, offset: int) -> tuple[list[str], int]:
     return lines, position
 
 
-# --- накопление -------------------------------------------------------------
+# --- accumulating ------------------------------------------------------------
 
 
 def _collect(
@@ -189,12 +188,12 @@ def _collect(
     stats: IngestStats,
 ) -> None:
     if record.kind is RecordKind.LAST_PROMPT and record.session_id:
-        # У записи нет времени: она всегда описывает текущее состояние сессии.
+        # The record has no time: it always describes the current session state.
         session = sessions.setdefault(record.session_id, _Session(session_id=record.session_id))
         session.last_prompt = record.prompt_text
         return
     if record.kind is RecordKind.TITLE and record.session_id:
-        # У записей названия нет ни времени, ни uuid — только sessionId.
+        # Title records have neither time nor uuid - only sessionId.
         session = sessions.setdefault(record.session_id, _Session(session_id=record.session_id))
         if record.title_source == "custom" or session.title_source != "custom":
             session.title = record.title
@@ -207,7 +206,7 @@ def _collect(
         stats.prompts += 1
         return
     if record.kind is RecordKind.UNKNOWN:
-        stats.unknown += 1  # складывание в raw_events — задача B6
+        stats.unknown += 1  # stashing into raw_events is task B6
         return
     if record.kind is not RecordKind.ASSISTANT:
         return
@@ -223,8 +222,8 @@ def _collect(
 
     turn = turns.get(record.message_id)
     if turn is not None:
-        # Записи одного хода несут расход неравномерно: у части он ещё нулевой.
-        # Правильное значение — поэлементный максимум, см. Usage.merge.
+        # Records of one turn carry the spend unevenly: for some it is still zero.
+        # The right value is the element-wise maximum, see Usage.merge.
         turn.usage = turn.usage.merge(record.usage or Usage())
         turn.model = turn.model or record.model
         turn.request_id = turn.request_id or record.request_id
@@ -252,16 +251,16 @@ def _touch_session(sessions: dict[str, _Session], record: ParsedRecord) -> None:
         session.started_at = record.ts
     if session.last_at is None or record.ts > session.last_at:
         session.last_at = record.ts
-    # Служебные записи (attachment и прочие) на «чем закончилась сессия» не
-    # влияют: между промптом и ответом их пишется сколько угодно.
+    # Service records (attachment and the rest) do not affect "how the session ended":
+    # any number of them can be written between a prompt and an answer.
     if record.kind is not RecordKind.UNKNOWN and (
         session.last_record_at is None or record.ts >= session.last_record_at
     ):
         session.last_record_kind = record.kind.value
         session.last_record_at = record.ts
     session.cwd = session.cwd or record.cwd
-    # Подпись сессии — первый настоящий промпт человека: ни сабагент,
-    # ни пересказ автосуммаризации на эту роль не годятся.
+    # The session caption is the first real human prompt: neither a subagent nor
+    # an auto-compaction summary fits that role.
     if (
         session.first_prompt is None
         and record.kind is RecordKind.PROMPT
@@ -272,28 +271,28 @@ def _touch_session(sessions: dict[str, _Session], record: ParsedRecord) -> None:
         session.first_prompt = record.prompt_text
 
 
-# --- запись -----------------------------------------------------------------
+# --- writing -------------------------------------------------------------
 
 
 def _project_slug(path: Path) -> str:
-    """Slug проекта — каталог верхнего уровня в каталоге транскриптов.
+    """The project slug is the top-level directory inside the transcript directory.
 
-    Имя родительского каталога тут не годится: транскрипты сабагентов лежат
-    в `<проект>/<сессия>/subagents/`, и от них заводился псевдопроект
-    «subagents», куда уезжали и сами родительские сессии.
+    The parent directory name will not do here: subagent transcripts live in
+    `<project>/<session>/subagents/`, and they used to spawn a pseudo-project
+    "subagents" that swallowed the parent sessions too.
     """
     try:
         parts = path.relative_to(paths.CLAUDE_PROJECTS_DIR).parts
     except ValueError:
-        return path.parent.name  # файл вне каталога транскриптов (тесты, ручной прогон)
+        return path.parent.name  # a file outside the transcript directory (tests, manual run)
     return parts[0] if len(parts) > 1 else ""
 
 
 def project_name(root_path: str | None) -> str | None:
-    """Человеческое имя проекта — последний сегмент рабочего пути.
+    """The human project name is the last segment of the working path.
 
-    Slug остаётся ключом каталога в `~/.claude/projects`, но на экране от него
-    толку нет: `-Users-me-code-myapp` читается хуже, чем `myapp`.
+    The slug stays the key of the directory in `~/.claude/projects`, but on screen it is
+    useless: `-Users-me-code-myapp` reads worse than `myapp`.
     """
     return PurePosixPath(root_path).name or None if root_path else None
 
@@ -335,15 +334,15 @@ def _upsert_sessions(
                                excluded.started_at),
             last_at      = MAX(COALESCE(sessions.last_at, excluded.last_at), excluded.last_at),
             first_prompt = COALESCE(sessions.first_prompt, excluded.first_prompt),
-            -- Батч из одних служебных записей приходит без last_record_at, и NULL
-            -- в скалярном MAX обнулил бы колонку, а с ней и паузу до простоя.
+            -- A batch of only service records arrives without last_record_at, and NULL
+            -- in a scalar MAX would wipe the column, and the idle countdown with it.
             last_record_kind = CASE
                 WHEN excluded.last_record_at IS NULL THEN sessions.last_record_kind
                 WHEN excluded.last_record_at >= COALESCE(sessions.last_record_at, '')
                 THEN excluded.last_record_kind ELSE sessions.last_record_kind END,
             last_record_at = MAX(COALESCE(sessions.last_record_at, excluded.last_record_at),
                                  COALESCE(excluded.last_record_at, sessions.last_record_at)),
-            -- Название, заданное человеком, не затирается сгенерированным.
+            -- A title set by a human is never overwritten by a generated one.
             title = CASE
                 WHEN excluded.title IS NULL THEN sessions.title
                 WHEN sessions.title_source = 'custom' AND excluded.title_source <> 'custom'
@@ -442,8 +441,8 @@ def _insert_turns(conn: sqlite3.Connection, turns: dict[str, _Turn], stats: Inge
     conn.executemany(
         """
         INSERT INTO tool_calls (turn_id, tool_use_id, tool, detail) VALUES (?, ?, ?, ?)
-        -- Нормализация команды выводится из данных, а её правила меняются:
-        -- при повторном чтении файла деталь обновляется, а не застревает старой.
+        -- Command normalisation is derived from the data, and its rules change:
+        -- on a re-read the detail is refreshed instead of getting stuck at the old value.
         ON CONFLICT(tool_use_id) DO UPDATE SET detail = excluded.detail
         """,
         rows,
@@ -451,19 +450,19 @@ def _insert_turns(conn: sqlite3.Connection, turns: dict[str, _Turn], stats: Inge
     stats.tools_new = _count(conn, "tool_calls") - tools_before
 
 
-#: Сколько полных экземпляров хранить на пару (тип, версия). Дальше — счётчик:
-#: незнакомых записей в истории десятки тысяч, и примеров хватает единиц.
+#: How many full samples to keep per (type, version) pair. Beyond that it is a counter:
+#: unknown records run into tens of thousands, and a handful of samples is enough.
 RAW_SAMPLE_LIMIT = 5
 
 
 def _store_unknown(
     conn: sqlite3.Connection, path: Path, records: list[tuple[int, ParsedRecord, str]]
 ) -> None:
-    """Сложить незнакомые записи: примеры и счётчик по паре (тип, версия).
+    """Stash unknown records: samples plus a counter per (type, version) pair.
 
-    Формат транскриптов недокументирован и меняется между версиями Claude Code.
-    Счётчик отвечает на вопрос «что появилось», примеры — «как оно выглядит»;
-    полный payload дальше первых `RAW_SAMPLE_LIMIT` не нужен (задача B6).
+    The transcript format is undocumented and changes between Claude Code versions.
+    The counter answers "what showed up", the samples answer "what it looks like";
+    the full payload beyond the first `RAW_SAMPLE_LIMIT` is not needed (task B6).
     """
     for line_no, record, raw in records:
         version = record.version or ""
@@ -489,13 +488,13 @@ def _store_unknown(
             )
 
 
-#: По сколько message_id спрашивать за раз: в файле их бывают тысячи, а число
-#: параметров в запросе SQLite ограничено.
+#: How many message_ids to ask about at a time: a file can hold thousands, and the
+#: number of parameters in an SQLite query is limited.
 _CHUNK = 500
 
 
 def _store_events(conn: sqlite3.Connection, events: list[tuple[str, str, str]]) -> None:
-    """Заметные моменты сессии. Повтор чтения хвоста их не задваивает: UNIQUE."""
+    """Notable moments of a session. Re-reading the tail does not double them: UNIQUE."""
     if not events:
         return
     conn.executemany(
@@ -505,17 +504,17 @@ def _store_events(conn: sqlite3.Connection, events: list[tuple[str, str, str]]) 
 
 
 def _link_parents(conn: sqlite3.Connection, turns: dict[str, _Turn]) -> None:
-    """Связать сессию с той, из которой её продолжили (задача B5).
+    """Link a session to the one it was continued from (task B5).
 
-    При resume Claude Code копирует прошлые ходы в новый файл с новым
-    `sessionId`, сохраняя `message.id`. Дедупликация оставляет такой ход за
-    первым владельцем — значит, ходы этого файла, записанные на чужую сессию,
-    и есть скопированная история.
+    On resume Claude Code copies past turns into a new file with a new `sessionId`,
+    keeping `message.id`. Deduplication leaves such a turn with its first owner - which
+    means the turns of this file recorded against someone else's session are exactly
+    the copied history.
 
-    Направление связи задаёт время, а не порядок чтения файлов: родитель — та
-    из двух сессий, что началась раньше. Иначе связь зависела бы от того, чей
-    файл попался обходу первым. Пара сравнивается по `(started_at, id)`, так
-    что порядок строгий и цикл невозможен. Связь ставится один раз.
+    The direction of the link is set by time, not by file read order: the parent is
+    whichever of the two sessions started earlier. Otherwise the link would depend on
+    whose file the walk hit first. The pair is compared by `(started_at, id)`, so the
+    order is strict and a cycle is impossible. The link is set once.
     """
     by_session: dict[str, list[str]] = {}
     for message_id, turn in turns.items():
@@ -554,11 +553,11 @@ def _link_parents(conn: sqlite3.Connection, turns: dict[str, _Turn]) -> None:
             "UPDATE sessions SET parent_session_id = ? WHERE id = ? AND parent_session_id IS NULL",
             (older, younger),
         )
-        log.info("сессия %s продолжает %s (общих ходов %s)", younger, older, shared[candidate])
+        log.info("session %s continues %s (shared turns %s)", younger, older, shared[candidate])
 
 
 def _refresh_session_totals(conn: sqlite3.Connection, session_ids: Iterable[str]) -> None:
-    """Пересчитать агрегаты затронутых сессий (тяжёлое считается в SQL)."""
+    """Recompute the aggregates of the affected sessions (heavy work runs in SQL)."""
     ids = tuple(session_ids)
     if not ids:
         return

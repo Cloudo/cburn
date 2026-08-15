@@ -1,8 +1,8 @@
-"""Тесты планировщика советчика (задача D3).
+"""Tests of the advisor scheduler (task D3).
 
-Каждый такт стоит денег, поэтому решение «звать модель или нет» проверяется
-особенно придирчиво: выключенный советчик, слишком ранний такт и период без
-ходов не должны приводить к вызову.
+Every tick costs money, so the "call the model or not" decision is checked
+especially closely: a switched-off advisor, a too early tick and a period without
+turns must not lead to a call.
 """
 
 from __future__ import annotations
@@ -61,7 +61,7 @@ def test_disabled_analyzer_never_ticks(conn: sqlite3.Connection) -> None:
 
 
 def test_quiet_period_is_skipped(conn: sqlite3.Connection) -> None:
-    """Ходов не было — советовать не о чем, деньги не тратим."""
+    """There were no turns - nothing to advise about, no money spent."""
     now = datetime.now(UTC)
     add_tick(conn, scheduler.WEEKLY, now - timedelta(days=1))
     add_tick(conn, scheduler.HOURLY, now - timedelta(hours=2))
@@ -82,7 +82,7 @@ def test_hourly_tick_after_interval(conn: sqlite3.Connection) -> None:
 
 
 def test_tick_waits_for_the_interval(conn: sqlite3.Connection) -> None:
-    """Раньше срока не тикаем, даже если ходы идут."""
+    """We do not tick early, even when turns keep coming."""
     now = datetime.now(UTC)
     add_tick(conn, scheduler.WEEKLY, now - timedelta(days=1))
     add_tick(conn, scheduler.HOURLY, now - timedelta(minutes=10))
@@ -92,7 +92,7 @@ def test_tick_waits_for_the_interval(conn: sqlite3.Connection) -> None:
 
 
 def test_weekly_tick_wins_and_takes_the_bigger_model(conn: sqlite3.Connection) -> None:
-    """Недельный разбор идёт на модели побольше и опережает часовой."""
+    """The weekly analysis runs on a bigger model and outranks the hourly one."""
     now = datetime.now(UTC)
     add_tick(conn, scheduler.HOURLY, now - timedelta(hours=2))
     add_turn(conn, now - timedelta(days=2))
@@ -104,7 +104,7 @@ def test_weekly_tick_wins_and_takes_the_bigger_model(conn: sqlite3.Connection) -
 
 
 def test_warmup_holds_the_first_tick(conn: sqlite3.Connection) -> None:
-    """Перезапуск сервера не должен сам по себе стоить денег."""
+    """A server restart must not cost money by itself."""
     now = datetime.now(UTC)
     add_turn(conn, now - timedelta(minutes=5))
 
@@ -113,7 +113,7 @@ def test_warmup_holds_the_first_tick(conn: sqlite3.Connection) -> None:
 
 
 def test_run_tick_records_its_kind(conn: sqlite3.Connection) -> None:
-    """Вид такта пишется в историю: по нему считается следующий недельный."""
+    """The tick kind is written into history: the next weekly one is counted from it."""
     now = datetime.now(UTC)
     add_turn(conn, now - timedelta(minutes=10))
     envelope = {
@@ -122,7 +122,7 @@ def test_run_tick_records_its_kind(conn: sqlite3.Connection) -> None:
         "structured_output": {
             "advice": [
                 {
-                    "title": "Закрыть линию работы",
+                    "title": "Close the work line",
                     "severity": "warn",
                     "detail": "",
                     "action": "",
@@ -144,7 +144,7 @@ def test_run_tick_records_its_kind(conn: sqlite3.Connection) -> None:
     row = conn.execute("SELECT kind, model, cost_usd FROM advice").fetchone()
     assert row["kind"] == scheduler.WEEKLY
     assert row["model"] == "claude-sonnet-5"
-    # Следующий недельный такт считается от этого, а не от календаря.
+    # The next weekly tick is counted from this one, not from the calendar.
     assert scheduler.plan_tick(conn, now, CONFIG) is None
     digest_json = conn.execute("SELECT digest_json FROM advice").fetchone()["digest_json"]
     assert json.loads(digest_json)["usage"]["turns"] == 1

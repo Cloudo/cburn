@@ -1,6 +1,6 @@
-// Язык интерфейса. Библиотеки ради двух языков не нужны: словарь плоский,
-// подстановка одна, а выбор языка — такое же дело браузера, как и раскладка,
-// поэтому он живёт в localStorage и сервер про него не знает.
+// The interface language. A library for two languages is overkill: the dictionary is flat,
+// there is one substitution, and the language choice is the browser's business just like
+// the layout, so it lives in localStorage and the server knows nothing about it.
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
@@ -9,10 +9,10 @@ import { setFormatLang } from "./format";
 export type Lang = "ru" | "en";
 
 const STORAGE_KEY = "cburn.lang";
-const RENAMED_KEY = "cloudo-dash.lang"; // ключ прежнего имени проекта
+const RENAMED_KEY = "cloudo-dash.lang"; // the key of the former project name
 
-/** Пары «русский, английский». Ключ — путь через точку, не сам текст: иначе
- *  правка формулировки на одном языке молча ломает второй. */
+/** Pairs of "Russian, English". The key is a dotted path rather than the text itself:
+ *  otherwise rewording one language would quietly break the other. */
 const DICT: Record<string, [string, string]> = {
   "app.tagline": ["расход Claude Code на этой машине", "Claude Code usage on this machine"],
   "app.screen.overview": ["обзор", "overview"],

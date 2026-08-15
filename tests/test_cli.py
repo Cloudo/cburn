@@ -1,9 +1,9 @@
-"""Тесты CLI и сверка цифр по сессии (задача A3, критерий приёмки M1).
+"""CLI tests and the reconciliation of session numbers (task A3, the M1 acceptance criterion).
 
-Главный тест — `test_session_output_matches_independent_count`: суммы, которые
-печатает `cburn session`, сверяются с независимым подсчётом по сырому JSON,
-сделанным так же, как это делается вручную через `jq`. Расхождение должно быть
-нулевым.
+The main test is `test_session_output_matches_independent_count`: the totals printed by
+`cburn session` are checked against an independent count over the raw JSON, done the
+same way one would do it by hand through `jq`. The difference must be
+zero.
 """
 
 from __future__ import annotations
@@ -25,20 +25,20 @@ FIXTURES = sorted(FIXTURES_DIR.glob("*.jsonl"))
 
 @pytest.fixture
 def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Изолированные каталог транскриптов и БД вместо настоящих."""
+    """An isolated transcript directory and database instead of the real ones."""
     projects_dir = tmp_path / "projects"
-    (projects_dir / "проект").mkdir(parents=True)
+    (projects_dir / "project").mkdir(parents=True)
     monkeypatch.setattr(paths, "CLAUDE_PROJECTS_DIR", projects_dir)
     monkeypatch.setattr(paths, "DB_PATH", tmp_path / "test.db")
     monkeypatch.setattr(paths, "DATA_DIR", tmp_path)
     monkeypatch.setattr(paths, "CONFIG_PATH", tmp_path / "config.toml")
-    return projects_dir / "проект"
+    return projects_dir / "project"
 
 
 def jq_style_totals(path: Path) -> dict[str, dict[str, int]]:
-    """Независимый подсчёт по сырому JSON: группировка по message.id, максимум usage.
+    """An independent count over the raw JSON: grouping by message.id, the maximum usage.
 
-    Ровно то же, что делает ручная сверка:
+    Exactly what a manual reconciliation does:
     `jq -s 'group_by(.message.id) | map(max)'`.
     """
     per_session: dict[str, dict[str, dict[str, int]]] = defaultdict(dict)
@@ -78,7 +78,7 @@ def jq_style_totals(path: Path) -> dict[str, dict[str, int]]:
 
 
 def parse_output(text: str) -> dict[str, int]:
-    """Вытащить числа из вывода `cburn session`."""
+    """Pull the numbers out of the `cburn session` output."""
     numbers: dict[str, int] = {}
     for label, pattern in (
         ("ходов", r"^ходов\s+: (\d+)"),
@@ -89,7 +89,7 @@ def parse_output(text: str) -> dict[str, int]:
         ("кэш 1h", r"1h ([\d ]+)\)"),
     ):
         match = re.search(pattern, text, re.MULTILINE)
-        assert match, f"в выводе нет строки «{label}»:\n{text}"
+        assert match, f"the output has no line for {label!r}:\n{text}"
         numbers[label] = int(match.group(1).replace(" ", ""))
     return numbers
 
@@ -98,14 +98,14 @@ def parse_output(text: str) -> dict[str, int]:
 def test_session_output_matches_independent_count(
     project: Path, path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Расхождение между `cburn session` и ручным подсчётом — ноль."""
+    """The difference between `cburn session` and a manual count is zero."""
     target = project / path.name
     target.write_text(path.read_text())
     assert cli.main(["reindex"]) == 0
     capsys.readouterr()
 
     expected = jq_style_totals(target)
-    assert expected, "в фикстуре нет ходов ассистента"
+    assert expected, "the fixture has no assistant turns"
     for session_id, totals in expected.items():
         assert cli.main(["session", session_id]) == 0
         assert parse_output(capsys.readouterr().out) == totals
@@ -125,7 +125,7 @@ def test_session_accepts_id_prefix(project: Path, capsys: pytest.CaptureFixture[
 def test_session_reports_unknown_id(project: Path, capsys: pytest.CaptureFixture[str]) -> None:
     cli.main(["reindex"])
     capsys.readouterr()
-    assert cli.main(["session", "нет-такой"]) == 1
+    assert cli.main(["session", "no-such"]) == 1
     assert "не найдена" in capsys.readouterr().err
 
 
@@ -148,8 +148,8 @@ def test_sessions_lists_indexed(project: Path, capsys: pytest.CaptureFixture[str
 
     assert cli.main(["sessions", "-n", "5"]) == 0
     out = capsys.readouterr().out
-    assert out.strip(), "список сессий пуст"
-    assert "project" in out  # имя из рабочего пути, а не slug каталога
+    assert out.strip(), "the session list is empty"
+    assert "project" in out  # the name from the working path, not the directory slug
 
 
 def test_sessions_on_empty_db(project: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -165,7 +165,7 @@ def test_paths_and_initdb(project: Path, capsys: pytest.CaptureFixture[str]) -> 
 
 
 def test_stats_reports_period_and_totals(project: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """Сводка за период считает ходы, токены и стоимость (задача B7)."""
+    """The period summary counts turns, tokens and cost (task B7)."""
     for fixture in FIXTURES:
         (project / fixture.name).write_text(fixture.read_text())
     cli.main(["reindex"])
@@ -178,51 +178,51 @@ def test_stats_reports_period_and_totals(project: Path, capsys: pytest.CaptureFi
 
 
 def test_stats_filters_by_project(project: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """Фильтр по проекту ищет подстроку в slug, а не требует его целиком."""
+    """The project filter searches a substring of the slug instead of demanding all of it."""
     for fixture in FIXTURES:
         (project / fixture.name).write_text(fixture.read_text())
     cli.main(["reindex"])
     capsys.readouterr()
 
-    assert cli.main(["stats", "--period", "all", "--project", "прое"]) == 0
-    assert "проект ~ прое" in capsys.readouterr().out
-    assert cli.main(["stats", "--period", "all", "--project", "нетакого"]) == 1
+    assert cli.main(["stats", "--period", "all", "--project", "proj"]) == 0
+    assert "проект ~ proj" in capsys.readouterr().out
+    assert cli.main(["stats", "--period", "all", "--project", "nosuch"]) == 1
     assert "ходов нет" in capsys.readouterr().err
 
 
 def test_period_is_parsed(project: Path) -> None:
-    """Период понимает today, часы, дни, дату и «за всю историю»."""
+    """The period understands today, hours, days, a date and "all history"."""
     assert cli._since("all") is None
     assert cli._since("24h") is not None
     assert cli._since("7d") < cli._since("24h")  # type: ignore[operator]
     assert cli._since("2026-08-01").year == 2026
     with pytest.raises(SystemExit):
-        cli._since("позавчера")
+        cli._since("the day before yesterday")
 
 
 def test_unknown_command_is_reported(project: Path, capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit):
-        cli.main(["такого-нет"])
+        cli.main(["no-such-command"])
 
 
 def test_serve_arguments_are_parsed() -> None:
-    """Сервер здесь не поднимается — проверяется только разбор аргументов."""
+    """The server is not brought up here - only argument parsing is checked."""
     args = cli.build_parser().parse_args(["serve", "--port", "9999"])
     assert (args.command, args.port, args.host, args.reload) == ("serve", 9999, "127.0.0.1", False)
 
 
 def test_serve_binds_localhost_by_default() -> None:
-    """Инвариант ТЗ §7: наружу сервер не смотрит."""
+    """The TZ §7 invariant: the server does not face outwards."""
     assert cli.build_parser().parse_args(["serve"]).host == "127.0.0.1"
 
 
-# --- телеметрия (веха E) -----------------------------------------------------
+# --- telemetry (milestone E) ----------------------------------------------------
 
 
 def test_otel_env_points_at_the_dashboard(
     project: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Переменные окружения печатаются готовыми к вставке в профиль шелла."""
+    """The environment variables are printed ready to be pasted into the shell profile."""
     assert cli.main(["otel", "--env", "--port", "9999"]) == 0
     lines = capsys.readouterr().out.splitlines()
     assert "export CLAUDE_CODE_ENABLE_TELEMETRY=1" in lines
@@ -233,15 +233,15 @@ def test_otel_env_points_at_the_dashboard(
 def test_otel_settings_fragment_is_valid_json(
     project: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Фрагмент для ~/.claude/settings.json — человек вставляет его руками:
-    сами мы туда не пишем, каталог Claude Code открыт только на чтение."""
+    """The snippet for ~/.claude/settings.json - a human pastes it by hand:
+    we never write there ourselves, the Claude Code directory is read-only."""
     assert cli.main(["otel", "--settings"]) == 0
     fragment = json.loads(capsys.readouterr().out)
     assert fragment["env"]["OTEL_METRICS_EXPORTER"] == "otlp"
 
 
 def test_otel_status_explains_silence(project: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """Пока телеметрия не включена, команда говорит об этом и подсказывает как."""
+    """While telemetry is off, the command says so and hints at how to switch it on."""
     assert cli.main(["otel"]) == 0
     out = capsys.readouterr().out
     assert "посылок не было" in out
@@ -262,10 +262,10 @@ def test_otel_status_counts_what_arrived(project: Path, capsys: pytest.CaptureFi
                             {
                                 "logRecords": [
                                     {
-                                        # Время «сейчас»: команда считает
-                                        # сессии за последние сутки, и
-                                        # прибитая к дате посылка назавтра
-                                        # выпадала бы из окна.
+                                        # The time is "now": the command counts
+                                        # sessions over the last day, and a payload
+                                        # nailed to a date would fall out of the
+                                        # window tomorrow.
                                         "timeUnixNano": str(
                                             int(datetime.now(UTC).timestamp() * 1_000_000_000)
                                         ),
@@ -288,15 +288,15 @@ def test_otel_status_counts_what_arrived(project: Path, capsys: pytest.CaptureFi
     out = capsys.readouterr().out
     assert "logs" in out
     assert "событие api_request" in out
-    assert "накоплено: 1 строк" in out  # объём и охват: видно, растёт ли база
-    # Сверка каналов: сколько сессий видит телеметрия и сколько — парсер.
+    assert "накоплено: 1 строк" in out  # volume and span: it shows whether the base grows
+    # Channel reconciliation: how many sessions telemetry sees and how many the parser does.
     assert "сессии за сутки: 1 по телеметрии, 0 по транскриптам" in out
 
 
 def test_stats_shows_spending_off_the_transcript(
     project: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Без этой строки сводка молча занижала бы расход на служебные запросы."""
+    """Without this line the summary would quietly understate the service request spend."""
     from cburn.collector import otlp
 
     (project / FIXTURES[0].name).write_text(FIXTURES[0].read_text())
@@ -340,7 +340,7 @@ def test_stats_shows_spending_off_the_transcript(
 def test_stats_stays_silent_without_telemetry(
     project: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Нет телеметрии — нет и строк про неё: пустые нули только сбивают."""
+    """No telemetry means no rows about it: empty zeros only mislead."""
     (project / FIXTURES[0].name).write_text(FIXTURES[0].read_text())
     cli.main(["reindex"])
     capsys.readouterr()
@@ -353,7 +353,7 @@ def test_stats_stays_silent_without_telemetry(
 def test_otel_status_hints_at_wrong_protocol(
     project: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Посылки идут, записей нет — почти всегда это `http/protobuf`."""
+    """Payloads arrive, records do not - almost always this is `http/protobuf`."""
     from cburn.collector import otlp
 
     with connect() as conn:
@@ -365,7 +365,7 @@ def test_otel_status_hints_at_wrong_protocol(
 
 
 def test_otel_prune_removes_old_records(project: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """Срок хранения применяется и руками: события копятся быстрее ходов."""
+    """The retention applies by hand too: events pile up faster than turns."""
     from cburn.collector import otlp
 
     with connect() as conn:

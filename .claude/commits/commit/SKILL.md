@@ -1,56 +1,57 @@
 ---
 name: commit
-description: Закоммитить текущие изменения сообщением по Conventional Commits на русском языке. Используй, когда просят сделать коммит, зафиксировать изменения или предложить сообщение коммита.
+description: Commit the current changes with a Conventional Commits message written in Russian. Use it when asked to make a commit, record changes or suggest a commit message.
 ---
 
-# Коммит по Conventional Commits
+# Commits by Conventional Commits
 
-Сообщения — по [conventionalcommits.org](https://www.conventionalcommits.org), но **описание пишется
-по-русски**. Английскими остаются только тип, скоуп и служебные слова (`BREAKING CHANGE`).
+Messages follow [conventionalcommits.org](https://www.conventionalcommits.org), but the
+**description is written in Russian**. Only the type, the scope and the service words
+(`BREAKING CHANGE`) stay English.
 
-## Формат
+## Format
 
 ```
-<тип>(<скоуп>): <краткое описание>
+<type>(<scope>): <short description>
 
-<тело: зачем менялось, если из заголовка не очевидно>
+<body: why it changed, when the header does not make it obvious>
 
-<футер: BREAKING CHANGE, ссылки на задачи>
+<footer: BREAKING CHANGE, task links>
 ```
 
-- заголовок ≤ 72 символов, без точки в конце;
-- описание — в повелительном наклонении и настоящем времени: «добавить», «починить», «убрать»,
-  а не «добавил» / «добавлено»;
-- тело — только если объясняет **почему**; пересказывать диф не нужно;
-- тело пишется **тезисно**: одна-две строки или короткие пункты списком.
-  Не абзацы прозы, не рассказ о ходе работы, не «раньше было так, а теперь вот
-  почему мы решили иначе». Не влезает в две строки — значит коммит слишком большой
-  или объяснение просится в отчёт;
-- скоуп необязателен, но в этом репозитории почти всегда уместен.
+- the header is <= 72 characters, without a full stop at the end;
+- the description is imperative and present tense: "добавить", "починить", "убрать",
+  not "добавил" / "добавлено";
+- the body appears only when it explains **why**; retelling the diff is not needed;
+- the body is written in **theses**: one or two lines or short bullet points.
+  Not paragraphs of prose, not a story of how the work went, not "it used to be like
+  this and here is why we decided otherwise". If it does not fit into two lines, the
+  commit is too large or the explanation belongs in a report;
+- the scope is optional, but in this repository it is almost always appropriate.
 
-## Типы
+## Types
 
-| Тип        | Когда                                                |
-| ---------- | ---------------------------------------------------- |
-| `feat`     | новая возможность для пользователя                   |
-| `fix`      | исправление ошибки                                   |
-| `refactor` | код изменён без смены поведения                      |
-| `perf`     | ускорение без смены поведения                        |
-| `test`     | только тесты                                         |
-| `docs`     | только документация (README, CLAUDE.md, комментарии) |
-| `build`    | сборка, зависимости, Dockerfile, compose             |
-| `ci`       | Gitea Actions, скрипты деплоя                        |
-| `style`    | форматирование, без смысловых правок                 |
-| `chore`    | рутина, не попадающая в остальные типы               |
+| Type       | When                                                    |
+| ---------- | ------------------------------------------------------- |
+| `feat`     | a new capability for the user                           |
+| `fix`      | a bug fix                                               |
+| `refactor` | the code changed without a change in behaviour          |
+| `perf`     | a speed-up without a change in behaviour                |
+| `test`     | tests only                                              |
+| `docs`     | documentation only (README, CLAUDE.md, comments)        |
+| `build`    | the build, dependencies, Dockerfile, compose            |
+| `ci`       | Gitea Actions, deployment scripts                       |
+| `style`    | formatting, without meaningful edits                    |
+| `chore`    | routine that does not fall into the other types         |
 
-## Скоупы этого репозитория
+## Scopes of this repository
 
 `auth`, `sync`, `admin`, `projects`, `team`, `analytics`, `api`, `db`, `deploy`, `ci`, `frontend`, `backend`.
 
-Если правки задели и бэкенд, и фронт одной функции — скоуп по смыслу возможности (`admin`), а не
-по слоям.
+If the edits touched both the backend and the frontend of one feature, the scope follows the
+capability (`admin`) rather than the layers.
 
-## Примеры
+## Examples
 
 ```
 feat(admin): добавить режим «Смотреть как» для проверки прав
@@ -62,7 +63,7 @@ test(api): покрыть скоуп видимости для трёх роле
 build(backend): обновить golang до 1.25
 ```
 
-С телом и ломающим изменением:
+With a body and a breaking change:
 
 ```
 feat(auth)!: перевести сессии с JWT на серверные
@@ -72,7 +73,7 @@ JWT нельзя отозвать, а админу нужны «когда за�
 BREAKING CHANGE: все текущие сессии инвалидируются, потребуется повторный вход
 ```
 
-Тезисно, когда причин несколько:
+In theses, when there are several reasons:
 
 ```
 fix(sync): не терять worklogs при повторной выгрузке
@@ -81,16 +82,16 @@ fix(sync): не терять worklogs при повторной выгрузке
 - ключ уникальности — пара (issue, started_at)
 ```
 
-## Порядок работы
+## The working order
 
-1. Посмотреть, что меняется: `git status --short` и `git diff` (плюс `git diff --staged`).
-2. Понять **смысл** изменений, а не только затронутые файлы: заголовок описывает результат для
-   пользователя или системы, а не перечень правок.
-3. Если в рабочем дереве смешаны несмежные изменения — предложить разбить на несколько коммитов
-   и объяснить, как именно; не сваливать всё в один `chore`.
-4. Не добавлять файлы вслепую: `git add` только то, что относится к коммиту. Проверить, что не
-   попадают `.env`, дампы БД, артефакты сборки.
-5. Закоммитить через heredoc, чтобы сохранить переносы строк:
+1. Look at what changes: `git status --short` and `git diff` (plus `git diff --staged`).
+2. Understand the **meaning** of the changes rather than only the files touched: the header
+   describes the result for the user or the system, not a list of edits.
+3. If the working tree mixes unrelated changes, propose splitting them into several commits
+   and explain exactly how; do not dump everything into one `chore`.
+4. Do not add files blindly: `git add` only what belongs to the commit. Check that no `.env`,
+   database dumps or build artefacts get in.
+5. Commit through a heredoc, to keep the line breaks:
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -99,15 +100,16 @@ EOF
 )"
 ```
 
-6. Показать результат: `git log --oneline -1` и `git status --short`.
+6. Show the result: `git log --oneline -1` and `git status --short`.
 
-Пушить только если об этом попросили отдельно.
+Push only when asked separately.
 
-## Чего не делать
+## What not to do
 
-- не писать «обновление», «правки», «мелкие изменения» — из такого заголовка ничего не понять;
-- не использовать `chore` как свалку, когда подходит `fix` или `feat`;
-- не смешивать в одном коммите функциональность и переформатирование всего файла;
-- не изобретать типы вне таблицы выше;
-- не писать в теле абзацы: пересказ обсуждения, историю поисков и рассуждения
-  «почему решили так». В `git log` это читают по диагонали — нужен факт, а не текст.
+- do not write "обновление", "правки", "мелкие изменения" - such a header explains nothing;
+- do not use `chore` as a dumping ground when `fix` or `feat` fits;
+- do not mix functionality and a full-file reformat in one commit;
+- do not invent types outside the table above;
+- do not write paragraphs in the body: a retelling of the discussion, the history of the
+  search and reasoning about "why we decided so". In `git log` that is skimmed - a fact is
+  needed, not text.

@@ -1,4 +1,4 @@
-"""Тесты HTTP и WebSocket (задача A5)."""
+"""HTTP and WebSocket tests (task A5)."""
 
 from __future__ import annotations
 
@@ -79,7 +79,7 @@ def prompt(text: str, *, session: str = "s1", ts: datetime | None = None) -> str
 
 @pytest.fixture
 def transcripts(tmp_path: Path) -> Path:
-    root = tmp_path / "projects" / "проект"
+    root = tmp_path / "projects" / "project"
     root.mkdir(parents=True)
     return root
 
@@ -97,7 +97,7 @@ def seed(transcripts: Path, db_path: Path, lines: list[str], name: str = "s1.jso
 
 
 class StubLimits:
-    """Лимиты в тестах не ходят ни в связку ключей, ни в сеть."""
+    """In tests the limits touch neither the keychain nor the network."""
 
     def __init__(self, payload: dict | None = None) -> None:
         self.payload = payload or {
@@ -127,12 +127,12 @@ def client(
     liveness: Callable[[], dict[str, datetime | None] | None] = lambda: None,
     advisor_run: object | None = None,
 ) -> TestClient:
-    """Тестовое приложение. По умолчанию живость «неизвестна», а советчик
-    падает при попытке его позвать: тесты не должны запускать ни
-    `claude agents --json`, ни `claude -p` — второй ещё и стоит денег."""
+    """The test application. By default liveness is "unknown", and the advisor
+    fails when called: tests must run neither `claude agents --json`
+    nor `claude -p` - the second one costs money as well."""
 
     def no_advisor(*args: object, **kwargs: object) -> dict:
-        raise AssertionError("тест не должен звать настоящий claude -p")
+        raise AssertionError("a test must not call the real claude -p")
 
     app = create_app(
         db_path=db_path,
@@ -145,7 +145,7 @@ def client(
     return TestClient(app)
 
 
-# --- обзор -------------------------------------------------------------------
+# --- overview -----------------------------------------------------------------
 
 
 def test_overview_counts_recent_turns(transcripts: Path, db_path: Path) -> None:
@@ -154,7 +154,7 @@ def test_overview_counts_recent_turns(transcripts: Path, db_path: Path) -> None:
         transcripts,
         db_path,
         [
-            prompt("первый вопрос"),
+            prompt("first question"),
             assistant("msg_1", ts=now - timedelta(seconds=20), output=100),
             assistant("msg_2", uuid="u2", ts=now - timedelta(seconds=40), output=200),
             assistant("msg_old", uuid="u3", ts=now - timedelta(hours=5), output=999),
@@ -164,12 +164,12 @@ def test_overview_counts_recent_turns(transcripts: Path, db_path: Path) -> None:
         data = api.get("/api/overview").json()
 
     assert data["totals"]["turns"] == 3
-    assert data["burn"]["10s"]["turns"] == 0  # оба хода старше десяти секунд
-    assert data["burn"]["1m"]["turns"] == 2  # ход пятичасовой давности не в окне
+    assert data["burn"]["10s"]["turns"] == 0  # both turns are older than ten seconds
+    assert data["burn"]["1m"]["turns"] == 2  # the five-hour-old turn is out of the window
     assert data["burn"]["1m"]["tokens_per_min"] == pytest.approx(2 * 2 + 300 + 2000 + 100)
     assert data["burn"]["60m"]["turns"] == 2
     assert data["today"]["output_tokens"] >= 300
-    assert data["live_sessions"], "живая сессия не показана"
+    assert data["live_sessions"], "the live session is not shown"
     assert data["live_sessions"][0]["id"] == "s1"
     assert data["top_sessions"][0]["id"] == "s1"
 
@@ -183,7 +183,7 @@ def test_overview_on_empty_db(db_path: Path, transcripts: Path) -> None:
 
 
 def test_burn_rate_is_per_minute(transcripts: Path, db_path: Path) -> None:
-    """Окно 5 минут делит на 5 — иначе стрелка врёт в пять раз."""
+    """The 5-minute window divides by 5 - otherwise the needle lies fivefold."""
     now = datetime.now(UTC)
     seed(
         transcripts,
@@ -199,22 +199,22 @@ def test_burn_rate_is_per_minute(transcripts: Path, db_path: Path) -> None:
     assert burn["5m"]["window_seconds"] == 300
 
 
-# --- сессии ------------------------------------------------------------------
+# --- sessions -----------------------------------------------------------------
 
 
 def test_sessions_list(transcripts: Path, db_path: Path) -> None:
-    seed(transcripts, db_path, [prompt("вопрос"), assistant("msg_1")])
+    seed(transcripts, db_path, [prompt("question"), assistant("msg_1")])
     with client(db_path, transcripts) as api:
         sessions = api.get("/api/sessions").json()["sessions"]
     assert [row["id"] for row in sessions] == ["s1"]
-    assert sessions[0]["first_prompt"] == "вопрос"
-    # Имя проекта — последний сегмент рабочего пути (cwd), а не имя каталога
-    # транскриптов: slug вида `-Users-x-project` человеку ничего не говорит.
+    assert sessions[0]["first_prompt"] == "question"
+    # The project name is the last segment of the working path (cwd), not the name of
+    # the transcript directory: a slug like `-Users-x-project` tells a human nothing.
     assert sessions[0]["project"] == "project"
 
 
 def test_session_details(transcripts: Path, db_path: Path) -> None:
-    seed(transcripts, db_path, [prompt("вопрос"), assistant("msg_1", output=42)])
+    seed(transcripts, db_path, [prompt("question"), assistant("msg_1", output=42)])
     with client(db_path, transcripts) as api:
         data = api.get("/api/sessions/s1").json()
 
@@ -226,7 +226,7 @@ def test_session_details(transcripts: Path, db_path: Path) -> None:
 
 def test_unknown_session_is_404(db_path: Path, transcripts: Path) -> None:
     with client(db_path, transcripts) as api:
-        assert api.get("/api/sessions/нет-такой").status_code == 404
+        assert api.get("/api/sessions/no-such").status_code == 404
 
 
 def test_health(db_path: Path, transcripts: Path) -> None:
@@ -237,10 +237,10 @@ def test_health(db_path: Path, transcripts: Path) -> None:
 def test_root_reports_missing_frontend(
     db_path: Path, transcripts: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Пока фронт не собран, корень подсказывает, как это сделать."""
+    """While the frontend is not built, the root hints at how to do it."""
     from cburn.api import server
 
-    monkeypatch.setattr(server, "WEB_DIST", tmp_path / "нет-сборки")
+    monkeypatch.setattr(server, "WEB_DIST", tmp_path / "no-build")
     with client(db_path, transcripts) as api:
         body = api.get("/").json()
     assert "/api/overview" in body["api"]
@@ -258,7 +258,7 @@ def test_ws_sends_overview_on_connect(transcripts: Path, db_path: Path) -> None:
 
 
 def test_ws_pushes_on_new_turn(transcripts: Path, db_path: Path) -> None:
-    """Дописанная строка транскрипта приводит к пушу в течение секунды."""
+    """A line appended to a transcript leads to a push within a second."""
     seed(transcripts, db_path, [assistant("msg_1")])
     with (
         client(db_path, transcripts, watch=True) as api,
@@ -275,7 +275,7 @@ def test_ws_pushes_on_new_turn(transcripts: Path, db_path: Path) -> None:
 
     assert message["type"] == "overview"
     assert message["data"]["totals"]["turns"] == 2
-    assert elapsed < 1.0, f"пуш пришёл за {elapsed:.2f} с — критерий вехи A не выполнен"
+    assert elapsed < 1.0, f"the push arrived in {elapsed:.2f} s - milestone A criterion failed"
 
 
 def test_ws_serves_two_clients(transcripts: Path, db_path: Path) -> None:
@@ -294,16 +294,16 @@ def test_ws_serves_two_clients(transcripts: Path, db_path: Path) -> None:
 
 
 def test_watcher_stops_with_app(transcripts: Path, db_path: Path) -> None:
-    """После остановки приложения фоновый поток не остаётся."""
+    """After the application stops, no background thread is left behind."""
     import threading
 
     before = {thread.name for thread in threading.enumerate()}
     with client(db_path, transcripts, watch=True) as api:
         api.get("/api/health")
 
-    # Ждём завершения потока, а не спим фиксированную долю секунды: на
-    # загруженной машине планировщик даёт ему очередь не сразу, и жёсткая
-    # пауза превращает тест в лотерею.
+    # We wait for the thread to finish rather than sleeping a fixed fraction of a second:
+    # on a loaded machine the scheduler does not give it a slot right away, and a rigid
+    # pause turns the test into a lottery.
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline:
         alive = {thread.name for thread in threading.enumerate()} - before
@@ -316,7 +316,7 @@ def test_watcher_stops_with_app(transcripts: Path, db_path: Path) -> None:
 
 
 def test_built_frontend_is_served(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Собранный фронт раздаётся статикой с того же порта, что и API."""
+    """The built frontend is served as statics from the same port as the API."""
     from cburn.api import server
 
     dist = tmp_path / "dist"
@@ -329,13 +329,13 @@ def test_built_frontend_is_served(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
         page = api.get("/")
         assert page.status_code == 200
         assert "cburn" in page.text
-        assert api.get("/api/health").json()["ok"] is True  # API не перекрыт статикой
+        assert api.get("/api/health").json()["ok"] is True  # the API is not shadowed by statics
 
 
 def test_frontend_cache_policy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Оболочку браузер сверяет каждый раз, ассеты с хешем кеширует навсегда.
+    """The browser revalidates the shell every time, hashed assets are cached forever.
 
-    Без этого пересобранный фронт грузится в старой оболочке из кеша браузера.
+    Without this a rebuilt frontend loads inside the old shell from the browser cache.
     """
     from cburn.api import server
 
@@ -351,18 +351,18 @@ def test_frontend_cache_policy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
         assert "immutable" in api.get("/assets/index-abc123.js").headers["cache-control"]
 
 
-# --- самописец и живые показания ---------------------------------------------
+# --- the chart recorder and live readings --------------------------------------
 
 
 def test_series_has_bucket_per_step(transcripts: Path, db_path: Path) -> None:
-    """Лента самописца — сплошная сетка корзин, включая пустые."""
+    """The recorder tape is a continuous grid of buckets, empty ones included."""
     now = datetime.now(UTC)
     seed(
         transcripts,
         db_path,
         [
-            # Оба хода с одной меткой времени: иначе они попадают в соседние
-            # корзины, когда замер приходится на границу шага.
+            # Both turns share one timestamp: otherwise they land in neighbouring
+            # buckets when the measurement falls on a step boundary.
             assistant("msg_1", ts=now - timedelta(seconds=8), output=100, cache_read=0),
             assistant("msg_2", uuid="u2", ts=now - timedelta(seconds=8), output=50, cache_read=0),
             assistant("msg_3", uuid="u3", ts=now - timedelta(minutes=2), output=10, cache_read=0),
@@ -373,24 +373,24 @@ def test_series_has_bucket_per_step(transcripts: Path, db_path: Path) -> None:
 
     series = data["series"]
     assert data["series_bucket_seconds"] == 2
-    assert len(series) >= 5 * 30  # пять минут по две секунды
+    assert len(series) >= 5 * 30  # five minutes at two seconds each
     assert sum(bucket["turns"] for bucket in series) == 3
     assert sum(bucket["output_tokens"] for bucket in series) == 160
-    assert any(bucket["turns"] == 0 for bucket in series), "пустые корзины не заполнены"
-    # Соседние ходы попадают в одну корзину: шаг именно 2 секунды, а не секунда.
+    assert any(bucket["turns"] == 0 for bucket in series), "empty buckets are not filled"
+    # Neighbouring turns land in one bucket: the step is exactly 2 seconds, not one.
     busiest = max(series, key=lambda bucket: bucket["turns"])
     assert busiest["turns"] == 2
 
 
 def test_pending_session_is_reported(transcripts: Path, db_path: Path) -> None:
-    """Промпт без ответа — признак того, что запрос сейчас выполняется."""
+    """A prompt without an answer is the sign that a request is running right now."""
     now = datetime.now(UTC)
     seed(
         transcripts,
         db_path,
         [
             assistant("msg_1", ts=now - timedelta(seconds=30)),
-            prompt("новый вопрос", ts=now - timedelta(seconds=3)),
+            prompt("new question", ts=now - timedelta(seconds=3)),
         ],
     )
     with client(db_path, transcripts) as api:
@@ -403,7 +403,7 @@ def test_answered_session_is_not_pending(transcripts: Path, db_path: Path) -> No
         transcripts,
         db_path,
         [
-            prompt("вопрос", ts=now - timedelta(seconds=20)),
+            prompt("question", ts=now - timedelta(seconds=20)),
             assistant("msg_1", ts=now - timedelta(seconds=5)),
         ],
     )
@@ -412,7 +412,7 @@ def test_answered_session_is_not_pending(transcripts: Path, db_path: Path) -> No
 
 
 def test_ws_pushes_without_new_turns(transcripts: Path, db_path: Path) -> None:
-    """Тикер шлёт обзор и в тишине: окна burn rate скользят сами по себе."""
+    """The ticker sends the overview in silence too: burn rate windows slide on their own."""
     from cburn.api import server
 
     seed(transcripts, db_path, [assistant("msg_1")])
@@ -420,9 +420,9 @@ def test_ws_pushes_without_new_turns(transcripts: Path, db_path: Path) -> None:
         client(db_path, transcripts, watch=False) as api,
         api.websocket_connect("/ws") as socket,
     ):
-        socket.receive_json()  # кадр при подключении
+        socket.receive_json()  # the frame on connect
         started = time.monotonic()
-        message = socket.receive_json()  # кадр от тикера, файлов никто не трогал
+        message = socket.receive_json()  # the frame from the ticker, nobody touched the files
         elapsed = time.monotonic() - started
 
     assert message["type"] == "overview"
@@ -430,7 +430,7 @@ def test_ws_pushes_without_new_turns(transcripts: Path, db_path: Path) -> None:
 
 
 def test_ten_second_window_reacts_immediately(transcripts: Path, db_path: Path) -> None:
-    """Короткое окно показывает, что происходит прямо сейчас, а не в среднем."""
+    """A short window shows what happens right now, not the average."""
     now = datetime.now(UTC)
     seed(
         transcripts,
@@ -441,13 +441,13 @@ def test_ten_second_window_reacts_immediately(transcripts: Path, db_path: Path) 
         burn = api.get("/api/overview").json()["burn"]
 
     assert burn["10s"]["window_seconds"] == 10
-    # Шесть секунд работы в десятисекундном окне — это 360 токенов в минуту.
+    # Six seconds of work inside a ten-second window is 360 tokens per minute.
     assert burn["10s"]["output_per_min"] == pytest.approx(360)
     assert burn["1m"]["output_per_min"] == pytest.approx(60)
 
 
 def test_burn_window_carries_its_own_usage(transcripts: Path, db_path: Path) -> None:
-    """Разбивка по составляющим доступна для каждого окна, не только за сегодня."""
+    """The per-part breakdown is available for every window, not only for today."""
     now = datetime.now(UTC)
     seed(
         transcripts,
@@ -460,17 +460,17 @@ def test_burn_window_carries_its_own_usage(transcripts: Path, db_path: Path) -> 
     with client(db_path, transcripts) as api:
         burn = api.get("/api/overview").json()["burn"]
 
-    assert burn["10s"]["usage"]["cache_read"] == 900  # только свежий ход
+    assert burn["10s"]["usage"]["cache_read"] == 900  # only the fresh turn
     assert burn["10s"]["usage"]["output_tokens"] == 60
-    assert burn["5m"]["usage"]["cache_read"] == 1000  # оба хода
-    assert burn["5m"]["usage"]["cache_write"] == 100  # по 50 на ход
+    assert burn["5m"]["usage"]["cache_read"] == 1000  # both turns
+    assert burn["5m"]["usage"]["cache_write"] == 100  # 50 per turn
 
 
-# --- закрытие сессии ---------------------------------------------------------
+# --- closing a session ---------------------------------------------------------
 
 
 def test_hide_removes_session_from_dashboard(transcripts: Path, db_path: Path) -> None:
-    seed(transcripts, db_path, [prompt("вопрос"), assistant("msg_1")])
+    seed(transcripts, db_path, [prompt("question"), assistant("msg_1")])
     with client(db_path, transcripts) as api:
         assert len(api.get("/api/overview").json()["live_sessions"]) == 1
 
@@ -484,13 +484,13 @@ def test_hide_removes_session_from_dashboard(transcripts: Path, db_path: Path) -
 
 def test_hide_unknown_session_is_404(db_path: Path, transcripts: Path) -> None:
     with client(db_path, transcripts) as api:
-        assert api.post("/api/sessions/нет-такой/hide").status_code == 404
+        assert api.post("/api/sessions/no-such/hide").status_code == 404
 
 
 def test_close_terminates_the_session_process(
     transcripts: Path, db_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Процесс берётся по sessionId из списка Claude Code и получает SIGTERM."""
+    """The process is taken by sessionId from the Claude Code list and gets a SIGTERM."""
     from cburn.api import server
     from cburn.processes import ClaudeSession
 
@@ -512,7 +512,7 @@ def test_close_terminates_the_session_process(
 def test_close_of_finished_session_only_hides(
     transcripts: Path, db_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Сессии уже нет среди запущенных — просто убираем карточку."""
+    """The session is no longer among the running ones - we just remove the card."""
     from cburn.api import server
 
     seed(transcripts, db_path, [assistant("msg_1")])
@@ -527,7 +527,7 @@ def test_close_of_finished_session_only_hides(
 
 
 def test_live_sessions_are_sorted_by_activity(transcripts: Path, db_path: Path) -> None:
-    """Самая свежая сессия сверху; сколько показывать — решает дашборд."""
+    """The freshest session on top; how many to show is the dashboard's call."""
     now = datetime.now(UTC)
     lines = [
         assistant(
@@ -549,19 +549,19 @@ def test_live_sessions_are_sorted_by_activity(transcripts: Path, db_path: Path) 
 
 
 def test_session_statuses(transcripts: Path, db_path: Path) -> None:
-    """Статус отвечает на вопрос, кого сессия ждёт."""
+    """The status answers the question of whom the session is waiting for."""
     now = datetime.now(UTC)
     tool_use = [{"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "ls"}}]
     seed(
         transcripts,
         db_path,
         [
-            # Модель работает: последняя запись — промпт без ответа.
+            # The model works: the last record is a prompt without an answer.
             assistant("msg_a", session="working", ts=now - timedelta(seconds=40)),
-            prompt("считай дальше", session="working", ts=now - timedelta(seconds=20)),
-            # Модель ответила и ждёт человека.
+            prompt("keep counting", session="working", ts=now - timedelta(seconds=20)),
+            # The model answered and waits for the human.
             assistant("msg_b", session="answered", uuid="u2", ts=now - timedelta(seconds=30)),
-            # Инструмент запрошен, результата нет — висит разрешение.
+            # A tool was requested, there is no result - a permission hangs.
             assistant(
                 "msg_c",
                 session="permission",
@@ -570,7 +570,7 @@ def test_session_statuses(transcripts: Path, db_path: Path) -> None:
                 content=tool_use,
                 stop_reason="tool_use",
             ),
-            # Тишина дольше двух минут.
+            # Silence for longer than two minutes.
             assistant("msg_d", session="idle", uuid="u4", ts=now - timedelta(minutes=20)),
         ],
     )
@@ -588,11 +588,11 @@ def test_session_statuses(transcripts: Path, db_path: Path) -> None:
 
 
 def test_long_tool_is_working_not_permission(transcripts: Path, db_path: Path) -> None:
-    """Долгий инструмент - не висящее разрешение: у процесса есть свежий потомок.
+    """A long tool is not a hanging permission: the process has a fresh child.
 
-    В транскрипте оба случая выглядят одинаково (запрос инструмента без
-    ответа), разводит их только процесс: прогон тестов запускает потомка, а на
-    вопросе «разрешить?» процесс простаивает.
+    In the transcript both cases look the same (a tool request without an answer),
+    only the process tells them apart: running the tests spawns a child, while on
+    an "allow?" question the process idles.
     """
     now = datetime.now(UTC)
     tool_use = [{"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "ls"}}]
@@ -606,15 +606,15 @@ def test_long_tool_is_working_not_permission(transcripts: Path, db_path: Path) -
             content=tool_use,
             stop_reason="tool_use",
         )
-        for session in ("гоняет", "спрашивает", "давний-потомок")
+        for session in ("running", "asking", "old-child")
     ]
     seed(transcripts, db_path, lines)
 
     def liveness() -> dict[str, datetime | None]:
         return {
-            "гоняет": asked + timedelta(seconds=1),  # потомок запущен по запросу
-            "спрашивает": None,  # потомков нет — процесс ждёт человека
-            "давний-потомок": asked - timedelta(hours=1),  # MCP-сервер, не в счёт
+            "running": asked + timedelta(seconds=1),  # the child started on the request
+            "asking": None,  # no children - the process waits for the human
+            "old-child": asked - timedelta(hours=1),  # an MCP server, does not count
         }
 
     with client(db_path, transcripts, liveness=liveness) as api:
@@ -622,38 +622,38 @@ def test_long_tool_is_working_not_permission(transcripts: Path, db_path: Path) -
 
     statuses = {row["id"]: row["status"] for row in data["live_sessions"]}
     assert statuses == {
-        "гоняет": "working",
-        "спрашивает": "permission",
-        "давний-потомок": "permission",
+        "running": "working",
+        "asking": "permission",
+        "old-child": "permission",
     }
 
 
 def test_finished_session_leaves_idle(transcripts: Path, db_path: Path) -> None:
-    """Молчащая сессия без процесса — «закончилась», а не «простаивает» (B4)."""
+    """A quiet session without a process is "finished", not "idle" (B4)."""
     now = datetime.now(UTC)
     seed(
         transcripts,
         db_path,
         [
-            assistant("msg_a", session="жива", ts=now - timedelta(minutes=20)),
-            assistant("msg_b", session="умерла", uuid="u2", ts=now - timedelta(minutes=20)),
+            assistant("msg_a", session="alive", ts=now - timedelta(minutes=20)),
+            assistant("msg_b", session="dead", uuid="u2", ts=now - timedelta(minutes=20)),
         ],
     )
 
-    with client(db_path, transcripts, liveness=lambda: {"жива": None}) as api:
+    with client(db_path, transcripts, liveness=lambda: {"alive": None}) as api:
         data = api.get("/api/overview").json()
 
     statuses = {row["id"]: row["status"] for row in data["live_sessions"]}
-    assert statuses == {"жива": "idle", "умерла": "done"}
+    assert statuses == {"alive": "idle", "dead": "done"}
 
 
 def test_unknown_liveness_keeps_idle(transcripts: Path, db_path: Path) -> None:
-    """Молчащий `claude` не повод объявить все сессии завершёнными (B4)."""
+    """A silent `claude` is no reason to declare every session finished (B4)."""
     now = datetime.now(UTC)
     seed(
         transcripts,
         db_path,
-        [assistant("msg_a", session="тихая", ts=now - timedelta(minutes=20))],
+        [assistant("msg_a", session="quiet", ts=now - timedelta(minutes=20))],
     )
 
     with client(db_path, transcripts, liveness=lambda: None) as api:
@@ -662,43 +662,43 @@ def test_unknown_liveness_keeps_idle(transcripts: Path, db_path: Path) -> None:
     assert [row["status"] for row in data["live_sessions"]] == ["idle"]
 
 
-# --- экран «Сессии» (задача C1) ----------------------------------------------
+# --- the "Sessions" screen (task C1) -------------------------------------------
 
 
 def test_sessions_page_filters_and_sparkline(transcripts: Path, db_path: Path) -> None:
-    """Список фильтруется по проекту и статусу и несёт спарклайн расхода."""
+    """The list is filtered by project and status and carries a spend sparkline."""
     now = datetime.now(UTC)
     seed(
         transcripts,
         db_path,
         [
-            assistant("msg_1", session="живая", ts=now - timedelta(seconds=30)),
-            assistant("msg_2", session="старая", uuid="u2", ts=now - timedelta(hours=3)),
+            assistant("msg_1", session="live", ts=now - timedelta(seconds=30)),
+            assistant("msg_2", session="old", uuid="u2", ts=now - timedelta(hours=3)),
         ],
     )
 
-    with client(db_path, transcripts, liveness=lambda: {"живая": None}) as api:
+    with client(db_path, transcripts, liveness=lambda: {"live": None}) as api:
         page = api.get("/api/sessions").json()
         only_done = api.get("/api/sessions?status=done").json()
-        nothing = api.get("/api/sessions?project=нетакого").json()
+        nothing = api.get("/api/sessions?project=nosuch").json()
 
-    assert {row["id"] for row in page["sessions"]} == {"живая", "старая"}
-    assert [row["id"] for row in only_done["sessions"]] == ["старая"]
+    assert {row["id"] for row in page["sessions"]} == {"live", "old"}
+    assert [row["id"] for row in only_done["sessions"]] == ["old"]
     assert nothing["sessions"] == []
     assert page["projects"][0]["sessions"] == 2
-    spark = next(row["spark"] for row in page["sessions"] if row["id"] == "живая")
+    spark = next(row["spark"] for row in page["sessions"] if row["id"] == "live")
     assert len(spark) == 24 and sum(spark) > 0
 
 
 def test_sessions_page_period_cuts_old(transcripts: Path, db_path: Path) -> None:
-    """Период отсекает старое: `24h` не показывает вчерашнюю сессию."""
+    """The period cuts off the old: `24h` does not show yesterday's session."""
     now = datetime.now(UTC)
     seed(
         transcripts,
         db_path,
         [
-            assistant("msg_1", session="свежая", ts=now - timedelta(minutes=5)),
-            assistant("msg_2", session="вчерашняя", uuid="u2", ts=now - timedelta(days=2)),
+            assistant("msg_1", session="fresh", ts=now - timedelta(minutes=5)),
+            assistant("msg_2", session="yesterday", uuid="u2", ts=now - timedelta(days=2)),
         ],
     )
 
@@ -706,37 +706,37 @@ def test_sessions_page_period_cuts_old(transcripts: Path, db_path: Path) -> None
         recent = api.get("/api/sessions?period=24h").json()["sessions"]
         everything = api.get("/api/sessions?period=all").json()["sessions"]
 
-    assert [row["id"] for row in recent] == ["свежая"]
+    assert [row["id"] for row in recent] == ["fresh"]
     assert len(everything) == 2
 
 
 def test_sessions_page_marks_resume_chain(transcripts: Path, db_path: Path) -> None:
-    """У продолжения виден родитель, у родителя — счётчик продолжений."""
+    """A continuation shows its parent, the parent shows a continuation counter."""
     now = datetime.now(UTC)
     seed(
         transcripts,
         db_path,
-        [assistant("msg_1", session="исток", ts=now - timedelta(minutes=30))],
+        [assistant("msg_1", session="base", ts=now - timedelta(minutes=30))],
     )
     seed(
         transcripts,
         db_path,
         [
-            assistant("msg_1", session="продолжение", ts=now - timedelta(minutes=30)),
-            assistant("msg_2", session="продолжение", uuid="u2", ts=now - timedelta(minutes=5)),
+            assistant("msg_1", session="resumed", ts=now - timedelta(minutes=30)),
+            assistant("msg_2", session="resumed", uuid="u2", ts=now - timedelta(minutes=5)),
         ],
-        "вторая.jsonl",
+        "second.jsonl",
     )
 
     with client(db_path, transcripts) as api:
         rows = {row["id"]: row for row in api.get("/api/sessions").json()["sessions"]}
 
-    assert rows["продолжение"]["parent_session_id"] == "исток"
-    assert rows["исток"]["children"] == 1
+    assert rows["resumed"]["parent_session_id"] == "base"
+    assert rows["base"]["children"] == 1
 
 
 def test_session_details_carry_turns_and_marks(transcripts: Path, db_path: Path) -> None:
-    """Экран «Сессия»: ходы по порядку, холостые помечены, вехи собраны (C2)."""
+    """The "Session" screen: turns in order, idle ones marked, milestones collected (C2)."""
     now = datetime.now(UTC)
     compacted = json.dumps(
         {
@@ -745,14 +745,14 @@ def test_session_details_carry_turns_and_marks(transcripts: Path, db_path: Path)
             "sessionId": "s1",
             "timestamp": (now - timedelta(minutes=8)).isoformat().replace("+00:00", "Z"),
             "isCompactSummary": True,
-            "message": {"role": "user", "content": "пересказ разговора"},
+            "message": {"role": "user", "content": "a retelling of the conversation"},
         }
     )
     seed(
         transcripts,
         db_path,
         [
-            # Обычный ход и холостой: короткий ответ при большом контексте.
+            # An ordinary turn and an idle one: a short answer on a large context.
             assistant("msg_1", ts=now - timedelta(minutes=10), output=500, cache_read=60_000),
             compacted,
             assistant(
@@ -770,13 +770,13 @@ def test_session_details_carry_turns_and_marks(transcripts: Path, db_path: Path)
     assert [event["kind"] for event in data["events"]] == ["compact"]
 
 
-# --- экран «Настройки» (задача C3) -------------------------------------------
+# --- the "Settings" screen (task C3) -------------------------------------------
 
 
 def test_config_is_read_and_written(
     transcripts: Path, db_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Настройки читаются, пишутся в файл и сразу применяют цены."""
+    """Settings are read, written into the file and apply prices right away."""
     config_path = tmp_path / "config.toml"
     monkeypatch.setattr(paths, "CONFIG_PATH", config_path)
     now = datetime.now(UTC)
@@ -801,27 +801,27 @@ def test_config_is_read_and_written(
 
     assert saved.status_code == 200
     assert again["thresholds"]["context_warn"] == 90_000
-    assert config_path.exists(), "конфиг должен лечь в файл, а не остаться в памяти"
+    assert config_path.exists(), "the config must land in the file, not stay in memory"
     conn = connect(db_path, apply_schema=False)
     try:
         cost = conn.execute("SELECT cost_usd FROM turns WHERE message_id = 'msg_1'").fetchone()[0]
     finally:
         conn.close()
-    assert cost > 0, "цены должны примениться сразу, без reindex"
+    assert cost > 0, "prices must apply right away, without a reindex"
 
 
 def test_config_rejects_broken_values(
     transcripts: Path, db_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Негодные значения не доезжают до файла, а объясняются человеку."""
+    """Bad values never reach the file, they are explained to the human instead."""
     config_path = tmp_path / "config.toml"
     monkeypatch.setattr(paths, "CONFIG_PATH", config_path)
     seed(transcripts, db_path, [assistant("msg_1")])
 
     with client(db_path, transcripts) as api:
         current = api.get("/api/config").json()["config"]
-        current["thresholds"]["context_warn"] = 200_000  # жёлтая позже красной
-        current["telegram"]["daily_summary_at"] = "вечером"
+        current["thresholds"]["context_warn"] = 200_000  # yellow later than red
+        current["telegram"]["daily_summary_at"] = "in the evening"
         response = api.put("/api/config", json={"config": current})
 
     assert response.status_code == 400
@@ -830,11 +830,11 @@ def test_config_rejects_broken_values(
     assert not config_path.exists()
 
 
-# --- экран «Советы» (задача D6) ----------------------------------------------
+# --- the "Advice" screen (task D6) ---------------------------------------------
 
 
 def advice_run(conn, *, kind: str = "hourly", cost: float = 0.08) -> int:
-    """Разбор с двумя советами прямо в базе: сам такт здесь не нужен."""
+    """An analysis with two tips straight in the database: the tick itself is not needed here."""
     with conn:
         cursor = conn.execute(
             """
@@ -850,15 +850,15 @@ def advice_run(conn, *, kind: str = "hourly", cost: float = 0.08) -> int:
             VALUES (?, ?, ?, ?, '', '', ?)
             """,
             [
-                (advice_id, "k1", "Закрыть линию работы", "warn", "chains[0].sessions = 19"),
-                (advice_id, "k2", "Перевести чтение на haiku", "info", "mechanical_opus = 212"),
+                (advice_id, "k1", "Close the work line", "warn", "chains[0].sessions = 19"),
+                (advice_id, "k2", "Move reading to haiku", "info", "mechanical_opus = 212"),
             ],
         )
     return int(advice_id or 0)
 
 
 def test_advice_history_is_served(transcripts: Path, db_path: Path) -> None:
-    """Экран получает разборы со вложенными советами."""
+    """The screen receives analyses with nested tips."""
     conn = connect(db_path)
     advice_run(conn)
     conn.close()
@@ -869,14 +869,14 @@ def test_advice_history_is_served(transcripts: Path, db_path: Path) -> None:
     assert len(runs) == 1
     assert runs[0]["cost_usd"] == pytest.approx(0.08)
     assert [item["title"] for item in runs[0]["items"]] == [
-        "Закрыть линию работы",
-        "Перевести чтение на haiku",
+        "Close the work line",
+        "Move reading to haiku",
     ]
     assert {item["status"] for item in runs[0]["items"]} == {"new"}
 
 
 def test_advice_mentions_are_expanded(transcripts: Path, db_path: Path) -> None:
-    """Короткий id в совете разворачивается в имя сессии и проект (для экрана)."""
+    """A short id in a tip expands into a session name and a project (for the screen)."""
     now = datetime.now(UTC)
     seed(
         transcripts,
@@ -887,7 +887,7 @@ def test_advice_mentions_are_expanded(transcripts: Path, db_path: Path) -> None:
                 {
                     "type": "ai-title",
                     "sessionId": "b2ae5a8a-1111-2222-3333-444455556666",
-                    "aiTitle": "разбор структуры проекта",
+                    "aiTitle": "project structure review",
                 }
             ),
         ],
@@ -902,7 +902,7 @@ def test_advice_mentions_are_expanded(transcripts: Path, db_path: Path) -> None:
         conn.execute(
             """
             INSERT INTO advice_items (advice_id, key, title, severity, detail, action, evidence)
-            VALUES (?, 'k1', 'Закрыть сессию', 'crit', '', '', 'sessions[0]: b2ae5a8a, turns 7568')
+            VALUES (?, 'k1', 'Close session', 'crit', '', '', 'sessions[0]: b2ae5a8a, turns 7568')
             """,
             (cursor.lastrowid,),
         )
@@ -911,13 +911,13 @@ def test_advice_mentions_are_expanded(transcripts: Path, db_path: Path) -> None:
     with client(db_path, transcripts) as api:
         item = api.get("/api/advice").json()["runs"][0]["items"][0]
 
-    assert [s["title"] for s in item["sessions"]] == ["разбор структуры проекта"]
+    assert [s["title"] for s in item["sessions"]] == ["project structure review"]
     assert item["sessions"][0]["project"] == "project"
-    assert item["sessions"][0]["id"].startswith("b2ae5a8a"), "ссылка ведёт на полный id"
+    assert item["sessions"][0]["id"].startswith("b2ae5a8a"), "the link leads to the full id"
 
 
 def test_advice_status_is_saved(transcripts: Path, db_path: Path) -> None:
-    """Отклонённый совет остаётся отклонённым — на этом держится «не повторять»."""
+    """A dismissed tip stays dismissed - "do not repeat" rests on that."""
     conn = connect(db_path)
     advice_run(conn)
     item_id = conn.execute("SELECT id FROM advice_items ORDER BY id LIMIT 1").fetchone()["id"]
@@ -926,7 +926,7 @@ def test_advice_status_is_saved(transcripts: Path, db_path: Path) -> None:
     with client(db_path, transcripts) as api:
         assert api.post(f"/api/advice/items/{item_id}?status=rejected").status_code == 200
         runs = api.get("/api/advice").json()["runs"]
-        bad_status = api.post(f"/api/advice/items/{item_id}?status=пожалуй")
+        bad_status = api.post(f"/api/advice/items/{item_id}?status=maybe")
         missing = api.post("/api/advice/items/99999?status=accepted")
 
     assert runs[0]["items"][0]["status"] == "rejected"
@@ -935,7 +935,7 @@ def test_advice_status_is_saved(transcripts: Path, db_path: Path) -> None:
 
 
 def test_manual_run_is_labelled_manual(transcripts: Path, db_path: Path) -> None:
-    """Разбор с кнопки подписывается «вручную», а не «часовой»."""
+    """An analysis from the button is labelled "manual", not "hourly"."""
     now = datetime.now(UTC)
     seed(transcripts, db_path, [assistant("msg_1", ts=now - timedelta(minutes=5))])
     envelope = {
@@ -944,7 +944,7 @@ def test_manual_run_is_labelled_manual(transcripts: Path, db_path: Path) -> None
         "structured_output": {
             "advice": [
                 {
-                    "title": "Закрыть линию работы",
+                    "title": "Close the work line",
                     "severity": "warn",
                     "detail": "",
                     "action": "",
@@ -963,11 +963,11 @@ def test_manual_run_is_labelled_manual(transcripts: Path, db_path: Path) -> None
     assert runs[0]["cost_usd"] == pytest.approx(0.07)
 
 
-# --- метрики ТЗ §4 (задача B3) -----------------------------------------------
+# --- TZ §4 metrics (task B3) ---------------------------------------------------
 
 
 def test_tool_profile_and_bash_commands(transcripts: Path, db_path: Path) -> None:
-    """Профиль инструментов, внутри Bash — по нормализованным командам."""
+    """The tool profile, and inside Bash - by normalised commands."""
     now = datetime.now(UTC)
     bash = [{"type": "tool_use", "id": "b1", "name": "Bash", "input": {"command": "git status"}}]
     read = [{"type": "tool_use", "id": "r1", "name": "Read", "input": {"file_path": "/x"}}]
@@ -997,7 +997,7 @@ def test_tool_profile_and_bash_commands(transcripts: Path, db_path: Path) -> Non
 
     assert profile["tools"][0] == {"tool": "Bash", "calls": 2}
     assert profile["tools_total"] == 3
-    # Обе команды свелись к одной строке, несмотря на префикс `cd`.
+    # Both commands collapsed into one row despite the `cd` prefix.
     assert profile["bash_commands"] == [{"command": "git status", "calls": 2}]
 
 
@@ -1017,19 +1017,19 @@ def test_model_share(transcripts: Path, db_path: Path) -> None:
 
 
 def test_idle_turns(transcripts: Path, db_path: Path) -> None:
-    """Холостой ход: ответ короче 10 токенов при контексте больше 50k."""
+    """An idle turn: an answer shorter than 10 tokens on a context larger than 50k."""
     now = datetime.now(UTC)
     seed(
         transcripts,
         db_path,
         [
-            # Холостой: 3 токена ответа при контексте 60k.
+            # Idle: a 3-token answer on a 60k context.
             assistant("msg_idle", ts=now - timedelta(minutes=1), output=3, cache_read=60_000),
-            # Короткий ответ, но контекст маленький — не холостой.
+            # A short answer, but the context is small - not idle.
             assistant(
                 "msg_small", uuid="u2", ts=now - timedelta(minutes=2), output=3, cache_read=10
             ),
-            # Большой контекст, но и ответ большой — не холостой.
+            # A large context, but the answer is large too - not idle.
             assistant(
                 "msg_work", uuid="u3", ts=now - timedelta(minutes=3), output=900, cache_read=60_000
             ),
@@ -1045,7 +1045,7 @@ def test_idle_turns(transcripts: Path, db_path: Path) -> None:
 
 
 def test_limit_window_starts_after_a_long_pause(transcripts: Path, db_path: Path) -> None:
-    """Окно лимитов начинается с первого хода после паузы длиннее пяти часов."""
+    """The limit window starts with the first turn after a pause longer than five hours."""
     now = datetime.now(UTC)
     seed(
         transcripts,
@@ -1062,7 +1062,7 @@ def test_limit_window_starts_after_a_long_pause(transcripts: Path, db_path: Path
     assert limits["approximate"] is True
     assert limits["window_hours"] == 5
     started = datetime.fromisoformat(limits["started_at"])
-    # Ход девятичасовой давности — из прошлого окна, он в счёт не идёт.
+    # The nine-hour-old turn belongs to the previous window, it does not count.
     assert (now - started) < timedelta(hours=5)
     assert limits["usage"]["turns"] == 2
     assert limits["usage"]["output_tokens"] == 100
@@ -1076,11 +1076,11 @@ def test_limit_window_empty_when_no_turns(db_path: Path, transcripts: Path) -> N
     assert limits["usage"] is None
 
 
-# --- лимиты подписки ---------------------------------------------------------
+# --- subscription limits -------------------------------------------------------
 
 
 def test_plan_limits_reach_the_dashboard(transcripts: Path, db_path: Path) -> None:
-    """Проценты плана отдаются как есть — их считает Anthropic, не мы."""
+    """Plan percentages are served as they are - Anthropic counts them, not us."""
     payload = {
         "source": "api",
         "fetched_at": 1_786_635_000.0,
@@ -1089,7 +1089,7 @@ def test_plan_limits_reach_the_dashboard(transcripts: Path, db_path: Path) -> No
         "limits": [
             {
                 "kind": "session",
-                "label": "текущая сессия",
+                "label": "current session",
                 "percent": 48,
                 "resets_at": "2026-08-13T16:10:00Z",
                 "severity": "normal",
@@ -1106,11 +1106,11 @@ def test_plan_limits_reach_the_dashboard(transcripts: Path, db_path: Path) -> No
 def test_overview_stamps_point_at_last_events(
     transcripts: Path, db_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Метка виджета — время последнего события, а не момент пересчёта."""
+    """The widget mark is the time of the last event, not the moment of recomputation."""
     now = datetime.now(UTC)
-    # Дневные метки считаются от местной полуночи, а тест сеет события «20 минут
-    # назад»: запущенный в 00:05 он ловил бы вчерашний день и падал. Границу дня
-    # отодвигаем, чтобы проверять метки, а не часы на стене.
+    # Daily marks are counted from local midnight, while the test seeds events "20 minutes
+    # ago": started at 00:05 it would catch yesterday and fail. We push the day boundary
+    # away, so that marks are checked rather than the clock on the wall.
     monkeypatch.setattr(
         metrics_module, "local_day_start", lambda moment: moment - timedelta(days=1)
     )
@@ -1118,35 +1118,35 @@ def test_overview_stamps_point_at_last_events(
         transcripts,
         db_path,
         [
-            # Холостой ход: короткий ответ при большом контексте.
+            # An idle turn: a short answer on a large context.
             assistant(
                 "msg_idle",
                 uuid="u1",
                 ts=now - timedelta(minutes=20),
                 output=3,
                 cache_read=200_000,
-                content=[{"type": "text", "text": "ок"}],
+                content=[{"type": "text", "text": "ok"}],
             ),
             assistant("msg_tool", uuid="u2", ts=now - timedelta(minutes=10)),
-            # Последний ход без инструментов: у ленты и профиля времена разойдутся.
+            # The last turn without tools: the feed and the profile times will diverge.
             assistant(
                 "msg_text",
                 uuid="u3",
                 ts=now - timedelta(minutes=1),
-                content=[{"type": "text", "text": "готово"}],
+                content=[{"type": "text", "text": "done"}],
             ),
         ],
     )
     with client(db_path, transcripts) as api:
         stamps = api.get("/api/overview").json()["stamps"]
 
-    assert stamps["last_turn"] == stamps["today_turn"]  # ходы сегодняшние
-    assert stamps["last_turn"] > stamps["tool_call"]  # последний ход без инструментов
-    assert stamps["idle_turn"] < stamps["tool_call"]  # холостой был раньше
+    assert stamps["last_turn"] == stamps["today_turn"]  # the turns are today's
+    assert stamps["last_turn"] > stamps["tool_call"]  # the last turn has no tools
+    assert stamps["idle_turn"] < stamps["tool_call"]  # the idle one came earlier
 
 
 def test_overview_stamps_are_empty_without_turns(transcripts: Path, db_path: Path) -> None:
-    """Пустой срез — не время, а прочерк: виджету нечего датировать."""
+    """An empty slice is not a time but a dash: the widget has nothing to date."""
     seed(transcripts, db_path, [])
     with client(db_path, transcripts) as api:
         assert api.get("/api/overview").json()["stamps"] == {
@@ -1158,7 +1158,7 @@ def test_overview_stamps_are_empty_without_turns(transcripts: Path, db_path: Pat
 
 
 def test_plan_refresh_asks_limits_now(transcripts: Path, db_path: Path) -> None:
-    """Кнопка обновления в виджете лимитов ходит мимо пятиминутного кэша."""
+    """The refresh button in the limits widget goes past the five-minute cache."""
     seed(transcripts, db_path, [assistant("msg_1")])
     limits = StubLimits()
     with client(db_path, transcripts, limits=limits) as api:
@@ -1169,8 +1169,8 @@ def test_plan_refresh_asks_limits_now(transcripts: Path, db_path: Path) -> None:
 
 
 def test_overview_shows_what_the_advisor_costs(transcripts: Path, db_path: Path) -> None:
-    """Прибор, который стоит дороже того, что экономит, — плохой прибор: свой
-    расход виден в «Обзоре» рядом с чужим (задача C4)."""
+    """An instrument that costs more than it saves is a bad instrument: its own
+    spend is visible in "Overview" next to everyone else's (task C4)."""
     conn = connect(db_path)
     advice_run(conn, kind="hourly", cost=0.07)
     advice_run(conn, kind="weekly", cost=0.31)
@@ -1185,7 +1185,7 @@ def test_overview_shows_what_the_advisor_costs(transcripts: Path, db_path: Path)
 
 
 def test_overview_without_advisor_runs(transcripts: Path, db_path: Path) -> None:
-    """Пока разборов не было, строка в «Обзоре» не появляется вовсе."""
+    """While there were no analyses, the row does not appear in "Overview" at all."""
     connect(db_path).close()
     with client(db_path, transcripts) as api:
         advisor = api.get("/api/overview").json()["advisor"]

@@ -1,9 +1,9 @@
-// Прибор расхода. Шкала логарифмическая: burn rate живой машины гуляет от
-// тысяч до десятков миллионов токенов в минуту, и на линейной шкале стрелка
-// либо лежит на нуле, либо упирается в упор.
+// The spend instrument. The scale is logarithmic: the burn rate of a live machine roams
+// from thousands to tens of millions of tokens per minute, and on a linear scale the
+// needle either lies at zero or hits the stop.
 //
-// Кольцо под шкалой разбито на доли составляющих: чтение кэша обычно на два
-// порядка больше остальных, и без разбивки прибор показывал бы только его.
+// The ring under the scale is split into shares of the parts: cache reads are usually two
+// orders of magnitude larger than the rest, and without the split the instrument would
 
 import { useState, type MouseEvent } from "react";
 
@@ -12,7 +12,7 @@ import { useLang } from "./i18n";
 
 export type Slice = { key: string; label: string; value: number; color: string };
 
-const DECADES = [3, 4, 5, 6, 7]; // 1 тыс … 10 млн токенов в минуту
+const DECADES = [3, 4, 5, 6, 7]; // 1k ... 10M tokens per minute
 const MIN = 10 ** DECADES[0];
 const MAX = 10 ** DECADES[DECADES.length - 1];
 
@@ -23,7 +23,7 @@ const R_RING_OUTER = 176;
 const R_RING_INNER = 168;
 
 function polar(radius: number, fraction: number) {
-  const angle = Math.PI * (1 + fraction); // 0 — слева, 1 — справа
+  const angle = Math.PI * (1 + fraction); // 0 is on the left, 1 on the right
   return { x: CX + radius * Math.cos(angle), y: CY + radius * Math.sin(angle) };
 }
 
@@ -47,7 +47,7 @@ function ringSegment(from: number, to: number): string {
   ].join(" ");
 }
 
-/** Позиция значения на логарифмической шкале, 0…1. */
+/** The position of a value on the logarithmic scale, 0...1. */
 export function scalePosition(value: number): number {
   if (value <= MIN) return 0;
   if (value >= MAX) return 1;
@@ -91,7 +91,7 @@ export function Gauge({ value, slices, caption }: Props) {
           const fraction = index / (DECADES.length - 1);
           const outer = polar(R_SCALE, fraction);
           const inner = polar(R_SCALE - 14, fraction);
-          // Крайние метки прижимаются к торцам дуги, поэтому их сдвигаем глубже.
+          // The outermost labels press against the arc ends, so we push them deeper.
           const edge = index === 0 || index === DECADES.length - 1;
           const label = polar(R_SCALE - (edge ? 52 : 32), fraction);
           return (
@@ -104,9 +104,9 @@ export function Gauge({ value, slices, caption }: Props) {
           );
         })}
 
-        {/* Стрелка рисуется влево (положение нуля) и поворачивается: CSS-переход
-            работает с transform, а атрибуты x1/y1/x2/y2 линии он не анимирует —
-            от них стрелка прыгала. */}
+        {/* The needle is drawn to the left (the zero position) and rotated: the CSS
+            transition works with transform, and it does not animate the x1/y1/x2/y2
+            attributes of a line - the needle jumped because of them. */}
         <line
           className="gauge-needle"
           x1={CX + 16}
@@ -130,7 +130,7 @@ export function Gauge({ value, slices, caption }: Props) {
   );
 }
 
-/** Линейная шкала выходных токенов: их немного, и логарифм тут только мешает. */
+/** A linear scale of output tokens: there are few of them, and a logarithm only hinders. */
 export function OutputMeter({ value, peak }: { value: number; peak: number }) {
   const { t } = useLang();
   const ceiling = Math.max(peak, 1000);
@@ -155,7 +155,7 @@ export function OutputMeter({ value, peak }: { value: number; peak: number }) {
   );
 }
 
-/** Самописец: расход по корзинам времени. Шаг задаёт сервер (сейчас 5 секунд). */
+/** The chart recorder: spend by time buckets. The step is set by the server (5 seconds now). */
 export function Recorder({
   series,
   bucketSeconds,
@@ -163,15 +163,15 @@ export function Recorder({
   series: Array<{ at: string; tokens: number; output_tokens: number; turns: number }>;
   bucketSeconds: number;
 }) {
-  // Высота — по выходу модели: в суммарных токенах любой ход выглядит
-  // одинаково, потому что чтение кэша перевешивает всё остальное.
+  // The height follows the model output: in total tokens every turn looks
+  // the same, because cache reads outweigh everything else.
   const { t } = useLang();
   const peak = Math.max(...series.map((bucket) => bucket.output_tokens), 1);
   const span = Math.round((series.length * bucketSeconds) / 60);
   const [hover, setHover] = useState<number | null>(null);
 
-  // Корзина ищется по позиции курсора на всей дорожке, а не наведением на сам
-  // столбик: пустые корзины высотой в пиксель иначе не поймать.
+  // The bucket is found by the cursor position over the whole track rather than by
+  // hovering the bar itself: empty one-pixel buckets could not be caught otherwise.
   const track = (event: MouseEvent<HTMLDivElement>) => {
     const box = event.currentTarget.getBoundingClientRect();
     const index = Math.floor(((event.clientX - box.left) / box.width) * series.length);
@@ -208,8 +208,8 @@ export function Recorder({
         ))}
 
         {active && (
-          // Подсказка стоит у края дорожки, противоположного курсору: следуя
-          // за ним, она вылезала бы за панель и дёргалась при каждом движении.
+          // The tooltip stands at the track edge opposite the cursor: following it,
+          // it would crawl out of the panel and twitch on every move.
           <div
             className={
               hover! < series.length / 2 ? "recorder-tip recorder-tip-right" : "recorder-tip"
@@ -237,7 +237,7 @@ export function Recorder({
   );
 }
 
-/** Подпись корзины: интервал, который она покрывает. */
+/** The bucket caption: the interval it covers. */
 function bucketClock(at: string, seconds: number): string {
   const from = new Date(at);
   const to = new Date(from.getTime() + seconds * 1000);

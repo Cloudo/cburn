@@ -1,22 +1,22 @@
-"""Разбор одной строки транскрипта JSONL (TZ §2, задача A1).
+"""Parsing one JSONL transcript line (TZ §2, task A1).
 
-Чистая функция без обращений к БД и ФС: строка на входе, `ParsedRecord` или
-`None` на выходе. Наружу не летит ни одного исключения — битая строка пишется
-в лог и пропускается, offset обхода при этом двигается дальше.
+A pure function with no database or filesystem access: a line in, a `ParsedRecord` or
+`None` out. Not a single exception escapes - a broken line goes to the log and is
+skipped, and the walk offset moves on regardless.
 
-Формат недокументирован и меняется между версиями Claude Code, поэтому разбор
-терпимый: незнакомые поля игнорируются, незнакомые типы записей отдаются как
-`RecordKind.UNKNOWN` с сырым payload (его складывает в `raw_events` индексатор).
+The format is undocumented and changes between Claude Code versions, so parsing is
+tolerant: unknown fields are ignored, unknown record types are returned as
+`RecordKind.UNKNOWN` with the raw payload (the indexer puts it into `raw_events`).
 
-Важное про модель данных, проверенное на реальной истории:
+What matters about the data model, verified against real history:
 
-* **Запись ≠ ход.** Один ответ ассистента разложен по нескольким JSONL-записям —
-  по одной на блок контента (`thinking`, `text`, каждый `tool_use`), и в каждой
-  лежит *полный и одинаковый* `usage`. Ключ хода — `message_id`; суммировать
-  usage по записям нельзя, иначе расход задваивается (в среднем ×4.6).
-* **`uuid` не уникален по истории.** При resume Claude Code копирует прошлые
-  ходы в новый файл с новым `session_id`, сохраняя `uuid` и `message_id`
-  (встречались копии одного хода в 20 файлах). Склейка — забота индексатора.
+* **A record is not a turn.** One assistant answer is spread over several JSONL records -
+  one per content block (`thinking`, `text`, every `tool_use`), and each one carries the
+  *full and identical* `usage`. The turn key is `message_id`; usage must not be summed
+  across records, otherwise the spend inflates (by ×4.6 on average).
+* **`uuid` is not unique across history.** On resume Claude Code copies past turns into
+  a new file with a new `session_id`, keeping `uuid` and `message_id` (copies of one turn
+  were seen in 20 files). Merging them is the indexer's job.
 """
 
 from __future__ import annotations
@@ -31,36 +31,36 @@ import orjson
 
 log = logging.getLogger(__name__)
 
-#: Типы записей, которые разбираются в структуру. Всё остальное — UNKNOWN.
+#: Record types parsed into a structure. Everything else is UNKNOWN.
 _ASSISTANT = "assistant"
 _USER = "user"
 
-#: Название сессии. `custom-title` задан человеком и важнее сгенерированного
-#: `ai-title`; у обеих записей нет ни timestamp, ни uuid — только sessionId.
+#: The session title. `custom-title` is set by a human and outranks the generated
+#: `ai-title`; neither record has a timestamp or a uuid - only sessionId.
 _TITLE_FIELDS = {"ai-title": "aiTitle", "custom-title": "customTitle"}
 
-#: Последний промпт сессии Claude Code пишет отдельной записью — искать его
-#: перебором user-записей не нужно.
+#: Claude Code writes the session's last prompt as a separate record - there is no need
+#: to hunt for it by scanning user records.
 _LAST_PROMPT = "last-prompt"
 
-#: Ограничение на текст промпта: в БД он нужен только как подпись сессии.
+#: Limit on the prompt text: in the database it is only needed as a session caption.
 PROMPT_LIMIT = 200
 
 
 class RecordKind(StrEnum):
-    """Смысловой класс записи — то, чем она является для учёта расхода."""
+    """The meaning class of a record - what it is for spend accounting."""
 
-    ASSISTANT = "assistant"  # ответ модели (или его блок), несёт usage
-    PROMPT = "prompt"  # настоящий промпт пользователя
-    TOOL_RESULT = "tool_result"  # результат инструмента, приходит записью user
-    TITLE = "title"  # название сессии: ai-title или custom-title
-    LAST_PROMPT = "last_prompt"  # последний промпт сессии, отдельной записью
-    UNKNOWN = "unknown"  # всё прочее — в raw_events
+    ASSISTANT = "assistant"  # a model answer (or a block of it), carries usage
+    PROMPT = "prompt"  # a real user prompt
+    TOOL_RESULT = "tool_result"  # a tool result, arrives as a user record
+    TITLE = "title"  # session title: ai-title or custom-title
+    LAST_PROMPT = "last_prompt"  # the session's last prompt, as a separate record
+    UNKNOWN = "unknown"  # everything else goes to raw_events
 
 
 @dataclass(frozen=True, slots=True)
 class Usage:
-    """Расход одного хода. Записи в 5m- и 1h-кэш тарифицируются по-разному."""
+    """The spend of one turn. Writes into the 5m and 1h cache are billed differently."""
 
     input_tokens: int = 0
     output_tokens: int = 0
@@ -70,22 +70,22 @@ class Usage:
 
     @property
     def cache_write(self) -> int:
-        """Суммарная запись в кэш."""
+        """Total cache write."""
         return self.cache_write_5m + self.cache_write_1h
 
     @property
     def context_estimate(self) -> int:
-        """Оценка занятого окна контекста на момент хода (TZ §4)."""
+        """An estimate of the context window in use at the moment of the turn (TZ §4)."""
         return self.input_tokens + self.cache_read + self.cache_write
 
     def merge(self, other: Usage) -> Usage:
-        """Свести usage двух записей одного хода — поэлементным максимумом.
+        """Merge the usage of two records of one turn - by element-wise maximum.
 
-        Записи одного ответа обычно несут одинаковый usage, но у 2 527 ходов из
-        15 197 в реальной истории часть записей нулевая: расход проставляется по
-        завершении ответа, а промежуточные блоки уже записаны. Максимум даёт
-        финальное значение независимо от порядка чтения; сумма завысила бы расход
-        в разы, первая запись — занизила бы на треть.
+        Records of one answer usually carry identical usage, but for 2,527 turns out of
+        15,197 in real history part of the records is zero: the spend is filled in when the
+        answer completes, while the intermediate blocks are already written. The maximum
+        gives the final value regardless of read order; a sum would inflate the spend
+        several times over, and the first record would understate it by a third.
         """
         return Usage(
             input_tokens=max(self.input_tokens, other.input_tokens),
@@ -98,16 +98,16 @@ class Usage:
 
 @dataclass(frozen=True, slots=True)
 class ToolUse:
-    """Вызов инструмента из блока `tool_use`."""
+    """A tool call from a `tool_use` block."""
 
     tool: str
     tool_use_id: str | None = None
-    detail: str | None = None  # для Bash — нормализованная команда
+    detail: str | None = None  # for Bash - the normalised command
 
 
 @dataclass(frozen=True, slots=True)
 class ParsedRecord:
-    """Разобранная строка транскрипта."""
+    """A parsed transcript line."""
 
     kind: RecordKind
     raw_type: str
@@ -138,22 +138,22 @@ class ParsedRecord:
 
 
 def parse_line(raw: str) -> ParsedRecord | None:
-    """Разобрать строку транскрипта. Битая или пустая строка → `None`."""
+    """Parse a transcript line. A broken or empty line gives `None`."""
     line = raw.strip()
     if not line:
         return None
     try:
         record = orjson.loads(line)
     except orjson.JSONDecodeError as exc:
-        log.warning("нечитаемая строка транскрипта: %s", exc)
+        log.warning("unreadable transcript line: %s", exc)
         return None
     if not isinstance(record, dict):
-        log.warning("строка транскрипта не объект: %s", type(record).__name__)
+        log.warning("transcript line is not an object: %s", type(record).__name__)
         return None
     try:
         return _parse_record(record)
-    except Exception as exc:  # разбор не должен останавливать обход файла
-        log.warning("строка транскрипта не разобрана (%s): %s", record.get("type"), exc)
+    except Exception as exc:  # parsing must not stop the file walk
+        log.warning("transcript line not parsed (%s): %s", record.get("type"), exc)
         return None
 
 
@@ -216,11 +216,11 @@ def _parse_assistant(
 def _parse_user(
     record: dict[str, Any], message: dict[str, Any], common: dict[str, Any]
 ) -> ParsedRecord:
-    """Промпт против результата инструмента.
+    """A prompt versus a tool result.
 
-    Различать по `promptSource` нельзя: поле есть меньше чем у 5% user-записей
-    (значения `sdk`, `typed`), у набранных руками промптов его обычно нет.
-    Надёжный признак — блок `tool_result` в контенте.
+    They cannot be told apart by `promptSource`: the field is present on less than 5% of
+    user records (values `sdk`, `typed`), and hand-typed prompts usually lack it.
+    The reliable sign is a `tool_result` block in the content.
     """
     content = message.get("content")
     if _is_tool_result(content):
@@ -240,20 +240,20 @@ def _is_tool_result(content: Any) -> bool:
     return any(isinstance(block, dict) and block.get("type") == "tool_result" for block in content)
 
 
-#: Служебные блоки, которые Claude Code подмешивает к промпту человека:
-#: контекст IDE, напоминания системы, предупреждения слэш-команд. Для подписи
-#: сессии они бесполезны — настоящий вопрос стоит после них.
+#: Service blocks Claude Code mixes into a human prompt: IDE context, system
+#: reminders, slash-command caveats. They are useless as a session caption -
+#: the real question comes after them.
 _SERVICE_BLOCK = re.compile(r"<([a-z][\w-]*)>.*?</\1>", re.DOTALL | re.IGNORECASE)
 _SERVICE_OPEN = re.compile(r"^\s*<[a-z][\w-]*>", re.IGNORECASE)
 _COMMAND_NAME = re.compile(r"<command-name>\s*(.+?)\s*</command-name>", re.DOTALL | re.IGNORECASE)
 
 
 def _strip_service_blocks(text: str) -> str:
-    """Оставить от промпта то, что написал человек.
+    """Keep only what the human actually wrote in the prompt.
 
-    Запуск слэш-команды выглядит как предупреждение `local-command-caveat`
-    и блоки `command-name`/`command-message` — живого текста там нет вовсе,
-    и подписью сессии становится сама команда.
+    Running a slash command looks like a `local-command-caveat` warning plus
+    `command-name`/`command-message` blocks - there is no live text there at all,
+    and the command itself becomes the session caption.
     """
     stripped = _SERVICE_BLOCK.sub(" ", text).strip()
     if stripped:
@@ -261,13 +261,13 @@ def _strip_service_blocks(text: str) -> str:
     command = _COMMAND_NAME.search(text)
     if command:
         return command.group(1)
-    # Один служебный текст без содержания: пусть подписью станет название
-    # сессии или проект — стена служебных предупреждений не подпись.
+    # A single service text with no substance: let the caption be the session
+    # title or the project - a wall of service warnings is no caption.
     return ""
 
 
 def _clean_prompt(text: str) -> str | None:
-    """Обрезать промпт и убрать служебные обёртки."""
+    """Trim the prompt and strip the service wrappers."""
     text = text.strip()
     if _SERVICE_OPEN.match(text):
         text = _strip_service_blocks(text)
@@ -275,7 +275,7 @@ def _clean_prompt(text: str) -> str | None:
 
 
 def _prompt_text(content: Any) -> str | None:
-    """Текст промпта, обрезанный до `PROMPT_LIMIT`. Вложения пропускаются."""
+    """The prompt text, trimmed to `PROMPT_LIMIT`. Attachments are skipped."""
     if isinstance(content, str):
         text = content
     elif isinstance(content, list):
@@ -291,11 +291,11 @@ def _prompt_text(content: Any) -> str | None:
 
 
 def _parse_usage(usage: Any) -> Usage | None:
-    """Разбор `message.usage`.
+    """Parsing `message.usage`.
 
-    Разбивка записи в кэш живёт в `cache_creation`; у старых версий и у
-    синтетических записей её может не быть — тогда всё считается 5-минутной,
-    чтобы сумма всё равно сходилась с `cache_creation_input_tokens`.
+    The breakdown of cache writes lives in `cache_creation`; old versions and synthetic
+    records may lack it - then everything counts as the 5-minute one, so that the sum
+    still matches `cache_creation_input_tokens`.
     """
     if not isinstance(usage, dict):
         return None
@@ -336,30 +336,30 @@ def _parse_tools(content: Any) -> tuple[ToolUse, ...]:
 
 
 def _tool_detail(tool: str, tool_input: Any) -> str | None:
-    """Деталь вызова для профиля инструментов (TZ §4).
+    """The call detail for the tool profile (TZ §4).
 
-    Только для Bash и только нормализованная команда — приватность требует, чтобы
-    в БД не оседали ни аргументы, ни пути (TZ §7).
+    Only for Bash and only the normalised command - privacy demands that neither
+    arguments nor paths settle in the database (TZ §7).
     """
     if tool != "Bash" or not isinstance(tool_input, dict):
         return None
     return normalize_command(_str(tool_input.get("command")))
 
 
-#: Токены, после которых начинается новая команда.
+#: Tokens after which a new command begins.
 _COMMAND_SEPARATORS = ("|", "&&", "||", ";", "\n")
 
-#: Обёртки, за которыми в том же сегменте стоит настоящая команда.
+#: Wrappers followed by the real command inside the same segment.
 _WRAPPERS = {"sudo", "env", "time", "nohup", "exec", "command", "nice"}
 
-#: `cd` пропускается целиком вместе со своим аргументом: аргумент — это путь,
-#: а не команда. На реальной истории `cd` оказался самой частой «командой»
-#: (2 291 вызов), потому что почти всегда это `cd куда-то && то, что нужно`.
+#: `cd` is skipped whole together with its argument: the argument is a path,
+#: not a command. In real history `cd` turned out to be the most frequent "command"
+#: (2,291 calls), because it is almost always `cd somewhere && the thing you need`.
 _PATH_WRAPPERS = {"cd", "pushd"}
 
-#: Команды, у которых вторым словом идёт осмысленная подкоманда. Белый список,
-#: а не эвристика: иначе `cat README` превращается в «cat README», и имя файла
-#: утекает в базу вопреки TZ §7.
+#: Commands whose second word is a meaningful subcommand. An allowlist, not a
+#: heuristic: otherwise `cat README` turns into "cat README", and a file name
+#: leaks into the database against TZ §7.
 _SUBCOMMAND_HOSTS = {
     "git",
     "npm",
@@ -398,20 +398,20 @@ _SUBCOMMAND_HOSTS = {
     "bun",
 }
 
-#: Присваивание переменной перед командой: `S=/tmp/x python3 …`.
+#: A variable assignment before the command: `S=/tmp/x python3 ...`.
 _ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
 
 def normalize_command(command: str | None) -> str | None:
-    """Свернуть bash-команду до «первое слово + подкоманда».
+    """Collapse a bash command down to "first word + subcommand".
 
     `git commit -m "..."` → `git commit`, `sed -n 1,50p f.py` → `sed`,
-    `cd /x && npm run build` → `npm run`. Аргументы и пути отбрасываются:
-    в БД оседает только имя команды (TZ §7).
+    `cd /x && npm run build` becomes `npm run`. Arguments and paths are dropped:
+    only the command name settles in the database (TZ §7).
 
-    Heredoc помечается отдельно (`python3 <<`): скрипт, который гоняют одним
-    и тем же куском по десять раз, — это заметный расход, а по имени команды
-    он неотличим от обычного вызова. Текст скрипта при этом не сохраняется.
+    A heredoc is marked separately (`python3 <<`): a script driven through the same
+    chunk ten times over is a noticeable spend, yet by command name it is
+    indistinguishable from an ordinary call. The script text is not stored.
     """
     if not command:
         return None
@@ -421,12 +421,12 @@ def normalize_command(command: str | None) -> str | None:
         name = _command_name(segment)
         if name is not None:
             return name + heredoc
-    # Осталась только смена каталога — она и есть вся команда.
+    # Only the directory change is left - it is the whole command then.
     return "cd" + heredoc if segments else None
 
 
 def _command_segments(command: str) -> list[str]:
-    """Разбить строку на команды по разделителям, сохранив порядок."""
+    """Split the line into commands by separators, keeping the order."""
     segments = [command.strip()]
     for separator in _COMMAND_SEPARATORS:
         segments = [part for segment in segments for part in segment.split(separator)]
@@ -434,7 +434,7 @@ def _command_segments(command: str) -> list[str]:
 
 
 def _command_name(segment: str) -> str | None:
-    """Имя команды в одном сегменте; обёртки и присваивания пропускаются."""
+    """The command name inside one segment; wrappers and assignments are skipped."""
     tokens = [token for token in segment.split() if not _ASSIGNMENT.match(token)]
     if not tokens:
         return None
@@ -442,7 +442,7 @@ def _command_name(segment: str) -> str | None:
     if not name or not name[0].isalnum():
         return None
     if name in _PATH_WRAPPERS:
-        return None  # аргумент — путь; настоящая команда в следующем сегменте
+        return None  # the argument is a path; the real command is in the next segment
     if name in _WRAPPERS:
         rest = " ".join(tokens[1:]).lstrip()
         return _command_name(rest) if rest else name

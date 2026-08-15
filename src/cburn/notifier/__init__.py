@@ -1,8 +1,8 @@
-"""Уведомления в telegram: бридж на localhost:8788 или прямой Bot API (TZ §7, M3).
+"""Telegram notifications: the bridge on localhost:8788 or the direct Bot API (TZ §7, M3).
 
-Здесь всё, что связывает правила (`rules`) с базой и каналом (`channel`):
-что уже отправлено, когда была последняя тревога по сессии и стоит ли сейчас
-пауза. Тексты собираются тут же — коротко, цифрами, без пересказа переписки.
+Everything that ties the rules (`rules`) to the database and the channel (`channel`) lives
+here: what has already been sent, when the last alert for a session went out and whether a
+pause is on right now. The texts are built here too - short, in numbers, no retelling.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from .rules import Message, alert_messages, daily_message, digest_message, pause
 
 log = logging.getLogger(__name__)
 
-#: Ключ паузы в `notifier_state`.
+#: The pause key in `notifier_state`.
 PAUSE_KEY = "paused_until"
 
 __all__ = [
@@ -48,7 +48,7 @@ def paused_until(conn: sqlite3.Connection) -> datetime | None:
 
 
 def set_pause(conn: sqlite3.Connection, until: datetime | None) -> None:
-    """Поставить или снять паузу. `None` — снять."""
+    """Set or lift the pause. `None` lifts it."""
     with conn:
         conn.execute(
             "INSERT INTO notifier_state (key, value) VALUES (?, ?)"
@@ -58,7 +58,7 @@ def set_pause(conn: sqlite3.Connection, until: datetime | None) -> None:
 
 
 def last_alerts(conn: sqlite3.Connection) -> dict[str, datetime]:
-    """Когда в последний раз тревожили по каждой сессии."""
+    """When each session was last alerted about."""
     rows = conn.execute(
         "SELECT key, MAX(ts) AS ts FROM notifications"
         " WHERE kind = 'alert' AND key IS NOT NULL GROUP BY key"
@@ -102,7 +102,7 @@ def remember(conn: sqlite3.Connection, message: Message, channel: str, ok: bool)
 
 
 def digest_text(run: dict[str, Any], items: list[dict[str, Any]]) -> str:
-    """Часовая выжимка: во что обошёлся период и что советчик предлагает."""
+    """Hourly summary: what the period cost and what the advisor suggests."""
     lines = [
         f"Разбор за час: {len(items)} совет(а/ов), такт ${run.get('cost_usd', 0):.2f}",
     ]
@@ -114,7 +114,7 @@ def digest_text(run: dict[str, Any], items: list[dict[str, Any]]) -> str:
 
 
 def daily_text(usage: dict[str, Any], top: list[dict[str, Any]]) -> str:
-    """Дневная сводка: сколько сожгли и кто больше всех."""
+    """Daily digest: how much was burned and who burned the most."""
     tokens = usage.get("tokens", 0)
     lines = [
         f"За день: {usage.get('turns', 0)} ходов, {tokens / 1000:.0f}k токенов,"
@@ -132,10 +132,10 @@ def alerts_for(
     config: dict[str, Any],
     now: datetime | None = None,
 ) -> list[Message]:
-    """Что горит прямо сейчас: расход выше порога и раздутый контекст.
+    """What is burning right now: spend above the threshold and a bloated context.
 
-    Оба повода уже посчитаны для дашборда — тревога не заводит своей арифметики,
-    иначе на экране и в телефоне были бы разные цифры.
+    Both reasons are already computed for the dashboard - the alert runs no arithmetic of
+    its own, otherwise the screen and the phone would show different numbers.
     """
     moment = now or datetime.now(UTC)
     thresholds = config.get("thresholds") or {}
@@ -174,7 +174,7 @@ def dispatch(
     config: dict[str, Any],
     now: datetime | None = None,
 ) -> int:
-    """Отправить то, что прошло правила; вернуть число ушедших сообщений."""
+    """Send whatever passed the rules; return the number of messages that went out."""
     moment = now or datetime.now(UTC)
     channel = Channel(config)
     if not channel.enabled:
@@ -183,7 +183,7 @@ def dispatch(
     sent = 0
     for message in messages:
         if message.severity != "crit" and quiet_until is not None and quiet_until > moment:
-            log.info("уведомление придержано паузой: %s", message.kind)
+            log.info("notification held back by the pause: %s", message.kind)
             continue
         error = channel.send(message.text, message.severity)
         remember(conn, message, channel.mode, ok=error is None)
@@ -197,7 +197,7 @@ def daily_if_due(
     config: dict[str, Any],
     now: datetime | None = None,
 ) -> Message | None:
-    """Дневная сводка, если её время пришло и сегодня она ещё не уходила."""
+    """The daily digest, if its time has come and it has not gone out today yet."""
     moment = now or datetime.now(UTC)
     telegram = config.get("telegram") or {}
     at = str(telegram.get("daily_summary_at") or "21:00")
@@ -208,7 +208,7 @@ def daily_if_due(
 
 
 def digest_if_worth(run: dict[str, Any], items: list[dict[str, Any]]) -> Message | None:
-    """Часовая выжимка, если советчик нашёл хоть что-то важнее `info`."""
+    """The hourly summary, if the advisor found anything above `info`."""
     severity = run.get("max_severity")
     if rank(severity) < rank("warn"):
         return None

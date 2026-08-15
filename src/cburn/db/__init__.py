@@ -1,4 +1,4 @@
-"""Доступ к SQLite. Схема — в schema.sql, применяется идемпотентно."""
+"""SQLite access. The schema lives in schema.sql and is applied idempotently."""
 
 from __future__ import annotations
 
@@ -11,11 +11,11 @@ SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
 
 def connect(db_path: Path | None = None, *, apply_schema: bool = True) -> sqlite3.Connection:
-    """Открыть соединение с применённой схемой.
+    """Open a connection with the schema applied.
 
-    Путь берётся из `paths` в момент вызова, а не при импорте: так его можно
-    подменить (тесты, вторая БД) без переимпорта модуля. `apply_schema=False` —
-    для читающих соединений (каждый запрос API), чтобы не гонять schema.sql.
+    The path is taken from `paths` at call time, not at import: that way it can be
+    swapped (tests, a second database) without re-importing the module. `apply_schema=False`
+    is for reading connections (every API request), to avoid running schema.sql.
     """
     paths.ensure_dirs()
     conn = sqlite3.connect(db_path or paths.DB_PATH)
@@ -27,8 +27,8 @@ def connect(db_path: Path | None = None, *, apply_schema: bool = True) -> sqlite
     return conn
 
 
-#: Колонки, добавленные в уже существующие таблицы. `CREATE TABLE IF NOT EXISTS`
-#: старую таблицу не трогает, а пересоздавать базу из-за одной колонки незачем.
+#: Columns added to already existing tables. `CREATE TABLE IF NOT EXISTS`
+#: leaves an old table alone, and recreating the database over one column is pointless.
 ADDED_COLUMNS = {
     "raw_events": {"version": "TEXT"},
     "sessions": {"busy_since": "TEXT"},
@@ -37,9 +37,9 @@ ADDED_COLUMNS = {
 
 
 def _fill_project_names(conn: sqlite3.Connection) -> None:
-    """Проставить имена проектам, проиндексированным до их появления.
+    """Fill in names for projects indexed before names existed.
 
-    Имя считается из рабочего пути; переиндексация ради него не нужна.
+    The name is derived from the working path; no reindex is needed for it.
     """
     rows = conn.execute(
         "SELECT id, root_path FROM projects WHERE display_name IS NULL AND root_path IS NOT NULL"

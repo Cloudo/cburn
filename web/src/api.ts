@@ -1,6 +1,6 @@
-// Единственный канал к бэкенду: HTTP и WebSocket на localhost. Прямых обращений
-// к файловой системе у фронта нет — иначе обёртка Tauri на M5 потребовала бы
-// переделки (см. CLAUDE.md, инварианты).
+// The only channel to the backend: HTTP and WebSocket on localhost. The frontend has no
+// direct filesystem access - otherwise the Tauri wrapper in M5 would have demanded
+// a rewrite (see CLAUDE.md, the invariants).
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -53,14 +53,14 @@ export type CloseResult = {
   note: string | null;
 };
 
-/** Закрыть сессию: завершить её процесс и убрать с дашборда. */
+/** Close a session: terminate its process and remove it from the dashboard. */
 export async function closeSession(id: string): Promise<CloseResult> {
   const response = await fetch(`api/sessions/${encodeURIComponent(id)}/close`, { method: "POST" });
   if (!response.ok) throw new Error(`не удалось закрыть сессию: ${response.status}`);
   return response.json();
 }
 
-/** Убрать сессию с дашборда, не трогая процесс. */
+/** Remove a session from the dashboard without touching the process. */
 export async function hideSession(id: string): Promise<void> {
   const response = await fetch(`api/sessions/${encodeURIComponent(id)}/hide`, { method: "POST" });
   if (!response.ok) throw new Error(`не удалось убрать сессию: ${response.status}`);
@@ -127,8 +127,8 @@ export type Plan = {
   error: string | null;
 };
 
-/** Время самых свежих данных по срезам: обзор пересчитывается каждую секунду,
- *  а вот события в нём появляются, только когда что-то происходит. */
+/** The time of the freshest data per slice: the overview is recomputed every second,
+ *  while events appear in it only when something happens. */
 export type Stamps = {
   last_turn: string | null;
   today_turn: string | null;
@@ -136,8 +136,8 @@ export type Stamps = {
   idle_turn: string | null;
 };
 
-/** Срез телеметрии Claude Code: то, чего не видно в транскриптах (веха E).
- *  `active: false` — телеметрия не включена, виджет объясняет как включить. */
+/** A slice of Claude Code telemetry: what the transcripts do not show (milestone E).
+ *  `active: false` means telemetry is off and the widget explains how to switch it on. */
 export type Otel = {
   active: boolean;
   last_at: string | null;
@@ -157,19 +157,19 @@ export type Otel = {
     auto: number;
     rejected: number;
     by_tool: Array<{ tool: string; decisions: number }>;
-    /** Уход в другой режим разрешений — та же тема с другой стороны.
-     *  Тоже может не прийти: поле появилось позже остальных. */
+    /** Going into another permission mode - the same subject from the other side.
+     *  It may also be missing: the field appeared later than the rest. */
     mode_switches?: Array<{ mode: string | null; switches: number }>;
   };
-  /** Неудавшиеся запросы к API: в транскрипт они не попадают вовсе.
-   *  Необязательные — фронт могли собрать раньше, чем перезапустили сервер. */
+  /** Failed API requests: they never reach the transcript at all.
+   *  Optional - the frontend may have been built before the server was restarted. */
   api?: {
     errors: number;
     by_status: Array<{ status: string; errors: number }>;
-    /** Сбои внутри самого клиента: работа обрывается на середине. */
+    /** Failures inside the client itself: work breaks off midway. */
     internal?: Array<{ error: string; count: number }>;
   };
-  /** Время, съеденное хуками: в транскрипте от них остаётся только пауза. */
+  /** The time eaten by hooks: in the transcript only a pause remains of them. */
   hooks?: {
     seconds: number;
     failures: number;
@@ -181,7 +181,7 @@ export type Otel = {
       failures: number;
     }>;
   };
-  /** Что получилось за расход: строки кода и активное время без пауз. */
+  /** What came out of the spend: lines of code and active time without pauses. */
   work?: {
     lines_added: number;
     lines_removed: number;
@@ -216,11 +216,11 @@ export type Overview = {
   plan: Plan;
   series: Bucket[];
   series_bucket_seconds: number;
-  /** Может не прийти: собранный фронт обновляется отдельно от процесса сервера. */
+  /** May be missing: the built frontend updates apart from the server process. */
   stamps?: Stamps;
-  /** Тоже может не прийти — сервер старше этого фронта. */
+  /** May be missing too - the server is older than this frontend. */
   otel?: Otel;
-  /** Во что обошёлся сам советчик за сегодня (задача C4). */
+  /** What the advisor itself cost today (task C4). */
   advisor?: {
     ticks: number;
     cost_usd: number;
@@ -230,7 +230,7 @@ export type Overview = {
   pending_sessions: string[];
 };
 
-/** Спросить лимиты подписки немедленно: сам обзор их кэширует на пять минут. */
+/** Ask for the subscription limits at once: the overview caches them for five minutes. */
 export async function refreshPlan(): Promise<void> {
   const response = await fetch("api/plan/refresh", { method: "POST" });
   if (!response.ok) throw new Error(`не удалось обновить лимиты: ${response.status}`);
@@ -267,7 +267,7 @@ export type SessionRow = {
   children: number;
   sidechain_turns: number;
   status: SessionStatus;
-  /** Расход по равным долям жизни сессии — столбики спарклайна. */
+  /** Spend over equal slices of the session's life - the sparkline bars. */
   spark: number[];
 };
 
@@ -275,10 +275,10 @@ export type ProjectRow = { slug: string; name: string; root_path: string | null;
 
 export type SessionsPage = { sessions: SessionRow[]; projects: ProjectRow[] };
 
-/** Список сессий с фильтрами (экран «Сессии», задача C1).
+/** The session list with filters (the "Sessions" screen, task C1).
  *
- *  Отдельным запросом, а не через WebSocket: экран смотрят подолгу и редко, а
- *  обзор летит каждую секунду всем подписчикам. */
+ *  A separate request rather than the WebSocket: this screen is watched long and rarely,
+ *  while the overview flies to every subscriber once a second. */
 export function useSessions(filters: { project: string; status: string; period: string }): {
   data: SessionsPage | null;
   error: boolean;
@@ -347,7 +347,7 @@ export type SessionDetails = {
   };
   models: Array<{ model: string; turns: number; output_tokens: number }>;
   tools: Array<{ tool: string; calls: number }>;
-  /** Время в инструментах — только из телеметрии, поэтому список бывает пуст. */
+  /** Time inside tools comes from telemetry only, so the list is sometimes empty. */
   tool_times?: Array<{
     tool: string | null;
     calls: number;
@@ -360,7 +360,7 @@ export type SessionDetails = {
   events: SessionEvent[];
 };
 
-/** Одна сессия целиком: суммы, ходы и вехи (экран «Сессия», задача C2). */
+/** One whole session: totals, turns and milestones (the "Session" screen, task C2). */
 export function useSession(id: string): {
   data: SessionDetails | null;
   error: boolean;
@@ -410,7 +410,7 @@ export type Config = {
     weekly_deep_model: string;
     allow_snippets: boolean;
   };
-  /** Может не прийти: сервер старше этого фронта. */
+  /** May be missing: the server is older than this frontend. */
   otel?: { enabled: boolean; keep_days: number };
   telegram: {
     mode: string;
@@ -423,15 +423,15 @@ export type Config = {
   prices: Record<string, ModelPrice>;
 };
 
-/** Настройки как они лежат в файле (экран «Настройки», задача C3). */
+/** Settings exactly as they sit in the file (the "Settings" screen, task C3). */
 export async function loadConfig(): Promise<{ config: Config; path: string }> {
   const response = await fetch("api/config");
   if (!response.ok) throw new Error(`не удалось прочитать настройки: ${response.status}`);
   return response.json();
 }
 
-/** Записать настройки. Ошибки проверки приходят текстом от бэкенда: он владеет
- *  файлом, и повторять правила на фронте значит завести вторую их версию. */
+/** Write the settings. Validation errors come as text from the backend: it owns the
+ *  file, and repeating the rules on the frontend would mean a second copy of them. */
 export async function saveConfig(config: Config): Promise<{ config: Config }> {
   const response = await fetch("api/config", {
     method: "PUT",
@@ -452,7 +452,7 @@ export type AdviceItem = {
   action: string | null;
   evidence: string;
   status: "new" | "accepted" | "rejected";
-  /** Сессии, на которые совет ссылается: разворачиваются из коротких id. */
+  /** Sessions a tip refers to: expanded from the short ids. */
   sessions: Array<{ id: string; title: string | null; project: string | null }>;
 };
 
@@ -468,7 +468,7 @@ export type AdviceRun = {
   items: AdviceItem[];
 };
 
-/** История разборов со статусами (экран «Советы», задача D6). */
+/** Analysis history with statuses (the "Advice" screen, task D6). */
 export function useAdvice(): {
   data: { runs: AdviceRun[] } | null;
   error: boolean;
@@ -500,7 +500,7 @@ export async function setAdviceStatus(id: number, status: AdviceItem["status"]):
   if (!response.ok) throw new Error(`не удалось сохранить статус: ${response.status}`);
 }
 
-/** Разобрать период сейчас. Стоит денег — зовётся только по кнопке. */
+/** Analyse the period now. It costs money - called from the button only. */
 export async function runAdvice(
   period: string,
 ): Promise<{ cost_usd: number; advice: AdviceItem[] }> {
@@ -510,7 +510,7 @@ export async function runAdvice(
   return payload;
 }
 
-/** Обзор, который сам себя обновляет: первый кадр и пуши приходят по WebSocket. */
+/** An overview that refreshes itself: the first frame and the pushes come over WebSocket. */
 export function useOverview(): OverviewFeed {
   const [data, setData] = useState<Overview | null>(null);
   const [connection, setConnection] = useState<Connection>("connecting");
@@ -550,8 +550,8 @@ export function useOverview(): OverviewFeed {
     };
   }, []);
 
-  // Кнопка обновления в виджете: тикер и так шлёт обзор раз в секунду, но при
-  // разорванном сокете это единственный способ увидеть свежие числа.
+  // The refresh button in the widget: the ticker sends the overview once a second anyway,
+  // but with a broken socket this is the only way to see fresh numbers.
   const refresh = useCallback(async () => {
     const response = await fetch("api/overview");
     if (!response.ok) throw new Error(`не удалось обновить обзор: ${response.status}`);

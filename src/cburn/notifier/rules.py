@@ -1,15 +1,15 @@
-"""Когда стоит написать в telegram, а когда промолчать (задача D5, ТЗ §7).
+"""When it is worth writing to telegram and when to stay quiet (task D5, TZ §7).
 
-Решения вынесены в чистые функции: сеть и база остаются снаружи, а правила
-проверяются тестами без единого запроса. Правил три и все они про одно —
-не будить человека без повода:
+The decisions live in pure functions: network and database stay outside, and the rules
+are covered by tests without a single request. There are three rules and all of them
+are about one thing - not waking the human without a reason:
 
-* часовая выжимка уходит, только если советчик нашёл что-то важнее `info`;
-* дневная сводка — раз в сутки в назначенное время, и только один раз;
-* мгновенный алерт по сессии — не чаще, чем раз в `COOLDOWN`.
+* the hourly summary goes out only if the advisor found something above `info`;
+* the daily digest goes once a day at the appointed time, and only once;
+* an instant per-session alert goes no more often than once per `COOLDOWN`.
 
-Поверх всего стоит глобальная пауза: два часа тишины, которые не отменяют
-только `crit` — если расход горит прямо сейчас, молчать нельзя.
+On top of all that sits the global pause: two hours of silence that only `crit`
+overrides - when the spend is burning right now, staying quiet is not an option.
 """
 
 from __future__ import annotations
@@ -17,19 +17,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-#: Насколько замолкает конкретная сессия после своего алерта. Полчаса — это
-#: примерно длина одного захода работы: чаще напоминать не о чем.
+#: How long a particular session goes quiet after its alert. Half an hour is roughly
+#: the length of one work stretch: there is nothing to remind about more often.
 COOLDOWN = timedelta(minutes=30)
 
-#: Сколько длится глобальная пауза по кнопке (ТЗ §5).
+#: How long the global pause from the button lasts (TZ §5).
 PAUSE = timedelta(hours=2)
 
-#: Порядок важности: сравнение идёт по этому списку, а не по алфавиту.
+#: Severity order: comparison follows this list, not the alphabet.
 SEVERITY = ("info", "warn", "crit")
 
 
 def rank(severity: str | None) -> int:
-    """Место важности в шкале; незнакомое слово считается самым мягким."""
+    """Place on the severity scale; an unknown word counts as the mildest."""
     try:
         return SEVERITY.index(severity or "info")
     except ValueError:
@@ -38,12 +38,12 @@ def rank(severity: str | None) -> int:
 
 @dataclass(frozen=True)
 class Message:
-    """Готовое сообщение: текст уже собран, каналу остаётся его отправить."""
+    """A ready message: the text is already built, the channel only has to send it."""
 
     kind: str  # digest | daily | alert
     text: str
     severity: str = "info"
-    #: Чем помечена память об этом сообщении: сессия у алерта, дата у сводки.
+    #: What the memory of this message is keyed by: the session for an alert, the date for a digest.
     key: str | None = None
 
 
@@ -52,16 +52,16 @@ def is_paused(paused_until: datetime | None, now: datetime) -> bool:
 
 
 def allowed(message: Message, paused_until: datetime | None, now: datetime) -> bool:
-    """Пропускать ли сообщение сквозь паузу.
+    """Whether to let the message through the pause.
 
-    `crit` проходит всегда: пауза — это «не отвлекай по мелочам», а не
-    «выключи прибор».
+    `crit` always passes: the pause means "do not bother me with small things", not
+    "switch the instrument off".
     """
     return message.severity == "crit" or not is_paused(paused_until, now)
 
 
 def digest_message(severity: str | None, summary: str) -> Message | None:
-    """Часовая выжимка советчика — только если есть о чём говорить."""
+    """The advisor's hourly summary - only if there is something to talk about."""
     if rank(severity) < rank("warn"):
         return None
     return Message(kind="digest", text=summary, severity=severity or "warn")
@@ -73,11 +73,11 @@ def daily_message(
     last_daily: datetime | None,
     summary: str,
 ) -> Message | None:
-    """Дневная сводка: раз в сутки, после назначенного времени.
+    """The daily digest: once a day, after the appointed time.
 
-    Время сравнивается по местным часам — «21:00» человек читает как вечер у
-    себя, а не в UTC. Если дашборд был выключен, сводка уйдёт при первом
-    запуске после срока, но всё равно один раз за день.
+    The time is compared in local hours - a human reads "21:00" as evening where they
+    are, not in UTC. If the dashboard was switched off, the digest goes out on the first
+    start after the deadline, but still only once a day.
     """
     local = now.astimezone()
     hours, _, minutes = at.partition(":")
@@ -97,11 +97,11 @@ def alert_messages(
     candidates: list[tuple[str, str, str]],
     last_alerts: dict[str, datetime],
 ) -> list[Message]:
-    """Мгновенные алерты с cooldown по сессии.
+    """Instant alerts with a per-session cooldown.
 
-    `candidates` — тройки «ключ, важность, текст»: правила, что считать
-    поводом, живут в вызывающем коде, здесь только память о том, кого мы
-    недавно уже трогали.
+    `candidates` are triples of "key, severity, text": the rules for what counts as a
+    reason live in the calling code, here we only keep the memory of whom we have
+    bothered recently.
     """
     fresh: list[Message] = []
     for key, severity, text in candidates:
@@ -113,5 +113,5 @@ def alert_messages(
 
 
 def pause_until(now: datetime | None = None) -> datetime:
-    """До какого момента молчать после нажатия «пауза на 2 часа»."""
+    """Until when to stay quiet after "pause for 2 hours" was pressed."""
     return (now or datetime.now(UTC)) + PAUSE

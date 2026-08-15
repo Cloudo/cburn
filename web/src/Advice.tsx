@@ -1,6 +1,6 @@
-// Экран «Советы» (задача D6): история разборов со статусами. Отклонённый совет
-// уезжает в промпт следующего такта пометкой «не повторять» — ради этого
-// статусы и нужны, иначе одно и то же приходило бы по кругу.
+// The "Advice" screen (task D6): analysis history with statuses. A dismissed tip
+// travels into the next tick's prompt marked "do not repeat" - that is what the
+// statuses are for, otherwise the same thing would come round again.
 
 import { useEffect, useState } from "react";
 
@@ -70,8 +70,8 @@ export function Advice() {
       {error && <p className="hint">{t("app.noConnection")}</p>}
       {!runs.length && !error && <p className="hint">{t("advice.empty")}</p>}
 
-      {/* Порядок — по важности, а не по разборам: сперва то, что горит.
-          Разбор, которому совет принадлежит, подписан на самой карточке. */}
+      {/* The order is by importance rather than by analyses: what burns comes first.
+          The analysis a tip belongs to is signed on the card itself. */}
       {SEVERITY_ORDER.map((severity) => {
         const group = flatten(runs).filter((item) => item.severity === severity);
         if (!group.length) return null;
@@ -90,8 +90,8 @@ export function Advice() {
   );
 }
 
-/** Все советы всех разборов одним списком: у каждого при себе его разбор.
- *  Отклонённые опускаются вниз своей группы — решение уже принято. */
+/** Every tip of every analysis in one list: each carries its analysis along.
+ *  Dismissed ones sink to the bottom of their group - the decision is already made. */
 function flatten(runs: AdviceRun[]): Array<AdviceItem & { run: AdviceRun }> {
   const items = runs.flatMap((run) => run.items.map((item) => ({ ...item, run })));
   const sunk = (item: AdviceItem) => (item.status === "rejected" ? 1 : 0);
@@ -151,7 +151,7 @@ function Item({
           <span className="advice-label">{t("advice.action")}</span> {item.action}
         </p>
       )}
-      {/* Совет без опоры на цифры до экрана не доезжает — его отбрасывает советчик. */}
+      {/* A tip without support in numbers never reaches the screen - the advisor drops it. */}
       <p className="advice-evidence">
         <span className="advice-label">{t("advice.evidence")}</span> {item.evidence}
       </p>

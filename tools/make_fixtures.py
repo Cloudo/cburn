@@ -1,12 +1,12 @@
-"""Нарезка обезличенных фикстур транскриптов из реальной истории (TZ §11).
+"""Slicing anonymised transcript fixtures out of the real history (TZ §11).
 
-Запуск: `.venv/bin/python tools/make_fixtures.py` — обходит ~/.claude/projects,
-берёт по одному файлу на каждую версию Claude Code и кладёт в
-tests/fixtures/transcripts/<версия>.jsonl обрезанный и обезличенный срез.
+Run: `.venv/bin/python tools/make_fixtures.py` - it walks ~/.claude/projects,
+takes one file per Claude Code version and puts a trimmed, anonymised slice into
+tests/fixtures/transcripts/<version>.jsonl.
 
-Из записи сохраняется только служебный скелет: типы, `usage` целиком, имена
-инструментов, нормализованные bash-команды, флаги. Текст переписки, аргументы
-инструментов, пути и реальные идентификаторы не сохраняются.
+Only the service skeleton is kept from a record: types, the whole `usage`, tool
+names, normalised bash commands, flags. Conversation text, tool arguments,
+paths and real identifiers are not kept.
 """
 
 from __future__ import annotations
@@ -24,11 +24,11 @@ from cburn.paths import CLAUDE_PROJECTS_DIR  # noqa: E402
 
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "transcripts"
 
-#: Сколько записей берём из файла и с какого места (начало файла — самое скучное).
+#: How many records to take from a file and from where (the file start is the dullest).
 RECORDS_PER_FIXTURE = 60
 
-#: Поля-идентификаторы: заменяются детерминированным псевдо-UUID, связность
-#: parentUuid → uuid при этом сохраняется.
+#: Identifier fields: replaced with a deterministic pseudo-UUID, the parentUuid -> uuid
+#: connectivity is preserved.
 ID_KEYS = {
     "uuid",
     "parentUuid",
@@ -42,11 +42,11 @@ ID_KEYS = {
     "message_id",
 }
 
-#: Поля, которые выбрасываются целиком: произвольная структура от инструментов,
-#: где текст может прятаться даже в именах ключей.
+#: Fields dropped entirely: arbitrary structures from tools,
+#: where text can hide even inside key names.
 DROP_KEYS = {"toolUseResult", "snapshot", "attachment", "messages"}
 
-#: Поля, которые переносятся как есть: числа, флаги и служебные перечисления.
+#: Fields carried over as they are: numbers, flags and service enumerations.
 SAFE_KEYS = {
     "type",
     "role",
@@ -75,7 +75,7 @@ SAFE_KEYS = {
 
 
 def pseudo_id(value: str, prefix: str = "") -> str:
-    """Детерминированный псевдо-идентификатор той же формы, что и исходный."""
+    """A deterministic pseudo-identifier of the same shape as the original."""
     digest = hashlib.sha256(value.encode()).hexdigest()
     if value.startswith(("msg_", "req_", "toolu_")):
         head = value.split("_", 1)[0]
@@ -84,7 +84,7 @@ def pseudo_id(value: str, prefix: str = "") -> str:
 
 
 def anonymize(value: Any, key: str | None = None, tool: str | None = None) -> Any:
-    """Обезличить произвольный кусок записи."""
+    """Anonymise an arbitrary piece of a record."""
     if isinstance(value, dict):
         result: dict[str, Any] = {}
         current_tool = value.get("name") if value.get("type") == "tool_use" else tool
@@ -92,8 +92,8 @@ def anonymize(value: Any, key: str | None = None, tool: str | None = None) -> An
             if name in DROP_KEYS:
                 result[name] = "[dropped]"
                 continue
-            # Имя ключа тоже бывает текстом переписки (ключи-вопросы в ответах
-            # инструментов), поэтому неслужебно выглядящие ключи не сохраняются.
+            # A key name can be conversation text too (question-keys in tool
+            # answers), so keys that do not look like service fields are dropped.
             safe_name = name if _is_field_name(name) else f"key{len(result)}"
             result[safe_name] = anonymize(item, key=name, tool=current_tool)
         return result
@@ -105,7 +105,7 @@ def anonymize(value: Any, key: str | None = None, tool: str | None = None) -> An
 
 
 def _is_field_name(name: str) -> bool:
-    """Похоже ли имя ключа на служебное поле, а не на кусок текста."""
+    """Whether a key name looks like a service field rather than a piece of text."""
     return len(name) <= 40 and all(char.isalnum() or char in "-_." for char in name)
 
 
@@ -126,7 +126,7 @@ def _anonymize_str(value: str, key: str | None, tool: str | None) -> str:
 
 
 def pick_records(path: Path) -> list[dict[str, Any]]:
-    """Взять срез записей вокруг первого хода ассистента с непустым usage."""
+    """Take a slice of records around the first assistant turn with non-empty usage."""
     records: list[dict[str, Any]] = []
     for line in path.read_text(errors="replace").splitlines():
         try:
@@ -147,7 +147,7 @@ def pick_records(path: Path) -> list[dict[str, Any]]:
 
 
 def file_version(path: Path) -> str | None:
-    """Версия Claude Code, которой записан файл (по первой пригодной записи)."""
+    """The Claude Code version a file was written by (from the first suitable record)."""
     with path.open(errors="replace") as fh:
         for _, line in zip(range(50), fh, strict=False):
             try:
@@ -162,12 +162,12 @@ def file_version(path: Path) -> str | None:
 
 def main() -> int:
     if not CLAUDE_PROJECTS_DIR.exists():
-        print(f"нет каталога {CLAUDE_PROJECTS_DIR}", file=sys.stderr)
+        print(f"no directory {CLAUDE_PROJECTS_DIR}", file=sys.stderr)
         return 1
     FIXTURES_DIR.mkdir(parents=True, exist_ok=True)
 
-    # На версию берём самый крупный файл из разумных по размеру: в мелких
-    # транскриптах часто нет ни одного хода ассистента.
+    # Per version we take the largest file among the reasonably sized ones: small
+    # transcripts often hold not a single assistant turn.
     by_version: dict[str, Path] = {}
     candidates = [p for p in CLAUDE_PROJECTS_DIR.rglob("*.jsonl") if p.stat().st_size < 20_000_000]
     for path in sorted(candidates, key=lambda p: p.stat().st_size, reverse=True):
@@ -183,7 +183,7 @@ def main() -> int:
         with target.open("w") as fh:
             for record in records:
                 fh.write(json.dumps(record, ensure_ascii=False) + "\n")
-        print(f"{target.name}: {len(records)} записей")
+        print(f"{target.name}: {len(records)} records")
     return 0
 
 

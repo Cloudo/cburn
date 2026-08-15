@@ -1,6 +1,6 @@
-// Экран «Настройки» (задача C3): форма над ~/.config/cburn/config.toml.
-// Правится то, что человек меняет руками: пороги зон, советчик, telegram, порт
-// и цены моделей. Проверяет введённое бэкенд — он же владеет файлом.
+// The "Settings" screen (task C3): a form over ~/.config/cburn/config.toml.
+// What a human edits by hand is editable here: zone thresholds, the advisor, telegram, the
+// port and model prices. The backend validates the input - it owns the file.
 
 import { useEffect, useState } from "react";
 

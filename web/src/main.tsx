@@ -6,8 +6,8 @@ import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 import "./styles.css";
 
-/** Ошибка отрисовки не должна оставлять чёрный экран: React снимает всё дерево,
- *  и без этого на дашборде не остаётся ни строчки о том, что случилось. */
+/** A render error must not leave a black screen: React unmounts the whole tree,
+ *  and without this the dashboard keeps not a line about what happened. */
 class Boundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state: { error: Error | null } = { error: null };
 

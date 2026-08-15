@@ -1,4 +1,4 @@
-"""Тесты расчёта стоимости (задача B1)."""
+"""Tests of the cost calculation (task B1)."""
 
 from __future__ import annotations
 
@@ -72,14 +72,14 @@ def write_transcript(path: Path, lines: list[str]) -> None:
 
 
 def test_cost_counted_on_ingest(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Цены из конфига применяются к ходу прямо при импорте."""
+    """Config prices are applied to a turn right at import time."""
     pricing.sync_prices(conn, PRICES)
     path = tmp_path / "proj" / "s1.jsonl"
     write_transcript(path, [assistant("msg_1")])
 
     ingest_file(conn, path)
 
-    # По миллиону токенов каждой составляющей — стоимость равна сумме тарифов.
+    # A million tokens of each part - the cost equals the sum of the rates.
     cost = conn.execute("SELECT cost_usd FROM turns WHERE message_id = 'msg_1'").fetchone()[0]
     assert cost == pytest.approx(5.0 + 25.0 + 0.5 + 6.25 + 10.0)
     assert conn.execute("SELECT cost_usd FROM sessions WHERE id = 's1'").fetchone()[
@@ -88,7 +88,7 @@ def test_cost_counted_on_ingest(conn: sqlite3.Connection, tmp_path: Path) -> Non
 
 
 def test_unknown_model_costs_zero(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Модель без цены не выдумывает тариф, а честно стоит ноль."""
+    """A model without a price does not invent a rate, it honestly costs zero."""
     pricing.sync_prices(conn, PRICES)
     path = tmp_path / "proj" / "s1.jsonl"
     write_transcript(path, [assistant("msg_1", model="claude-unknown-9")])
@@ -100,7 +100,7 @@ def test_unknown_model_costs_zero(conn: sqlite3.Connection, tmp_path: Path) -> N
 
 
 def test_dated_model_matches_price(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """`claude-haiku-4-5-20251001` тарифицируется как `claude-haiku-4-5`."""
+    """`claude-haiku-4-5-20251001` is billed as `claude-haiku-4-5`."""
     pricing.sync_prices(
         conn, {"prices": {"claude-haiku-4-5": {"input": 1.0, "output": 5.0, "cache_read": 0.1}}}
     )
@@ -127,11 +127,11 @@ def test_dated_model_matches_price(conn: sqlite3.Connection, tmp_path: Path) -> 
 
 
 def test_recalculate_after_price_change(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Смена цен пересчитывает уже импортированную историю."""
+    """A price change recomputes the already imported history."""
     path = tmp_path / "proj" / "s1.jsonl"
     write_transcript(path, [assistant("msg_1")])
     ingest_file(conn, path)
-    assert conn.execute("SELECT cost_usd FROM turns").fetchone()[0] == 0  # цен ещё не было
+    assert conn.execute("SELECT cost_usd FROM turns").fetchone()[0] == 0  # there were no prices yet
 
     pricing.recalculate(conn, PRICES)
 
@@ -140,7 +140,7 @@ def test_recalculate_after_price_change(conn: sqlite3.Connection, tmp_path: Path
 
 
 def test_empty_prices_keep_table(conn: sqlite3.Connection) -> None:
-    """Пустая секция конфига не обнуляет уже заведённые цены."""
+    """An empty config section does not wipe the prices already entered."""
     pricing.sync_prices(conn, PRICES)
 
     assert pricing.sync_prices(conn, {"prices": {}}) == 0
@@ -148,7 +148,7 @@ def test_empty_prices_keep_table(conn: sqlite3.Connection) -> None:
 
 
 def test_sample_prices_are_readable() -> None:
-    """Заготовка для `cburn prices --init` разбирается и покрывает все колонки."""
+    """The template for `cburn prices --init` parses and covers every column."""
     sample = pricing.sample_prices()
 
     assert "claude-opus-5" in sample

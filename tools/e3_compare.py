@@ -1,14 +1,14 @@
-"""Сверка E3: метрики OTel против ходов из транскрипта на одной сессии.
+"""Check E3: OTel metrics against transcript turns on one session.
 
-Транскрипт сессии дочитывается в ту же БД, куда лёг приём телеметрии, после
-чего обе стороны считаются по своим таблицам и сравниваются по токенам и
-стоимости. Порог приёмки — расхождение не больше 2% (ТЗ §10, M4).
+The session transcript is read into the same database the telemetry landed in, after
+which both sides are counted over their own tables and compared by tokens and
+cost. The acceptance threshold is a mismatch of no more than 2% (TZ §10, M4).
 
-Сравнивается основной запрос (`query_source = main`): служебные запросы
-Claude Code (генерация заголовка сессии и подобное) в транскрипт не попадают
-вовсе, поэтому их видно только со стороны телеметрии и они печатаются отдельно.
+The main request is compared (`query_source = main`): Claude Code service requests
+(session title generation and the like) never reach the transcript at all, so they are
+visible only on the telemetry side and are printed separately.
 
-    python tools/e3_compare.py <база> <каталог проекта в ~/.claude/projects> <session_id>
+    python tools/e3_compare.py <database> <project dir in ~/.claude/projects> <session_id>
 """
 
 import sys
@@ -48,8 +48,8 @@ def metric(name: str, kind: str | None, source: str) -> float:
 TOKENS = "claude_code.token.usage"
 COST = "claude_code.cost.usage"
 
-print(f"сессия {session_id}: ходов в транскрипте {turns['turns']}")
-print(f"{'величина':12} {'JSONL':>14} {'OTel main':>14} {'расхождение':>12}")
+print(f"session {session_id}: turns in the transcript {turns['turns']}")
+print(f"{'value':12} {'JSONL':>14} {'OTel main':>14} {'mismatch':>12}")
 worst = 0.0
 for label, left, right in (
     ("input", turns["input"], metric(TOKENS, "input", "main")),
@@ -68,7 +68,7 @@ aux_tokens = sum(
     metric(TOKENS, kind, "auxiliary") for kind in ("input", "output", "cacheRead", "cacheCreation")
 )
 print(
-    f"служебные запросы мимо транскрипта: {aux_tokens:,.0f} токенов,"
+    f"service requests past the transcript: {aux_tokens:,.0f} tokens,"
     f" ${metric(COST, None, 'auxiliary'):.6f}"
 )
 
@@ -77,6 +77,6 @@ events = conn.execute(
     " GROUP BY name ORDER BY n DESC",
     (session_id,),
 ).fetchall()
-print("события:", ", ".join(f"{row['name']}×{row['n']}" for row in events))
-print(f"худшее расхождение: {worst:.2f}% (порог 2%)")
+print("events:", ", ".join(f"{row['name']}x{row['n']}" for row in events))
+print(f"worst mismatch: {worst:.2f}% (threshold 2%)")
 conn.close()

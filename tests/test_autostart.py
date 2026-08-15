@@ -1,8 +1,8 @@
-"""Тесты автозапуска через launchd (задача C5).
+"""Tests of autostart through launchd (task C5).
 
-Настоящий `launchctl` не зовётся ни разу: он бы трогал агенты машины, на
-которой идут тесты. Вместо него подставляется свой раннер, и проверяется, что
-команды и plist получаются те, что нужно.
+The real `launchctl` is never called: it would touch the agents of the machine the
+tests run on. A runner of our own is substituted instead, and what is checked is that
+the commands and the plist come out the way they should.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from cburn import autostart, paths
 
 
 class FakeLaunchctl:
-    """Запоминает команды вместо запуска и отвечает заранее заданным кодом."""
+    """Remembers commands instead of running them and answers with a preset code."""
 
     def __init__(self, code: int = 0, output: str = "") -> None:
         self.calls: list[list[str]] = []
@@ -30,7 +30,7 @@ class FakeLaunchctl:
 
 @pytest.fixture
 def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Домашний каталог и каталог данных — во временных, а не настоящих."""
+    """The home directory and the data directory are temporary, not the real ones."""
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
     monkeypatch.setattr(paths, "DATA_DIR", tmp_path / "data")
     monkeypatch.setattr(paths, "CONFIG_PATH", tmp_path / "config.toml")
@@ -39,7 +39,7 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def test_plist_runs_module_not_console_script(home: Path) -> None:
-    """Запускается `python -m cburn`: путь до интерпретатора точен."""
+    """What starts is `python -m cburn`: the interpreter path is exact."""
     document = plistlib.loads(autostart.build_plist(8799, executable=Path("/opt/py/bin/python")))
 
     assert document["Label"] == "com.cloudo.cburn"
@@ -52,7 +52,7 @@ def test_plist_runs_module_not_console_script(home: Path) -> None:
         "8799",
     ]
     assert document["RunAtLoad"] is True
-    # Иначе launchd поднимал бы дашборд после любой остановки руками.
+    # Otherwise launchd would raise the dashboard after any manual stop.
     assert document["KeepAlive"] == {"SuccessfulExit": False}
     assert document["StandardOutPath"].endswith("serve.log")
 
@@ -66,12 +66,12 @@ def test_install_writes_plist_and_loads_agent(home: Path) -> None:
     assert target.exists()
     assert plistlib.loads(target.read_bytes())["ProgramArguments"][-1] == "9000"
     verbs = [call[1] for call in launchctl.calls]
-    assert verbs == ["bootout", "bootstrap"], "старый агент снимается перед загрузкой нового"
+    assert verbs == ["bootout", "bootstrap"], "the old agent is removed before the new one loads"
     assert "9000" in message
 
 
 def test_install_twice_replaces_plist(home: Path) -> None:
-    """Повторная установка не плодит агентов, а обновляет их."""
+    """A repeated install does not breed agents, it refreshes them."""
     autostart.install(8799, run=FakeLaunchctl())
     autostart.install(9100, run=FakeLaunchctl())
 
@@ -80,7 +80,7 @@ def test_install_twice_replaces_plist(home: Path) -> None:
 
 
 def test_install_reports_launchctl_failure(home: Path) -> None:
-    """Молчаливой установки не бывает: отказ launchd виден человеку."""
+    """There is no silent install: a launchd refusal is visible to the human."""
     with pytest.raises(SystemExit, match="не смог загрузить"):
         autostart.install(8799, run=FakeLaunchctl(code=5, output="Load failed"))
 

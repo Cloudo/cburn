@@ -1,10 +1,10 @@
-// Числа на приборе читаются на бегу, поэтому крупные округляются до трёх
-// значащих цифр, а точные значения остаются в подписях.
+// Numbers on the instrument are read on the run, so large ones are rounded to three
+// significant digits, and the exact values stay in the captions.
 
-const SPACE = " "; // тонкий пробел: 2 439 123 не разъезжается в моноширинном
+const SPACE = " "; // a thin space: 2 439 123 does not sprawl in a monospace font
 
-//: Язык форматирования. Числа и даты рисуются вне React, поэтому язык
-//: приезжает сюда из провайдера, а не через пропсы.
+//: The formatting language. Numbers and dates are drawn outside React, so the language
+//: arrives here from the provider rather than through props.
 let lang: "ru" | "en" = "ru";
 let locale = "ru-RU";
 
@@ -13,17 +13,17 @@ export function setFormatLang(next: "ru" | "en"): void {
   locale = next === "ru" ? "ru-RU" : "en-US";
 }
 
-/** Слово по текущему языку — для коротких единиц внутри формата. */
+/** A word in the current language - for short units inside a format. */
 function word(ru: string, en: string): string {
   return lang === "ru" ? ru : en;
 }
 
 export function grouped(value: number): string {
-  // Русские разряды разделены пробелом (его и утончаем), английские — запятой.
+  // Russian groups are separated by a space (which we thin out), English ones by a comma.
   return Math.round(value).toLocaleString(locale).replace(/\s/g, SPACE);
 }
 
-/** Крупные числа сокращаются как в США: K, M, B через тонкий пробел. */
+/** Large numbers are shortened US-style: K, M, B through a thin space. */
 export function compact(value: number): string {
   const abs = Math.abs(value);
   if (abs >= 1_000_000_000) return `${trim(value / 1_000_000_000)}${SPACE}B`;
@@ -35,15 +35,15 @@ export function compact(value: number): string {
 function trim(value: number): string {
   const digits = value >= 100 ? 0 : value >= 10 ? 1 : 2;
   const text = value.toFixed(digits).replace(".", word(",", "."));
-  // Хвостовые нули режутся только в дробной части: иначе «100» станет «1».
+  // Trailing zeros are cut only in the fractional part: otherwise "100" would become "1".
   const point = word(",", ".");
   return text.includes(point) ? text.replace(/[.,]?0+$/, "") : text;
 }
 
-/** Деньги подписчику не счёт, а вес: точность до цента, разряды как у чисел.
+/** Money is not a bill to a subscriber but a weight: cent precision, groups as in numbers.
  *
- *  Мелочь дешевле цента показывается точнее: «$0,00» читается как ноль, а речь
- *  о живом расходе — например, о служебных запросах телеметрии. */
+ *  Change smaller than a cent is shown more precisely: "$0.00" reads as zero, while the
+ *  talk is about live spend - telemetry service requests, for instance. */
 export function usd(value: number): string {
   const digits = value !== 0 && Math.abs(value) < 0.01 ? 4 : 2;
   const text = value
@@ -58,17 +58,17 @@ export function clockTime(at: string | number): string {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
-    hourCycle: "h23", // 21:05:03 короче, чем 9:05:03 PM, и не прыгает по ширине
+    hourCycle: "h23", // 21:05:03 is shorter than 9:05:03 PM and does not jump in width
   });
 }
 
-/** Момент из ISO-строки бэкенда в миллисекундах; null — событий не было. */
+/** A moment from the backend ISO string in milliseconds; null means there were no events. */
 export function timestamp(iso: string | null): number | null {
   return iso === null ? null : new Date(stamp(iso)).getTime();
 }
 
-/** Подсказка у метки в шапке виджета: когда произошло последнее событие
- *  и когда обзор в последний раз пересчитывали. */
+/** The tooltip on the mark in a widget header: when the last event happened
+ *  and when the overview was last recomputed. */
 export function freshnessLabel(at: number | null, checkedAt: number, now: number): string {
   const checked = `${word("пересчитано", "recomputed")} ${clockTime(checkedAt)}`;
   if (at === null) return `${word("данных за период нет", "no data for the period")}, ${checked}`;
@@ -88,7 +88,7 @@ export function modelLabel(model: string | null): string {
 }
 
 
-/** Сколько сессия уже идёт: «3 ч 12 мин», «7 мин». */
+/** How long the session has been running: "3 h 12 min", "7 min". */
 export function duration(fromIso: string | null, toIso: string | null): string {
   if (!fromIso || !toIso) return "—";
   const ms = new Date(stamp(toIso)).getTime() - new Date(stamp(fromIso)).getTime();
@@ -100,7 +100,7 @@ export function duration(fromIso: string | null, toIso: string | null): string {
   return rest ? `${h} ${rest} ${word("мин", "m")}` : h;
 }
 
-/** Доля в процентах с десятыми: «1,7», «12,0». Знак процента ставит перевод. */
+/** A share in percent with tenths: "1.7", "12.0". The percent sign comes from the translation. */
 export function share(value: number): string {
   return (value * 100).toLocaleString(locale, {
     minimumFractionDigits: 1,
@@ -108,7 +108,7 @@ export function share(value: number): string {
   });
 }
 
-/** Сколько времени заняла работа: «8,4 с», «3 мин», «1 ч 5 мин». */
+/** How long the work took: "8.4 s", "3 min", "1 h 5 min". */
 export function spent(seconds: number): string {
   if (seconds < 60) {
     const value =
@@ -125,7 +125,7 @@ export function spent(seconds: number): string {
   return rest ? `${h} ${rest} ${word("мин", "m")}` : h;
 }
 
-/** Насколько давно это было, от «сейчас». */
+/** How long ago that was, counting from "now". */
 export function sinceLabel(iso: string | null): string {
   if (!iso) return "—";
   const seconds = (Date.now() - new Date(stamp(iso)).getTime()) / 1000;
@@ -137,8 +137,8 @@ function stamp(iso: string): string {
   return iso.endsWith("Z") || iso.includes("+") ? iso : `${iso}Z`;
 }
 
-/** Имя инструмента для показа: `mcp__plugin_playwright_playwright__browser_click`
- *  превращается в `playwright: browser_click`. */
+/** The tool name for display: `mcp__plugin_playwright_playwright__browser_click`
+ *  turns into `playwright: browser_click`. */
 export function toolLabel(tool: string): string {
   if (!tool.startsWith("mcp__")) return tool;
   const parts = tool.slice("mcp__".length).split("__");

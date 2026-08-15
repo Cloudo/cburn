@@ -1,5 +1,5 @@
-/* Приборная панель: тёмный корпус, тёплая подсветка стрелки, цифры моноширинные.
-   Шрифты только системные — сервис работает офлайн и на M5 поедет в webview. */
+/* The instrument panel: a dark case, a warm needle glow, monospaced digits.
+   System fonts only - the service works offline and in M5 it moves into a webview. */
 
 :root {
   --bg: #0f1216;
@@ -15,8 +15,8 @@
   --mint: #5eab86;
   --danger: #d98080;
   --danger-strong: #c05c5c;
-  /* Подсветка строки под курсором и тени: на тёмном они светлеют, на светлом
-     темнеют, поэтому вынесены в токены, а не заданы цветом на месте. */
+  /* The row highlight under the cursor and the shadows: on dark they lighten, on light
+     they darken, so they live in tokens rather than being set by colour in place. */
   --tint: rgb(255 255 255 / 6%);
   --tint-soft: rgb(255 255 255 / 5%);
   --shadow: 0 10px 28px rgb(0 0 0 / 55%);
@@ -26,8 +26,8 @@
   --radius: 10px;
 }
 
-/* Светлая тема: тот же прибор при дневном свете. Акценты притемнены — на белом
-   фоне исходные читались как выцветшие. */
+/* The light theme: the same instrument in daylight. The accents are darkened - on a white
+   background the original ones read as faded. */
 :root[data-theme="light"] {
   --bg: #f2f4f7;
   --bg-panel: #ffffff;
@@ -78,7 +78,7 @@ main.empty {
   color: var(--text-dim);
 }
 
-/* --- шапка --- */
+/* --- header --- */
 
 .masthead {
   display: flex;
@@ -139,7 +139,7 @@ main.empty {
   background: var(--danger-strong);
 }
 
-/* --- раскладка --- */
+/* --- layout --- */
 
 .dash {
   display: grid;
@@ -189,7 +189,7 @@ main.empty {
   font-size: 12px;
 }
 
-/* --- переключатель окна --- */
+/* --- window switch --- */
 
 .theme-toggle {
   display: flex;
@@ -209,7 +209,7 @@ main.empty {
   background: var(--bg-sunken);
 }
 
-/* Переключатель языка живёт в строке состояния и подчиняется её гамме. */
+/* The language switch lives in the status line and follows its tone. */
 .lang-picker {
   display: flex;
   gap: 1px;
@@ -238,8 +238,8 @@ main.empty {
   color: var(--text);
 }
 
-/* Окно усреднения стоит в шапке рядом с часами и живёт в их же гамме:
-   тот же моноширинный кегль и тот же приглушённый цвет. */
+/* The averaging window stands in the header next to the clock and lives in its tone:
+   the same monospaced size and the same muted colour. */
 .window-picker {
   display: flex;
   gap: 1px;
@@ -280,7 +280,7 @@ main.empty {
   outline-offset: 2px;
 }
 
-/* --- прибор --- */
+/* --- the instrument --- */
 
 .gauge {
   margin: 4px 0 0;
@@ -364,7 +364,7 @@ main.empty {
   color: var(--text-faint);
 }
 
-/* --- легенда разбивки --- */
+/* --- breakdown legend --- */
 
 .legend {
   list-style: none;
@@ -392,7 +392,7 @@ main.empty {
 
 .legend-label {
   flex: 1;
-  white-space: nowrap; /* «чтение кэша» в две строки ломает ритм списка */
+  white-space: nowrap; /* "cache read" wrapped in two lines breaks the list rhythm */
 }
 
 .legend-share {
@@ -409,7 +409,7 @@ main.empty {
   font-variant-numeric: tabular-nums;
 }
 
-/* --- шкала выхода --- */
+/* --- output scale --- */
 
 .meter {
   margin-top: 20px;
@@ -466,7 +466,7 @@ main.empty {
   color: var(--text-faint);
 }
 
-/* --- сегодня --- */
+/* --- today --- */
 
 .today {
   margin: 0;
@@ -481,7 +481,7 @@ main.empty {
   gap: 2px;
 }
 
-/* Деньги — итог под четырьмя счётчиками, а не пятый в паре. */
+/* Money is the total under the four counters, not a fifth one in the pair. */
 .today-wide {
   grid-column: 1 / -1;
 }
@@ -499,7 +499,7 @@ main.empty {
   font-variant-numeric: tabular-nums;
 }
 
-/* --- сессии --- */
+/* --- sessions --- */
 
 .sessions {
   list-style: none;
@@ -553,7 +553,7 @@ main.empty {
   color: var(--text-faint);
 }
 
-/* --- топ сессий --- */
+/* --- top sessions --- */
 
 .leaders {
   list-style: none;
@@ -567,7 +567,7 @@ main.empty {
 .leaders li {
   position: relative;
   display: grid;
-  /* id — проект — объём: проект сжимается, крайние колонки держат ширину. */
+  /* id - project - volume: the project shrinks, the outer columns hold their width. */
   grid-template-columns: 76px minmax(0, 1fr) 84px;
   gap: 12px;
   align-items: center;
@@ -612,7 +612,7 @@ main.empty {
   opacity: 0.55;
 }
 
-/* --- лента ходов --- */
+/* --- turn feed --- */
 
 .feed ol {
   list-style: none;
@@ -648,8 +648,8 @@ main.empty {
   padding-bottom: 7px;
 }
 
-/* Подписи наследуют выравнивание колонок, но не их цвета: шапка не должна
-   спорить со значениями. */
+/* The captions inherit the column alignment but not their colours: the header must not
+   argue with the values. */
 .turn-head span {
   color: inherit;
 }
@@ -691,7 +691,7 @@ main.empty {
   padding: 1px 6px;
 }
 
-/* --- узкие экраны --- */
+/* --- narrow screens --- */
 
 @media (max-width: 860px) {
   .dash {
@@ -718,7 +718,7 @@ main.empty {
   }
 }
 
-/* --- самописец --- */
+/* --- chart recorder --- */
 
 .recorder {
   margin-top: 20px;
@@ -782,7 +782,7 @@ main.empty {
   color: var(--text-faint);
 }
 
-/* --- идёт запрос --- */
+/* --- a request is running --- */
 
 .working {
   display: inline-flex;
@@ -824,7 +824,7 @@ main.empty {
   }
 }
 
-/* --- подсказка самописца --- */
+/* --- chart recorder tooltip --- */
 
 .recorder-track {
   position: relative;
@@ -878,10 +878,10 @@ main.empty {
   font-variant-numeric: tabular-nums;
 }
 
-/* --- окно разбивки --- */
+/* --- breakdown window --- */
 
-/* Прибор и разбивка в ряд: полукруг оставляет по бокам пустые поля, и список
-   составляющих занимает одно из них вместо того, чтобы уезжать вниз. */
+/* The instrument and the breakdown in a row: the semicircle leaves empty fields on the
+   sides, and the list of parts takes one of them instead of moving down. */
 .gauge-row {
   display: flex;
   align-items: center;
@@ -903,7 +903,7 @@ main.empty {
   gap: 10px;
 }
 
-/* Сбоку места на одну колонку: строки идут друг под другом. */
+/* There is room for one column at the side: the rows go one under another. */
 .breakdown .legend {
   grid-template-columns: minmax(0, 1fr);
   gap: 8px;
@@ -916,7 +916,7 @@ main.empty {
   color: var(--text-faint);
 }
 
-/* --- карточка живой сессии --- */
+/* --- live session card --- */
 
 .session-name {
   flex: 1;
@@ -966,8 +966,8 @@ main.empty {
   outline-offset: 1px;
 }
 
-/* Подтверждение живёт рядом с кнопкой: модальное окно ради одной сессии
-   перекрыло бы весь дашборд, который в этот момент и надо видеть. */
+/* The confirmation lives next to the button: a modal window for one session
+   would cover the whole dashboard, which is exactly what has to be seen then. */
 .popover {
   position: absolute;
   top: calc(100% + 6px);
@@ -1026,7 +1026,7 @@ main.empty {
   border-color: var(--danger);
 }
 
-/* --- вкладки статусов --- */
+/* --- status tabs --- */
 
 .tabs {
   display: flex;
@@ -1088,7 +1088,7 @@ main.empty {
   color: var(--mint);
 }
 
-/* --- цвет карточки по статусу --- */
+/* --- card colour by status --- */
 
 .sessions li {
   border-left-color: var(--line);
@@ -1110,7 +1110,7 @@ main.empty {
   border-left-color: var(--line);
 }
 
-/* Сессия, которой уже нет: полоса и подпись гасятся сильнее простоя. */
+/* A session that is gone: the stripe and the caption are dimmed more than for idle. */
 .session-done {
   border-left-color: transparent;
 }
@@ -1141,7 +1141,7 @@ main.empty {
   border: 1px solid var(--line);
 }
 
-/* --- профиль: на что уходят ходы --- */
+/* --- profile: where the turns go --- */
 
 .profile-row {
   display: grid;
@@ -1186,8 +1186,8 @@ main.empty {
   overflow: hidden;
 }
 
-/* Полоска — фон строки, а не отдельный столбец: так длинные имена
-   инструментов не отнимают место у самой шкалы. */
+/* The bar is the row background rather than a separate column: that way long tool
+   names do not steal room from the scale itself. */
 .ranked-bar {
   position: absolute;
   inset: 0 auto 0 0;
@@ -1219,7 +1219,7 @@ main.empty {
   font-variant-numeric: tabular-nums;
 }
 
-/* --- холостые ходы --- */
+/* --- idle turns --- */
 
 .idle-value {
   display: flex;
@@ -1236,7 +1236,7 @@ main.empty {
   color: var(--text-faint);
 }
 
-/* --- телеметрия --- */
+/* --- telemetry --- */
 
 .telemetry {
   display: flex;
@@ -1244,8 +1244,8 @@ main.empty {
   gap: 14px;
 }
 
-/* Две цифры рядом, пока хватает ширины: виджет тянут мышью, и на узком
-   он должен складываться сам — по своей ширине, а не по ширине окна. */
+/* Two numbers side by side while the width allows: the widget is dragged by hand, and on
+   a narrow one it must fold by itself - by its own width, not the window's. */
 .telemetry-pair {
   display: grid;
   grid-template-columns: 1fr;
@@ -1281,9 +1281,9 @@ main.empty {
   color: var(--text-faint);
 }
 
-/* Наблюдения списком: коротко и в одну строку каждое, подробности — в title.
-   Виджет живёт на дашборде рядом с девятью другими, читать его должно быть
-   так же быстро, как стрелку прибора. */
+/* Observations as a list: each short and on one line, the details go into title.
+   The widget lives on the dashboard next to nine others, and reading it must be
+   as quick as reading the needle. */
 .telemetry-facts {
   list-style: none;
   margin: 0;
@@ -1317,7 +1317,7 @@ main.empty {
   color: var(--text-dim);
 }
 
-/* --- окно лимитов --- */
+/* --- limit window --- */
 
 .limits-head {
   display: flex;
@@ -1387,7 +1387,7 @@ main.empty {
   }
 }
 
-/* --- лимиты подписки --- */
+/* --- subscription limits --- */
 
 .plan-name {
   margin: -4px 0 12px;
@@ -1455,7 +1455,7 @@ main.empty {
   background: var(--danger);
 }
 
-/* Активное окно — то, что тикает прямо сейчас. */
+/* The active window is the one ticking right now. */
 .plan-active .plan-label {
   color: var(--text);
 }
@@ -1466,7 +1466,7 @@ main.empty {
   color: var(--text-faint);
 }
 
-/* --- сетка виджетов --- */
+/* --- widget grid --- */
 
 .dashboard-bar {
   position: relative;
@@ -1573,7 +1573,7 @@ main.empty {
   color: var(--text);
 }
 
-/* --- сами виджеты --- */
+/* --- the widgets themselves --- */
 
 .widget {
   display: flex;
@@ -1582,7 +1582,7 @@ main.empty {
   overflow: hidden;
 }
 
-/* Заголовок — ручка перетаскивания, поэтому курсор и подсветка на нём. */
+/* The title is the drag handle, hence the cursor and the highlight on it. */
 .widget-grip {
   display: flex;
   align-items: center;
@@ -1604,14 +1604,14 @@ main.empty {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-faint);
-  /* Метка и кнопки важнее длинного имени: на узком виджете оно урезается. */
+  /* The mark and the buttons matter more than a long name: on a narrow widget it is trimmed. */
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Метка актуальности и кнопки: перетаскивание с них снято draggableCancel. */
+/* The freshness mark and the buttons: dragging is removed from them by draggableCancel. */
 .widget-tools {
   display: flex;
   align-items: center;
@@ -1620,8 +1620,8 @@ main.empty {
   cursor: default;
 }
 
-/* На какое время данные виджета. Обзор пересчитывается раз в секунду, лимиты
-   подписки — раз в пять минут, поэтому метка у каждого виджета своя. */
+/* What time the widget data is for. The overview is recomputed once a second, the
+   subscription limits once every five minutes, so every widget has its own mark. */
 .widget-at {
   font-family: var(--mono);
   font-size: 10px;
@@ -1678,7 +1678,7 @@ main.empty {
   background: var(--bg-sunken);
 }
 
-/* Пока запрос в пути, значок крутится — иначе клик выглядит как ничего. */
+/* While a request is in flight the icon spins - otherwise a click looks like nothing. */
 .widget-refresh-busy {
   opacity: 1;
   color: var(--text);
@@ -1700,8 +1700,8 @@ main.empty {
   }
 }
 
-/* Содержимое скроллится внутри виджета: иначе изменение размера
-   обрезало бы данные вместо того, чтобы давать к ним доступ. */
+/* The content scrolls inside the widget: otherwise resizing would clip the data
+   instead of giving access to it. */
 .widget-body {
   flex: 1;
   min-height: 0;
@@ -1710,7 +1710,7 @@ main.empty {
 }
 
 .widget-body h2 {
-  display: none; /* заголовок теперь в шапке виджета */
+  display: none; /* the title now lives in the widget header */
 }
 
 .react-grid-item.react-grid-placeholder {
@@ -1735,9 +1735,9 @@ main.empty {
   color: var(--text-dim);
 }
 
-/* --- адаптация к размеру виджета, а не окна ---
-   Виджеты тянутся мышью, поэтому вёрстка внутри реагирует на ширину самого
-   виджета: медиа-запрос по окну здесь бесполезен — окно не меняется. */
+/* --- adapting to the widget size rather than the window ---
+   Widgets are dragged by hand, so the markup inside reacts to the width of the widget
+   itself: a window media query is useless here - the window does not change. */
 
 .widget {
   container-type: inline-size;
@@ -1800,10 +1800,10 @@ main.empty {
   }
 }
 
-/* --- скроллбары ---
-   Нативный светлый бегунок выбивался из тёмной панели. Стилизуем оба
-   механизма: `scrollbar-*` понимают Firefox и свежий Chrome, `::-webkit-*`
-   нужен Safari и системному webview, в котором приложение поедет на M5. */
+/* --- scrollbars ---
+   The native light thumb stood out against the dark panel. We style both
+   mechanisms: `scrollbar-*` is understood by Firefox and recent Chrome, `::-webkit-*`
+   is needed by Safari and the system webview the application moves into in M5. */
 
 * {
   scrollbar-width: thin;
@@ -1821,7 +1821,7 @@ main.empty {
 
 *::-webkit-scrollbar-thumb {
   background: var(--line);
-  /* Прозрачная рамка отделяет бегунок от края — иначе он липнет к тексту. */
+  /* A transparent border separates the thumb from the edge - otherwise it sticks to the text. */
   border: 2px solid transparent;
   background-clip: padding-box;
   border-radius: 6px;
@@ -1836,8 +1836,8 @@ main.empty {
   background: transparent;
 }
 
-/* Бегунок появляется, когда с виджетом работают: в покое панель остаётся
-   чистой, как с оверлейным скроллбаром macOS. */
+/* The thumb appears while the widget is being worked with: at rest the panel stays
+   clean, like with the macOS overlay scrollbar. */
 .widget-body {
   scrollbar-color: transparent transparent;
   transition: scrollbar-color 0.2s;
@@ -1863,7 +1863,7 @@ main.empty {
   background-clip: padding-box;
 }
 
-/* --- экраны и навигация (задача C1) --- */
+/* --- screens and navigation (task C1) --- */
 
 .screens {
   display: flex;
@@ -1935,7 +1935,7 @@ main.empty {
   background: var(--bg-panel);
 }
 
-/* --- таблица сессий --- */
+/* --- session table --- */
 
 .sessions-table {
   border: 1px solid var(--line);
@@ -1970,7 +1970,7 @@ main.empty {
   background: var(--bg-panel);
 }
 
-/* Продолжение цепочки resume: та же работа, но шагом правее. */
+/* A continuation of a resume chain: the same work, one step to the right. */
 .sessions-row-nested .sessions-name {
   padding-left: 22px;
 }
@@ -2049,7 +2049,7 @@ main.empty {
   color: var(--text);
 }
 
-/* --- спарклайн расхода --- */
+/* --- spend sparkline --- */
 
 .spark {
   display: flex;
@@ -2066,7 +2066,7 @@ main.empty {
   min-height: 1px;
 }
 
-/* --- экран одной сессии (задача C2) --- */
+/* --- single session screen (task C2) --- */
 
 .session-head-line {
   display: flex;
@@ -2117,7 +2117,7 @@ main.empty {
   font-variant-numeric: tabular-nums;
 }
 
-/* --- график контекста --- */
+/* --- context chart --- */
 
 .chart {
   margin: 0 0 18px;
@@ -2193,7 +2193,7 @@ main.empty {
   background: rgb(200 90 80 / 45%);
 }
 
-/* --- разбивки и лента ходов --- */
+/* --- breakdowns and the turn feed --- */
 
 .session-columns {
   display: grid;
@@ -2232,7 +2232,7 @@ main.empty {
   color: var(--text-faint);
 }
 
-/* Время в инструменте: есть только с телеметрией, поэтому приписка, а не колонка. */
+/* Time inside a tool: it exists only with telemetry, hence a note rather than a column. */
 .bars-extra {
   margin-left: 8px;
   color: var(--text-dim);
@@ -2259,8 +2259,8 @@ main.empty {
   border-bottom: none;
 }
 
-/* Холостой ход: короткий ответ при большом контексте — платим за чтение кэша
-   почти впустую, поэтому строка выделена. */
+/* An idle turn: a short answer on a large context - we pay for cache reads almost
+   for nothing, so the row is highlighted. */
 .turns-row-idle {
   background: rgb(232 163 61 / 6%);
 }
@@ -2282,7 +2282,7 @@ main.empty {
   color: var(--text-faint);
 }
 
-/* --- экран настроек (задача C3) --- */
+/* --- settings screen (task C3) --- */
 
 .settings-columns {
   display: grid;
@@ -2347,7 +2347,7 @@ main.empty {
   outline: 1px solid var(--steel);
 }
 
-/* --- таблица цен --- */
+/* --- price table --- */
 
 .prices {
   border: 1px solid var(--line);
@@ -2438,7 +2438,7 @@ main.empty {
   font-size: 12px;
 }
 
-/* --- экран советов (задача D6) --- */
+/* --- advice screen (task D6) --- */
 
 .advice-actions {
   display: flex;
@@ -2484,9 +2484,9 @@ main.empty {
   border-top: 1px solid var(--line);
 }
 
-/* Важность видно цветом полосы: горит — янтарный, утечка — стальной,
-   к сведению — приглушённый. Статус при этом уходит в подпись, чтобы два
-   разных смысла не боролись за один и тот же цвет. */
+/* Severity shows through the stripe colour: burning is amber, a leak is steel,
+   for information is muted. The status goes into the caption, so that two
+   different meanings do not fight over the same colour. */
 .advice-item {
   border-left: 2px solid transparent;
 }
@@ -2507,7 +2507,7 @@ main.empty {
   color: var(--amber);
 }
 
-/* Отклонённый совет не прячем: пусть видно, что уже решили. */
+/* A dismissed tip is not hidden: let it be visible that a decision was made. */
 .advice-item-rejected {
   opacity: 0.45;
 }
@@ -2607,8 +2607,8 @@ main.empty {
   border-color: var(--steel);
 }
 
-/* Сессии, на которые ссылается совет: короткий id человеку ничего не говорит,
-   поэтому разворачиваем в имя и проект — и делаем ссылкой на экран сессии. */
+/* Sessions a tip refers to: a short id tells a human nothing, so we expand it
+   into a name and a project - and make it a link to the session screen. */
 .advice-sessions {
   display: flex;
   flex-wrap: wrap;
@@ -2637,7 +2637,7 @@ main.empty {
   color: var(--text-faint);
 }
 
-/* Группы советов по важности: сперва то, что горит. */
+/* Tip groups by severity: what burns comes first. */
 .advice-group {
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -2673,7 +2673,7 @@ main.empty {
   color: var(--text);
 }
 
-/* Откуда совет: разбор подписан на карточке, раз группируем не по разборам. */
+/* Where a tip comes from: the analysis is signed on the card, since we group not by analyses. */
 .advice-origin {
   margin-left: auto;
   font-size: 11px;

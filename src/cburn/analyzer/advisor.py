@@ -1,19 +1,19 @@
-"""Советчик: дайджест → `claude -p` → массив советов (задача D2, ТЗ §6).
+"""The advisor: digest -> `claude -p` -> an array of tips (task D2, TZ §6).
 
-Контракт CLI сверен с установленной версией Claude Code (2.1.231), а не взят
-по памяти — он меняется между версиями:
+The CLI contract was checked against the installed Claude Code (2.1.231) rather than
+taken from memory - it changes between versions:
 
-* `--max-turns` из плана больше нет; лишние ходы отсекает `--tools ""`
-  (без инструментов модели нечем продолжать) и `--max-budget-usd`;
-* `--json-schema` заставляет ответ соответствовать схеме, а разобранный ответ
-  приходит в поле `structured_output` — руками JSON из текста доставать не надо;
-* конверт `--output-format json` несёт `total_cost_usd`, и это честная
-  собственная стоимость такта, её и пишем в `advice.cost_usd`;
-* `--strict-mcp-config` и `--exclude-dynamic-system-prompt-sections` убирают из
-  системного промпта MCP-серверы и сведения о машине: советчику они не нужны,
-  а платим за них в каждом такте.
+* the planned `--max-turns` is gone; extra turns are cut off by `--tools ""`
+  (without tools the model has nothing to continue with) and `--max-budget-usd`;
+* `--json-schema` forces the answer to match a schema, and the parsed answer
+  arrives in the `structured_output` field - no need to dig JSON out of text by hand;
+* the `--output-format json` envelope carries `total_cost_usd`, and that is the honest
+  cost of the tick itself, which is what goes into `advice.cost_usd`;
+* `--strict-mcp-config` and `--exclude-dynamic-system-prompt-sections` strip MCP servers
+  and machine details out of the system prompt: the advisor does not need them,
+  yet we pay for them on every tick.
 
-Промпт уходит через stdin: дайджест великоват для аргумента командной строки.
+The prompt goes through stdin: the digest is a bit large for a command-line argument.
 """
 
 from __future__ import annotations
@@ -30,17 +30,17 @@ log = logging.getLogger(__name__)
 
 CLAUDE_BINARY = "claude"
 
-#: Такт не должен длиться дольше — иначе он налезет на следующий.
+#: A tick must not run longer than this - otherwise it would overlap the next one.
 TIMEOUT = 300.0
 
-#: Потолок расхода на один такт. Своя стоимость должна быть видна и ограничена:
-#: советчик, который дороже своих советов, бессмысленен.
+#: The spend ceiling for one tick. Our own cost must be visible and bounded:
+#: an advisor that costs more than its advice is pointless.
 MAX_BUDGET_USD = 0.10
 
 SEVERITIES = ("info", "warn", "crit")
 
-#: Схема ответа. `evidence` обязательна: совет без опоры на цифры дайджеста —
-#: это общие слова, такие мы выбрасываем (ТЗ §6).
+#: The answer schema. `evidence` is mandatory: a tip without support from the digest
+#: numbers is just general words, and those we throw away (TZ §6).
 RESPONSE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -98,7 +98,7 @@ SYSTEM_PROMPT = """
 
 
 def build_command(model: str, budget_usd: float = MAX_BUDGET_USD) -> list[str]:
-    """Собрать команду запуска. Вынесено ради тестов: сеть в них не ходит."""
+    """Assemble the command. Extracted for tests: they never touch the network."""
     return [
         CLAUDE_BINARY,
         "-p",
@@ -110,7 +110,7 @@ def build_command(model: str, budget_usd: float = MAX_BUDGET_USD) -> list[str]:
         SYSTEM_PROMPT,
         "--model",
         model,
-        # Инструменты советчику не нужны: он смотрит на готовый дайджест.
+        # The advisor needs no tools: it looks at a ready digest.
         "--tools",
         "",
         "--strict-mcp-config",
@@ -121,8 +121,8 @@ def build_command(model: str, budget_usd: float = MAX_BUDGET_USD) -> list[str]:
 
 
 def run_claude(prompt: str, model: str, budget_usd: float = MAX_BUDGET_USD) -> dict[str, Any]:
-    """Позвать `claude -p` и вернуть разобранный конверт ответа."""
-    result = subprocess.run(  # noqa: S603 — команда собрана здесь же
+    """Call `claude -p` and return the parsed answer envelope."""
+    result = subprocess.run(  # noqa: S603 - the command is assembled right here
         build_command(model, budget_usd),
         input=prompt,
         capture_output=True,
@@ -131,23 +131,23 @@ def run_claude(prompt: str, model: str, budget_usd: float = MAX_BUDGET_USD) -> d
         check=False,
     )
     if result.returncode != 0:
-        raise RuntimeError(f"claude -p вернул {result.returncode}: {result.stderr.strip()[:400]}")
+        raise RuntimeError(f"claude -p returned {result.returncode}: {result.stderr.strip()[:400]}")
     try:
         envelope = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
-        raise RuntimeError(f"ответ claude -p не разобран: {result.stdout[:200]}") from exc
+        raise RuntimeError(f"the claude -p answer was not parsed: {result.stdout[:200]}") from exc
     return dict(envelope)
 
 
 def parse_advice(envelope: dict[str, Any]) -> list[dict[str, Any]]:
-    """Достать советы из конверта и выбросить те, что не на чём не держатся."""
+    """Pull the tips out of the envelope and drop the ones resting on nothing."""
     payload = envelope.get("structured_output")
     if not isinstance(payload, dict):
-        # Запасной путь: схема не сработала, но текст ответа обычно всё равно JSON.
+        # Fallback: the schema did not fire, but the answer text is usually JSON anyway.
         try:
             payload = json.loads(envelope.get("result") or "{}")
         except json.JSONDecodeError:
-            log.warning("советчик ответил не по схеме, советов нет")
+            log.warning("the advisor answered off-schema, no tips")
             return []
     items = payload.get("advice") if isinstance(payload, dict) else None
     advice = []
@@ -157,7 +157,7 @@ def parse_advice(envelope: dict[str, Any]) -> list[dict[str, Any]]:
         title = (item.get("title") or "").strip()
         evidence = (item.get("evidence") or "").strip()
         if not title or not evidence:
-            log.info("совет без опоры на цифры выброшен: %s", title or "без заголовка")
+            log.info("a tip without support in numbers was dropped: %s", title or "untitled")
             continue
         severity = item.get("severity") if item.get("severity") in SEVERITIES else "info"
         advice.append(
@@ -174,13 +174,13 @@ def parse_advice(envelope: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def advice_key(title: str, action: str | None) -> str:
-    """Отпечаток совета: по нему отклонённый совет узнаётся в следующем такте."""
+    """A tip fingerprint: it lets a dismissed tip be recognised on the next tick."""
     seed = f"{title.strip().lower()}|{(action or '').strip().lower()}"
     return hashlib.sha256(seed.encode("utf-8")).hexdigest()[:16]
 
 
 def rejected_keys(conn: sqlite3.Connection) -> list[str]:
-    """Что человек уже отклонил — советчику это повторять незачем."""
+    """What the human has already dismissed - no point in the advisor repeating it."""
     return [
         row["key"]
         for row in conn.execute("SELECT DISTINCT key FROM advice_items WHERE status = 'rejected'")
@@ -196,10 +196,10 @@ def advise(
     runner: Any = None,
     kind: str = "manual",
 ) -> dict[str, Any]:
-    """Прогнать дайджест через модель и записать советы. Возвращает итог такта.
+    """Run the digest through the model and store the tips. Returns the tick result.
 
-    `kind` — как такт случился: `manual` из CLI и с кнопки, `hourly`/`weekly`
-    от планировщика. По нему считается расписание и подписывается разбор.
+    `kind` is how the tick happened: `manual` from the CLI and from the button,
+    `hourly`/`weekly` from the scheduler. It drives the schedule and labels the analysis.
     """
     call = runner or run_claude
     prompt = json.dumps(
@@ -207,10 +207,10 @@ def advise(
         ensure_ascii=False,
     )
     envelope = call(prompt, model, budget_usd)
-    # Проверка живёт здесь, а не в раннере: ошибку должен ловить любой источник
-    # конверта, в том числе подменённый в тестах.
+    # The check lives here and not in the runner: the error must be caught for any
+    # envelope source, including one swapped in tests.
     if envelope.get("is_error"):
-        raise RuntimeError(f"claude -p сообщил об ошибке: {envelope.get('result')}")
+        raise RuntimeError(f"claude -p reported an error: {envelope.get('result')}")
     advice = parse_advice(envelope)
     period = digest.get("period") or {}
     cost = float(envelope.get("total_cost_usd") or 0.0)
@@ -259,7 +259,7 @@ def _max_severity(advice: list[dict[str, Any]]) -> str:
 
 
 def _model_name(envelope: dict[str, Any], fallback: str) -> str:
-    """Полное имя модели из конверта: алиас `haiku` в истории ничего не скажет."""
+    """The full model name from the envelope: the `haiku` alias tells nothing in history."""
     usage = envelope.get("modelUsage")
     if isinstance(usage, dict) and usage:
         return next(iter(usage))

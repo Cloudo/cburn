@@ -1,13 +1,12 @@
-"""Слежение за каталогом транскриптов (задача A4).
+"""Watching the transcript directory (task A4).
 
-Claude Code дописывает JSONL пачками по несколько строк на ход, поэтому события
-файловой системы приходят очередями. Путь ставится в очередь и дочитывается не
-раньше чем через `debounce` секунд после последнего события по нему — так один
-ход не разбирается по три раза.
+Claude Code appends JSONL in bunches of several lines per turn, so filesystem events
+arrive in queues. A path is queued and read no earlier than `debounce` seconds after the
+last event on it - that way one turn is not parsed three times over.
 
-Читает и пишет всё один рабочий поток: соединение SQLite создаётся внутри него,
-наружу отдаются только готовые `IngestStats` через `on_ingest`. Каталог Claude
-Code открывается только на чтение.
+A single worker thread does all the reading and writing: the SQLite connection is created
+inside it, and only finished `IngestStats` leave through `on_ingest`. The Claude Code
+directory is opened read-only.
 """
 
 from __future__ import annotations
@@ -27,17 +26,17 @@ from .indexer import IngestStats, ingest_file
 
 log = logging.getLogger(__name__)
 
-#: Пауза после последнего события по файлу, ТЗ §3 — «дебаунс ~200 мс».
+#: The pause after the last event on a file, TZ §3 - "debounce ~200 ms".
 DEFAULT_DEBOUNCE = 0.2
 
-#: Как часто рабочий поток просыпается смотреть на очередь.
+#: How often the worker thread wakes up to look at the queue.
 TICK = 0.05
 
 TRANSCRIPT_SUFFIX = ".jsonl"
 
 
 class TranscriptWatcher:
-    """Наблюдатель за `~/.claude/projects`, дочитывающий хвосты транскриптов."""
+    """A watcher over `~/.claude/projects` that reads transcript tails."""
 
     def __init__(
         self,
@@ -56,13 +55,13 @@ class TranscriptWatcher:
         self._stop = threading.Event()
         self._observer: Observer | None = None  # type: ignore[valid-type]
         self._worker: threading.Thread | None = None
-        self._idle = threading.Event()  # очередь разобрана, полезно тестам
+        self._idle = threading.Event()  # queue drained, useful for tests
         self._idle.set()
 
-    # --- жизненный цикл -----------------------------------------------------
+    # --- lifecycle ----------------------------------------------------------
 
     def start(self, *, initial_scan: bool = True) -> None:
-        """Запустить слежение. `initial_scan` дочитывает то, что накопилось офлайн."""
+        """Start watching. `initial_scan` reads whatever piled up offline."""
         if initial_scan:
             self.enqueue(self.root.rglob(f"*{TRANSCRIPT_SUFFIX}"), delay=0)
         self._worker = threading.Thread(target=self._run, name="cburn-watcher", daemon=True)
@@ -88,10 +87,10 @@ class TranscriptWatcher:
     def __exit__(self, *exc: object) -> None:
         self.stop()
 
-    # --- очередь ------------------------------------------------------------
+    # --- queue --------------------------------------------------------------
 
     def enqueue(self, paths: Iterable[Path], delay: float | None = None) -> None:
-        """Поставить файлы в очередь на дочитывание."""
+        """Queue files to be read."""
         due_delay = self.debounce if delay is None else delay
         now = time.monotonic()
         with self._lock:
@@ -102,7 +101,7 @@ class TranscriptWatcher:
                 self._idle.clear()
 
     def wait_idle(self, timeout: float = 5.0) -> bool:
-        """Дождаться, пока очередь разобрана (нужно тестам и остановке сервера)."""
+        """Wait until the queue is drained (needed by tests and by server shutdown)."""
         return self._idle.wait(timeout)
 
     def _due(self, now: float) -> list[Path]:
@@ -112,7 +111,7 @@ class TranscriptWatcher:
                 del self._pending[path]
             return ready
 
-    # --- рабочий поток ------------------------------------------------------
+    # --- worker thread --------------------------------------------------------
 
     def _run(self) -> None:
         conn = connect(self._db_path)
@@ -133,18 +132,18 @@ class TranscriptWatcher:
     def _ingest(self, conn: sqlite3.Connection, path: Path) -> None:
         try:
             stats = ingest_file(conn, path)
-        except Exception:  # один битый файл не должен ронять слежение
-            log.exception("не удалось дочитать %s", path)
+        except Exception:  # one broken file must not bring the watching down
+            log.exception("could not read %s", path)
             return
         if stats.lines and self.on_ingest is not None:
             try:
                 self.on_ingest(stats)
             except Exception:
-                log.exception("обработчик on_ingest упал на %s", path)
+                log.exception("the on_ingest handler failed on %s", path)
 
 
 class _Handler(FileSystemEventHandler):
-    """Переводит события ФС в постановку файла в очередь."""
+    """Turns FS events into queueing a file."""
 
     def __init__(self, watcher: TranscriptWatcher) -> None:
         self._watcher = watcher
@@ -153,7 +152,7 @@ class _Handler(FileSystemEventHandler):
         if event.is_directory or event.event_type == "opened":
             return
         paths = [event.src_path]
-        # Переименование внутри каталога: дочитывать нужно файл под новым именем.
+        # A rename inside the directory: the file has to be read under its new name.
         dest = getattr(event, "dest_path", None)
         if dest:
             paths.append(dest)

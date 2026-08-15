@@ -1,15 +1,15 @@
-"""Планировщик советчика (задача D3, ТЗ §6).
+"""Advisor scheduler (task D3, TZ §6).
 
-Такт раз в `analyzer.interval_minutes`, раз в неделю — глубокий разбор на
-модели побольше. Каждый такт стоит денег, поэтому решение «звать модель или
-нет» вынесено в чистую функцию `plan_tick`: её видно в тестах, и она молчит,
-когда советовать не о чем.
+A tick every `analyzer.interval_minutes`, and once a week a deep analysis on a bigger
+model. Every tick costs money, so the "call the model or not" decision lives in the pure
+function `plan_tick`: it is visible in tests, and it stays quiet when there is nothing
+to advise about.
 
-Пропускаем такт, когда:
+We skip a tick when:
 
-* советчик выключен в конфиге;
-* с прошлого такта не прошёл интервал;
-* за период не было ни одного хода — разбирать нечего.
+* the advisor is switched off in the config;
+* the interval has not passed since the previous tick;
+* there was not a single turn in the period - nothing to analyse.
 """
 
 from __future__ import annotations
@@ -28,23 +28,23 @@ log = logging.getLogger(__name__)
 
 HOURLY = "hourly"
 WEEKLY = "weekly"
-#: Разбор, запущенный человеком: из CLI или кнопкой на экране «Советы».
-#: На расписание влияет так же, как часовой — интервал считается от любого
-#: такта, — но в истории должен быть подписан честно.
+#: An analysis started by a human: from the CLI or by the button on the "Advice" screen.
+#: It affects the schedule the same way an hourly one does - the interval counts from any
+#: tick - but it must be labelled honestly in the history.
 MANUAL = "manual"
 
-#: Неделя между глубокими разборами. Считается от прошлого недельного такта,
-#: а не по календарю: перезапуск сервера не должен сдвигать расписание.
+#: A week between deep analyses. Counted from the previous weekly tick, not by the
+#: calendar: a server restart must not shift the schedule.
 WEEKLY_PERIOD = timedelta(days=7)
 
-#: Сколько ждать после старта до первого такта. Сервер часто перезапускают, и
-#: такт на каждом старте — это деньги на ровном месте.
+#: How long to wait after start before the first tick. The server gets restarted often, and
+#: a tick on every start is money spent for nothing.
 WARMUP = timedelta(minutes=5)
 
 
 @dataclass(frozen=True)
 class Tick:
-    """Что и за какой период разбирать."""
+    """What to analyse and over which period."""
 
     kind: str
     since: datetime
@@ -58,7 +58,7 @@ def plan_tick(
     *,
     started_at: datetime | None = None,
 ) -> Tick | None:
-    """Решить, нужен ли такт прямо сейчас. `None` — пропускаем."""
+    """Decide whether a tick is due right now. `None` means skip."""
     analyzer = config.get("analyzer") or {}
     if not analyzer.get("enabled", True):
         return None
@@ -66,8 +66,8 @@ def plan_tick(
         return None
 
     interval = timedelta(minutes=float(analyzer.get("interval_minutes") or 60))
-    # Интервал считается от любого такта, а не только от часового: недельный
-    # разбор только что посмотрел те же данные, повторять их за $0.08 незачем.
+    # The interval counts from any tick, not only from an hourly one: the weekly
+    # analysis has just looked at the same data, repeating it for $0.08 is pointless.
     last_any = _last_tick(conn)
     last_weekly = _last_tick(conn, WEEKLY)
 
@@ -80,7 +80,7 @@ def plan_tick(
         return None
     since = last_any or now - interval
     if not _has_turns(conn, since, now):
-        log.debug("такт пропущен: за период не было ходов")
+        log.debug("tick skipped: no turns in the period")
         return None
     return Tick(HOURLY, since, str(analyzer.get("model") or "haiku"))
 
@@ -92,17 +92,17 @@ def run_tick(
     *,
     runner: Any = None,
 ) -> dict[str, Any]:
-    """Собрать дайджест за период такта и прогнать его через советчика."""
+    """Build the digest for the tick period and run it through the advisor."""
     payload = digest.build(conn, tick.since, config=config)
     result = advisor.advise(conn, payload, model=tick.model, runner=runner, kind=tick.kind)
     result["kind"] = tick.kind
-    # Разбор нашёл что-то важное — человек узнает об этом в телеграме, а не
-    # когда сам откроет экран «Советы» (задача D5).
+    # The analysis found something important - the human learns about it in telegram,
+    # not whenever they open the "Advice" screen themselves (task D5).
     message = notifier.digest_if_worth(result, result.get("advice") or [])
     if message is not None:
         notifier.dispatch(conn, [message], config)
     log.info(
-        "такт %s: советов %s, стоил $%.4f",
+        "tick %s: tips %s, cost $%.4f",
         tick.kind,
         len(result["advice"]),
         result["cost_usd"],
@@ -117,16 +117,16 @@ async def loop(
     runner: Any = None,
     interval_seconds: float = 60.0,
 ) -> None:
-    """Фоновый цикл: раз в минуту спрашивает планировщик, не пора ли.
+    """Background loop: once a minute it asks the scheduler whether it is time.
 
-    Опрос дешёвый (один SELECT), а решение принимает `plan_tick` — так такт не
-    съезжает от того, что сервер перезапускали.
+    Polling is cheap (a single SELECT), and the decision is made by `plan_tick` - that way
+    a tick does not drift because the server was restarted.
     """
     started_at = datetime.now(UTC)
 
     def tick_now() -> None:
-        # Соединение открывается здесь же: объект SQLite принадлежит потоку,
-        # в котором создан, а весь такт уходит в отдельный поток.
+        # The connection is opened right here: an SQLite object belongs to the thread
+        # it was created in, and the whole tick runs in a separate thread.
         config = load_config()
         conn = open_db()
         try:
@@ -134,8 +134,8 @@ async def loop(
             tick = plan_tick(conn, now, config, started_at=started_at)
             if tick is not None:
                 run_tick(conn, config, tick, runner=runner)
-            # Уведомления живут на том же такте: цикл и так тикает раз в
-            # минуту, а заводить второй ради двух проверок незачем (D5).
+            # Notifications live on the same tick: the loop already ticks once a
+            # minute, and starting a second one for two checks is pointless (D5).
             messages = notifier.alerts_for(conn, metrics.overview(conn, now), config, now=now)
             daily = notifier.daily_if_due(conn, config, now=now)
             if daily is not None:
@@ -151,12 +151,12 @@ async def loop(
             await asyncio.to_thread(tick_now)
         except asyncio.CancelledError:
             raise
-        except Exception:  # такт не должен ронять сервер
-            log.exception("такт советчика не отработал")
+        except Exception:  # a tick must not bring the server down
+            log.exception("the advisor tick failed")
 
 
 def _last_tick(conn: sqlite3.Connection, kind: str | None = None) -> datetime | None:
-    """Время последнего такта: указанного вида или любого."""
+    """The time of the last tick: of the given kind or of any kind."""
     if kind is None:
         row = conn.execute("SELECT MAX(ts) AS ts FROM advice").fetchone()
     else:

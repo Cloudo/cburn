@@ -1,6 +1,6 @@
-// Экран «Сессии» (задача C1): вся история с фильтрами по проекту, статусу и
-// периоду. Цепочка resume схлопнута в одну строку: продолжения раскрываются по
-// клику, иначе одна линия работы занимала бы половину экрана.
+// The "Sessions" screen (task C1): the whole history with filters by project, status and
+// period. A resume chain is collapsed into one row: continuations expand on click,
+// otherwise one work line would take half the screen.
 
 import { useEffect, useMemo, useState } from "react";
 
@@ -8,15 +8,15 @@ import { compact, duration, grouped, sinceLabel, usd } from "./format";
 import { useSessions, type SessionRow } from "./api";
 import { useLang } from "./i18n";
 
-//: Ключи статусов и периодов; подписи берутся из словаря.
+//: Status and period keys; the captions come from the dictionary.
 const STATUSES = ["permission", "working", "answered", "idle", "done"];
 const PERIODS = ["today", "24h", "7d", "30d", "all"];
 
-/** Строка списка: либо корень цепочки со своими продолжениями, либо одиночка. */
+/** A list row: either a chain root with its continuations, or a loner. */
 type Line = { root: SessionRow; children: SessionRow[] };
 
-/** Собрать цепочки resume: продолжение уходит под своего родителя.
- *  Родителя может не быть в выдаче (отфильтрован) — тогда строка сама по себе. */
+/** Assemble resume chains: a continuation goes under its parent.
+ *  The parent may be missing from the results (filtered out) - then the row stands alone. */
 function toLines(rows: SessionRow[]): Line[] {
   const byId = new Map(rows.map((row) => [row.id, row]));
   const lines = new Map<string, Line>();
@@ -40,7 +40,7 @@ export function Sessions() {
   const [period, setPeriod] = useState("7d");
   const { data, error, reload } = useSessions({ project, status, period });
 
-  // Список перечитывается сам: экран смотрят подолгу, а сессии живые.
+  // The list re-reads itself: the screen is watched for long, and sessions are alive.
   useEffect(() => {
     const timer = setInterval(reload, 5000);
     return () => clearInterval(timer);
@@ -203,7 +203,7 @@ function SessionLine({
   );
 }
 
-/** Спарклайн расхода: столбик на равную долю жизни сессии. */
+/** The spend sparkline: one bar per equal slice of the session's life. */
 function Spark({ values }: { values: number[] }) {
   const peak = Math.max(...values, 1);
   return (

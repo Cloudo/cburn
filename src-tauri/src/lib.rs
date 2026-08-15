@@ -1,14 +1,14 @@
-//! Десктопная обёртка дашборда (веха F, ТЗ §11 M5).
+//! The desktop wrapper of the dashboard (milestone F, TZ §11 M5).
 //!
-//! Окно грузит тот же самый фронт с `http://127.0.0.1:8799`, который открывается
-//! в браузере: фронт для этого не меняется — он с самого начала ходит к бэкенду
-//! только по HTTP и WebSocket на localhost (инвариант проекта). Из-за этого
-//! страница берётся с сервера, а не из локальных файлов: относительные пути
-//! вида `api/overview` должны попадать в наш же сервер, а не в `tauri://`.
+//! The window loads the very same frontend from `http://127.0.0.1:8799` that opens
+//! in a browser: the frontend does not change for this - from the very beginning it talks
+//! to the backend over HTTP and WebSocket on localhost only (a project invariant). Because
+//! of that the page is taken from the server rather than from local files: relative paths
+//! like `api/overview` must land in our own server, not in `tauri://`.
 //!
-//! Трей меню-бара (ТЗ §5) — второй способ смотреть на прибор: цифра расхода
-//! всегда на виду, а меню отвечает на вопрос «что сейчас происходит», не
-//! требуя открывать окно.
+//! The menu-bar tray (TZ §5) is the second way to look at the instrument: the spend figure
+//! is always in sight, and the menu answers the question "what is happening now" without
+//! requiring the window to be opened.
 
 mod server;
 mod tray;
@@ -28,14 +28,14 @@ pub fn run() {
                         .build(),
                 )?;
             }
-            // Сервер поднимается сам, если его нет: .app в автозапуске
-            // заменяет launchd-агент, а без сервера окно пустое (F3).
+            // The server raises itself when absent: an .app in autostart
+            // replaces the launchd agent, and without a server the window is empty (F3).
             if let Some(path) = server::start_if_needed() {
-                log::info!("запущен сервер дашборда: {}", path.display());
+                log::info!("dashboard server started: {}", path.display());
             }
             tray::setup(app.handle())?;
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("не удалось запустить окно дашборда");
+        .expect("could not start the dashboard window");
 }

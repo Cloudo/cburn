@@ -1,4 +1,4 @@
-"""Тесты импорта транскриптов в SQLite (задача A2)."""
+"""Tests of importing transcripts into SQLite (task A2)."""
 
 from __future__ import annotations
 
@@ -84,13 +84,13 @@ def rows(conn: sqlite3.Connection, sql: str) -> list[sqlite3.Row]:
     return list(conn.execute(sql))
 
 
-# --- критерий готовности A2 --------------------------------------------------
+# --- the A2 readiness criterion ------------------------------------------------
 
 
 def test_second_pass_changes_nothing(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Повторный вызов на том же файле не меняет ни одной строки."""
+    """A repeated call on the same file changes not a single row."""
     path = tmp_path / "proj" / "s1.jsonl"
-    write_transcript(path, [prompt("привет"), assistant("msg_1"), assistant("msg_2", uuid="u2")])
+    write_transcript(path, [prompt("hello"), assistant("msg_1"), assistant("msg_2", uuid="u2")])
 
     first = ingest_file(conn, path)
     snapshot = rows(conn, "SELECT * FROM turns ORDER BY message_id")
@@ -98,7 +98,7 @@ def test_second_pass_changes_nothing(conn: sqlite3.Connection, tmp_path: Path) -
 
     assert first.turns_new == 2
     assert second.turns_new == 0
-    assert second.lines == 0  # хвост дочитан, перечитывать нечего
+    assert second.lines == 0  # the tail is read, there is nothing to re-read
     assert [tuple(row) for row in rows(conn, "SELECT * FROM turns ORDER BY message_id")] == [
         tuple(row) for row in snapshot
     ]
@@ -107,11 +107,11 @@ def test_second_pass_changes_nothing(conn: sqlite3.Connection, tmp_path: Path) -
 def test_reingest_after_offset_reset_is_idempotent(
     conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
-    """Даже при перечитывании файла с нуля ходы не задваиваются."""
+    """Even when the file is re-read from scratch, turns are not doubled."""
     path = tmp_path / "proj" / "s1.jsonl"
     write_transcript(path, [assistant("msg_1"), assistant("msg_2", uuid="u2")])
     ingest_file(conn, path)
-    conn.execute("UPDATE files SET offset = 0")  # имитация сброса offset
+    conn.execute("UPDATE files SET offset = 0")  # simulating an offset reset
     conn.commit()
 
     stats = ingest_file(conn, path)
@@ -122,11 +122,11 @@ def test_reingest_after_offset_reset_is_idempotent(
     assert conn.execute("SELECT COUNT(*) FROM turns").fetchone()[0] == 2
 
 
-# --- ход собирается из нескольких записей ------------------------------------
+# --- a turn is assembled from several records ----------------------------------
 
 
 def test_turn_split_across_records_is_one_row(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Три записи одного ответа дают один ход и один usage, а не три."""
+    """Three records of one answer give one turn and one usage, not three."""
     path = tmp_path / "proj" / "s1.jsonl"
     write_transcript(
         path,
@@ -146,15 +146,15 @@ def test_turn_split_across_records_is_one_row(conn: sqlite3.Connection, tmp_path
 
     assert stats.turns_new == 1
     turn = rows(conn, "SELECT * FROM turns")[0]
-    assert turn["output_tokens"] == 100  # не 300
+    assert turn["output_tokens"] == 100  # not 300
     assert turn["cache_read"] == 1000
-    assert turn["uuid"] == "u1"  # uuid первой записи хода
+    assert turn["uuid"] == "u1"  # uuid of the turn's first record
     tools = rows(conn, "SELECT * FROM tool_calls")
     assert [(row["tool"], row["detail"]) for row in tools] == [("Bash", "ls")]
 
 
 def test_turn_blocks_split_between_passes(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Блоки хода, дочитанные следующим проходом, не создают второй ход."""
+    """Turn blocks read on the next pass do not create a second turn."""
     path = tmp_path / "proj" / "s1.jsonl"
     write_transcript(path, [assistant("msg_1", uuid="u1")])
     ingest_file(conn, path)
@@ -180,7 +180,7 @@ def test_turn_blocks_split_between_passes(conn: sqlite3.Connection, tmp_path: Pa
 
 
 def test_tool_calls_are_not_duplicated(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Повторный импорт того же блока tool_use гасится по tool_use_id."""
+    """A repeated import of the same tool_use block is swallowed by tool_use_id."""
     path = tmp_path / "proj" / "s1.jsonl"
     block = [{"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "git status"}}]
     write_transcript(path, [assistant("msg_1", content=block)])
@@ -193,11 +193,11 @@ def test_tool_calls_are_not_duplicated(conn: sqlite3.Connection, tmp_path: Path)
     assert rows(conn, "SELECT detail FROM tool_calls")[0]["detail"] == "git status"
 
 
-# --- resume: копии ходов в другом файле --------------------------------------
+# --- resume: turn copies in another file ---------------------------------------
 
 
 def test_resume_copy_does_not_double_count(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Скопированный при resume ход остаётся за первой сессией и не задваивает расход."""
+    """A turn copied on resume stays with the first session and does not double the spend."""
     original = tmp_path / "proj" / "s1.jsonl"
     write_transcript(original, [assistant("msg_1", session="s1", output=100)])
     ingest_file(conn, original)
@@ -206,8 +206,8 @@ def test_resume_copy_does_not_double_count(conn: sqlite3.Connection, tmp_path: P
     write_transcript(
         resumed,
         [
-            assistant("msg_1", session="s2", output=100),  # копия прошлого хода
-            assistant("msg_2", session="s2", uuid="u2", output=7),  # новый ход
+            assistant("msg_1", session="s2", output=100),  # a copy of a past turn
+            assistant("msg_2", session="s2", uuid="u2", output=7),  # a new turn
         ],
     )
     stats = ingest_file(conn, resumed)
@@ -222,15 +222,15 @@ def test_resume_copy_does_not_double_count(conn: sqlite3.Connection, tmp_path: P
 
 
 def test_same_uuid_in_two_files_is_not_a_conflict(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """uuid записи не уникален по истории — на нём падать нельзя."""
+    """A record uuid is not unique across history - failing on it is not allowed."""
     for name, session in (("s1.jsonl", "s1"), ("s2.jsonl", "s2")):
         path = tmp_path / "proj" / name
-        write_transcript(path, [assistant(f"msg_{session}", session=session, uuid="одинаковый")])
+        write_transcript(path, [assistant(f"msg_{session}", session=session, uuid="same-uuid")])
         ingest_file(conn, path)
     assert conn.execute("SELECT COUNT(*) FROM turns").fetchone()[0] == 2
 
 
-# --- инкрементальность -------------------------------------------------------
+# --- incrementality -------------------------------------------------------------
 
 
 def test_incremental_tail_read(conn: sqlite3.Connection, tmp_path: Path) -> None:
@@ -242,20 +242,20 @@ def test_incremental_tail_read(conn: sqlite3.Connection, tmp_path: Path) -> None
         fh.write(assistant("msg_2", uuid="u2") + "\n")
     second = ingest_file(conn, path)
 
-    assert second.lines == 1  # прочитана только дописанная строка
+    assert second.lines == 1  # only the appended line was read
     assert second.offset > first.offset
     assert conn.execute("SELECT COUNT(*) FROM turns").fetchone()[0] == 2
 
 
 def test_partial_line_is_not_consumed(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Недописанная строка ждёт следующего прохода и не двигает offset."""
+    """An unfinished line waits for the next pass and does not move the offset."""
     path = tmp_path / "proj" / "s1.jsonl"
     write_transcript(path, [assistant("msg_1")])
     ingest_file(conn, path)
 
     tail = assistant("msg_2", uuid="u2")
     with path.open("a") as fh:
-        fh.write(tail[:40])  # запись оборвана на середине
+        fh.write(tail[:40])  # the write is cut off midway
     stats = ingest_file(conn, path)
     assert stats.lines == 0
     assert conn.execute("SELECT COUNT(*) FROM turns").fetchone()[0] == 1
@@ -272,7 +272,7 @@ def test_offset_resets_on_truncate(conn: sqlite3.Connection, tmp_path: Path) -> 
     write_transcript(path, [assistant("msg_1"), assistant("msg_2", uuid="u2")])
     ingest_file(conn, path)
 
-    write_transcript(path, [assistant("msg_3", uuid="u3")])  # файл усечён и переписан
+    write_transcript(path, [assistant("msg_3", uuid="u3")])  # the file is truncated and rewritten
     stats = ingest_file(conn, path)
 
     assert stats.restarted
@@ -290,7 +290,7 @@ def test_offset_resets_on_new_inode(conn: sqlite3.Connection, tmp_path: Path) ->
         replacement,
         [assistant("msg_1"), assistant("msg_2", uuid="u2"), assistant("msg_3", uuid="u3")],
     )
-    replacement.replace(path)  # пересоздание файла: inode другой, size больше
+    replacement.replace(path)  # recreating the file: a different inode, a bigger size
     stats = ingest_file(conn, path)
 
     assert stats.restarted
@@ -300,29 +300,29 @@ def test_offset_resets_on_new_inode(conn: sqlite3.Connection, tmp_path: Path) ->
 
 
 def test_missing_file_is_survivable(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    stats = ingest_file(conn, tmp_path / "нет-такого.jsonl")
+    stats = ingest_file(conn, tmp_path / "no-such.jsonl")
     assert stats.lines == 0
 
 
 def test_broken_lines_do_not_stop_the_pass(conn: sqlite3.Connection, tmp_path: Path) -> None:
     path = tmp_path / "proj" / "s1.jsonl"
-    write_transcript(path, [assistant("msg_1"), "{битый json", "", assistant("msg_2", uuid="u2")])
+    write_transcript(path, [assistant("msg_1"), "{broken json", "", assistant("msg_2", uuid="u2")])
     stats = ingest_file(conn, path)
     assert stats.lines == 4
     assert stats.turns_new == 2
 
 
-# --- сессии и проекты --------------------------------------------------------
+# --- sessions and projects ------------------------------------------------------
 
 
 def test_session_metadata_and_totals(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    path = tmp_path / "мой-проект" / "s1.jsonl"
+    path = tmp_path / "my-project" / "s1.jsonl"
     write_transcript(
         path,
         [
-            prompt("первый вопрос", ts="2026-08-13T09:00:00Z"),
+            prompt("first question", ts="2026-08-13T09:00:00Z"),
             assistant("msg_1", ts="2026-08-13T09:00:05Z", output=10, cache_read=500, write_1h=20),
-            prompt("второй вопрос", ts="2026-08-13T09:01:00Z"),
+            prompt("second question", ts="2026-08-13T09:01:00Z"),
             assistant(
                 "msg_2",
                 uuid="u2",
@@ -337,19 +337,19 @@ def test_session_metadata_and_totals(conn: sqlite3.Connection, tmp_path: Path) -
     ingest_file(conn, path)
 
     session = rows(conn, "SELECT * FROM sessions")[0]
-    assert session["first_prompt"] == "первый вопрос"
+    assert session["first_prompt"] == "first question"
     assert session["started_at"] == "2026-08-13T09:00:00Z"
     assert session["last_at"] == "2026-08-13T09:01:05Z"
     assert session["turns"] == 2
     assert session["tokens_out"] == 40
     assert session["cache_read"] == 1400
     assert session["cache_write"] == 25
-    assert session["last_context"] == 2 + 900 + 5  # контекст последнего хода
+    assert session["last_context"] == 2 + 900 + 5  # the context of the last turn
 
     project = rows(conn, "SELECT * FROM projects")[0]
-    assert project["slug"] == "мой-проект"
+    assert project["slug"] == "my-project"
     assert project["root_path"] == "/Users/x/project"
-    assert project["display_name"] == "project"  # на экран идёт имя, а не slug
+    assert project["display_name"] == "project"  # the screen gets the name, not the slug
     assert session["project_id"] == project["id"]
 
 
@@ -357,24 +357,24 @@ def test_first_prompt_ignores_sidechain_and_compact_summary(
     conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
     path = tmp_path / "proj" / "s1.jsonl"
-    sidechain = json.loads(prompt("задача сабагенту", ts="2026-08-13T08:00:00Z"))
+    sidechain = json.loads(prompt("a task for the subagent", ts="2026-08-13T08:00:00Z"))
     sidechain["isSidechain"] = True
-    compact = json.loads(prompt("пересказ", ts="2026-08-13T08:30:00Z"))
+    compact = json.loads(prompt("a retelling", ts="2026-08-13T08:30:00Z"))
     compact["isCompactSummary"] = True
     write_transcript(
         path,
         [
             json.dumps(sidechain),
             json.dumps(compact),
-            prompt("настоящий промпт", ts="2026-08-13T09:00:00Z"),
+            prompt("a real prompt", ts="2026-08-13T09:00:00Z"),
         ],
     )
     ingest_file(conn, path)
-    assert rows(conn, "SELECT first_prompt FROM sessions")[0]["first_prompt"] == "настоящий промпт"
+    assert rows(conn, "SELECT first_prompt FROM sessions")[0]["first_prompt"] == "a real prompt"
 
 
 def test_several_sessions_in_one_file(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Файл ≠ сессия: группировка идёт по полю записи."""
+    """A file is not a session: the grouping follows the record field."""
     path = tmp_path / "proj" / "mixed.jsonl"
     write_transcript(
         path,
@@ -400,7 +400,7 @@ def test_sidechain_turn_is_marked(conn: sqlite3.Connection, tmp_path: Path) -> N
 
 
 def test_synthetic_records_are_skipped(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """`<synthetic>` — служебный ответ с нулевым usage, ходом не является."""
+    """`<synthetic>` is a service answer with zero usage, it is not a turn."""
     path = tmp_path / "proj" / "s1.jsonl"
     write_transcript(
         path,
@@ -415,7 +415,7 @@ def test_synthetic_records_are_skipped(conn: sqlite3.Connection, tmp_path: Path)
 
 
 def test_unknown_types_do_not_break_the_turn(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Незнакомая запись считается, складывается в raw_events и не мешает ходу."""
+    """An unknown record is counted, stashed into raw_events and does not disturb the turn."""
     path = tmp_path / "proj" / "s1.jsonl"
     write_transcript(
         path,
@@ -429,14 +429,14 @@ def test_unknown_types_do_not_break_the_turn(conn: sqlite3.Connection, tmp_path:
     assert "a1" in stored["payload"]
 
 
-# --- фикстуры ----------------------------------------------------------------
+# --- fixtures -------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("path", FIXTURES, ids=lambda path: path.stem)
 def test_fixture_ingest_matches_manual_count(
     conn: sqlite3.Connection, path: Path, tmp_path: Path
 ) -> None:
-    """Суммы в БД сходятся с независимым подсчётом по сырому JSON."""
+    """The database totals match an independent count over the raw JSON."""
     target = tmp_path / "proj" / path.name
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(path.read_text())
@@ -473,7 +473,7 @@ def test_ingest_tree_walks_all_files(conn: sqlite3.Connection, tmp_path: Path) -
 def test_subagent_transcript_keeps_parent_project(
     conn: sqlite3.Connection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Сабагенты лежат в `<проект>/<сессия>/subagents/` — проект берётся родительский."""
+    """Subagents live in `<project>/<session>/subagents/` - the parent project is used."""
     monkeypatch.setattr(indexer_paths, "CLAUDE_PROJECTS_DIR", tmp_path)
     project = tmp_path / "-Users-me-proj"
     write_transcript(project / "s1.jsonl", [assistant("msg_1", session="s1")])
@@ -493,7 +493,7 @@ def test_subagent_transcript_keeps_parent_project(
 
 
 def test_ingest_tree_reports_progress(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Обход отдаёт прогресс по файлам — по нему CLI рисует строку (задача B2)."""
+    """The walk reports progress per file - the CLI draws its line from it (task B2)."""
     for name in ("a", "b", "c"):
         write_transcript(tmp_path / f"proj-{name}" / "s.jsonl", [assistant(f"msg_{name}")])
     seen: list[tuple[int, int, str]] = []
@@ -508,13 +508,13 @@ def test_ingest_tree_reports_progress(conn: sqlite3.Connection, tmp_path: Path) 
     assert [name for _, _, name in seen] == ["proj-a", "proj-b", "proj-c"]
 
 
-# --- незнакомые записи (задача B6) -------------------------------------------
+# --- unknown records (task B6) ---------------------------------------------------
 
 
 def test_unknown_records_counted_with_limited_samples(
     conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
-    """Счётчик растёт на каждую запись, payload хранится только у первых."""
+    """The counter grows on every record, the payload is kept only for the first ones."""
     unknown = [
         json.dumps({"type": "attachment", "version": "2.1.228", "sessionId": "s1"})
         for _ in range(RAW_SAMPLE_LIMIT + 4)
@@ -531,13 +531,13 @@ def test_unknown_records_counted_with_limited_samples(
 
 
 def test_unknown_records_split_by_version(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Пара (тип, версия) считается отдельно: формат меняется между версиями."""
+    """A (type, version) pair is counted separately: the format changes between versions."""
     write_transcript(
         tmp_path / "proj" / "s1.jsonl",
         [
             json.dumps({"type": "mode", "version": "2.1.220", "sessionId": "s1"}),
             json.dumps({"type": "mode", "version": "2.1.231", "sessionId": "s1"}),
-            json.dumps({"type": "mode", "sessionId": "s1"}),  # версии нет вовсе
+            json.dumps({"type": "mode", "sessionId": "s1"}),  # no version at all
         ],
     )
 
@@ -547,11 +547,11 @@ def test_unknown_records_split_by_version(conn: sqlite3.Connection, tmp_path: Pa
     assert rows == {"2.1.220": 1, "2.1.231": 1, "": 1}
 
 
-# --- resume-форки (задача B5) ------------------------------------------------
+# --- resume forks (task B5) ------------------------------------------------------
 
 
 def test_resume_links_child_to_parent(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Скопированные при resume ходы связывают новую сессию с исходной."""
+    """Turns copied on resume link the new session to the original one."""
     write_transcript(
         tmp_path / "proj" / "s1.jsonl",
         [
@@ -559,7 +559,7 @@ def test_resume_links_child_to_parent(conn: sqlite3.Connection, tmp_path: Path) 
             assistant("msg_2", session="s1", uuid="u2", ts="2026-08-13T10:05:00Z"),
         ],
     )
-    # Resume: прошлые ходы скопированы в новый файл с новым sessionId.
+    # Resume: past turns are copied into a new file with a new sessionId.
     write_transcript(
         tmp_path / "proj" / "s2.jsonl",
         [
@@ -573,14 +573,14 @@ def test_resume_links_child_to_parent(conn: sqlite3.Connection, tmp_path: Path) 
 
     parents = dict(conn.execute("SELECT id, parent_session_id FROM sessions"))
     assert parents == {"s1": None, "s2": "s1"}
-    # Копии не задваивают расход: ход остаётся за первой сессией.
+    # The copies do not double the spend: the turn stays with the first session.
     assert conn.execute("SELECT COUNT(*) FROM turns").fetchone()[0] == 3
 
 
 def test_resume_direction_does_not_depend_on_read_order(
     conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
-    """Родитель — тот, кто начался раньше, а не чей файл прочитан первым."""
+    """The parent is whoever started earlier, not whose file was read first."""
     later = tmp_path / "proj" / "s2.jsonl"
     earlier = tmp_path / "proj" / "s1.jsonl"
     write_transcript(
@@ -595,7 +595,7 @@ def test_resume_direction_does_not_depend_on_read_order(
         [assistant("msg_1", session="s1", uuid="u1", ts="2026-08-13T10:00:00Z")],
     )
 
-    ingest_file(conn, later)  # сначала потомок
+    ingest_file(conn, later)  # the child first
     ingest_file(conn, earlier)
 
     parents = dict(conn.execute("SELECT id, parent_session_id FROM sessions"))
@@ -604,7 +604,7 @@ def test_resume_direction_does_not_depend_on_read_order(
 
 
 def test_session_chain_sums_the_whole_line(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Линия работы собирает все сессии цепочки и их суммы (задача B5)."""
+    """A work line collects every session of the chain and their totals (task B5)."""
     write_transcript(
         tmp_path / "proj" / "s1.jsonl",
         [assistant("msg_1", session="s1", uuid="u1", ts="2026-08-13T10:00:00Z", output=100)],
@@ -621,14 +621,14 @@ def test_session_chain_sums_the_whole_line(conn: sqlite3.Connection, tmp_path: P
     chain = session_chain(conn, "s2")
 
     assert sorted(chain["sessions"]) == ["s1", "s2"]
-    assert chain["turns"] == 2  # копия не считается дважды
+    assert chain["turns"] == 2  # the copy is not counted twice
 
 
-# --- неполный usage в записях хода -------------------------------------------
+# --- incomplete usage in turn records --------------------------------------------
 
 
 def test_zero_usage_record_does_not_hide_real_one(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Ход, начатый нулевой записью, получает расход из завершающей."""
+    """A turn started by a zero record gets its spend from the finishing one."""
     path = tmp_path / "proj" / "s1.jsonl"
     write_transcript(
         path,
@@ -645,7 +645,7 @@ def test_zero_usage_record_does_not_hide_real_one(conn: sqlite3.Connection, tmp_
 
 
 def test_real_usage_arrives_in_later_pass(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Ход уже в БД с нулём: дочитанный хвост поднимает расход, а не задваивает его."""
+    """The turn is in the database with a zero: the read tail raises the spend, not doubles it."""
     path = tmp_path / "proj" / "s1.jsonl"
     write_transcript(path, [assistant("msg_1", uuid="u1", output=0, cache_read=0, write_1h=0)])
     ingest_file(conn, path)
@@ -662,7 +662,7 @@ def test_real_usage_arrives_in_later_pass(conn: sqlite3.Connection, tmp_path: Pa
 
 
 def test_empty_resume_copy_does_not_erase_usage(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Копия хода с нулевым расходом не затирает уже учтённый."""
+    """A copy of a turn with zero spend does not overwrite the one already counted."""
     original = tmp_path / "proj" / "s1.jsonl"
     write_transcript(original, [assistant("msg_1", session="s1", output=100)])
     ingest_file(conn, original)
@@ -674,13 +674,13 @@ def test_empty_resume_copy_does_not_erase_usage(conn: sqlite3.Connection, tmp_pa
     assert rows(conn, "SELECT output_tokens FROM turns")[0]["output_tokens"] == 100
 
 
-# --- чем закончилась сессия --------------------------------------------------
+# --- how the session ended --------------------------------------------------------
 
 
 def test_pending_state_after_prompt(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Промпт без ответа означает, что запрос сейчас выполняется."""
+    """A prompt without an answer means a request is running right now."""
     path = tmp_path / "proj" / "s1.jsonl"
-    write_transcript(path, [assistant("msg_1"), prompt("новый вопрос", ts="2026-08-13T11:00:00Z")])
+    write_transcript(path, [assistant("msg_1"), prompt("new question", ts="2026-08-13T11:00:00Z")])
     ingest_file(conn, path)
 
     session = rows(conn, "SELECT * FROM sessions")[0]
@@ -690,7 +690,7 @@ def test_pending_state_after_prompt(conn: sqlite3.Connection, tmp_path: Path) ->
 
 def test_pending_state_clears_after_answer(conn: sqlite3.Connection, tmp_path: Path) -> None:
     path = tmp_path / "proj" / "s1.jsonl"
-    write_transcript(path, [prompt("вопрос", ts="2026-08-13T11:00:00Z")])
+    write_transcript(path, [prompt("question", ts="2026-08-13T11:00:00Z")])
     ingest_file(conn, path)
     assert rows(conn, "SELECT last_record_kind FROM sessions")[0]["last_record_kind"] == "prompt"
 
@@ -704,12 +704,12 @@ def test_pending_state_clears_after_answer(conn: sqlite3.Connection, tmp_path: P
 
 
 def test_service_records_do_not_clear_pending(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Между промптом и ответом пишутся attachment и прочая служебка."""
+    """Between a prompt and an answer, attachments and other service records are written."""
     path = tmp_path / "proj" / "s1.jsonl"
     write_transcript(
         path,
         [
-            prompt("вопрос", ts="2026-08-13T11:00:00Z"),
+            prompt("question", ts="2026-08-13T11:00:00Z"),
             json.dumps(
                 {
                     "type": "attachment",
@@ -725,7 +725,7 @@ def test_service_records_do_not_clear_pending(conn: sqlite3.Connection, tmp_path
 
 
 def test_service_records_keep_last_record_at(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Батч из одной служебки не должен обнулять время последней настоящей записи."""
+    """A batch of one service record must not wipe the time of the last real record."""
     path = tmp_path / "proj" / "s1.jsonl"
     write_transcript(path, [assistant("msg_1", ts="2026-08-13T11:00:00Z")])
     ingest_file(conn, path)
@@ -750,7 +750,7 @@ def test_service_records_keep_last_record_at(conn: sqlite3.Connection, tmp_path:
     assert session["last_at"] == "2026-08-13T11:05:00Z"
 
 
-# --- название сессии ---------------------------------------------------------
+# --- the session title -------------------------------------------------------------
 
 
 def title_record(title: str, *, kind: str = "ai-title", session: str = "s1") -> str:
@@ -769,33 +769,33 @@ def test_ai_title_becomes_session_name(conn: sqlite3.Connection, tmp_path: Path)
 
 
 def test_custom_title_wins_over_generated(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Название, заданное человеком, не затирается сгенерированным."""
+    """A title set by a human is not overwritten by a generated one."""
     path = tmp_path / "proj" / "s1.jsonl"
     write_transcript(
         path,
         [
             assistant("msg_1"),
-            title_record("своё имя", kind="custom-title"),
-            title_record("сгенерированное"),
+            title_record("own name", kind="custom-title"),
+            title_record("generated"),
         ],
     )
     ingest_file(conn, path)
 
     session = rows(conn, "SELECT * FROM sessions")[0]
-    assert (session["title"], session["title_source"]) == ("своё имя", "custom")
+    assert (session["title"], session["title_source"]) == ("own name", "custom")
 
     with path.open("a") as fh:
-        fh.write(title_record("ещё одно сгенерированное") + "\n")
+        fh.write(title_record("another generated one") + "\n")
     ingest_file(conn, path)
-    assert rows(conn, "SELECT title FROM sessions")[0]["title"] == "своё имя"
+    assert rows(conn, "SELECT title FROM sessions")[0]["title"] == "own name"
 
 
 def test_title_record_does_not_create_pending_state(
     conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
-    """У записи названия нет времени — она не должна двигать состояние сессии."""
+    """A title record has no time - it must not move the session state."""
     path = tmp_path / "proj" / "s1.jsonl"
-    write_transcript(path, [assistant("msg_1", ts="2026-08-13T10:00:00Z"), title_record("имя")])
+    write_transcript(path, [assistant("msg_1", ts="2026-08-13T10:00:00Z"), title_record("name")])
     ingest_file(conn, path)
 
     session = rows(conn, "SELECT * FROM sessions")[0]

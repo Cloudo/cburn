@@ -1,4 +1,4 @@
-"""Тесты лимитов подписки: разбор ответа, кэш и отказ по частоте."""
+"""Subscription limit tests: parsing the answer, the cache and a rate refusal."""
 
 from __future__ import annotations
 
@@ -50,12 +50,12 @@ def test_normalize_uses_limits_array() -> None:
     rows = _normalize(USAGE_RESPONSE)
     assert [row["kind"] for row in rows] == ["session", "weekly_all", "weekly_scoped"]
     assert rows[0]["percent"] == 48
-    # Название модели попадает в подпись — как на экране `/usage`.
+    # The model name reaches the caption - just like on the `/usage` screen.
     assert rows[2]["label"] == "неделя, модель: Fable"
 
 
 def test_normalize_falls_back_to_window_fields() -> None:
-    """Старый ответ без массива limits: окна собираются из five_hour и seven_day."""
+    """An old answer without the limits array: windows come from five_hour and seven_day."""
     rows = _normalize({k: v for k, v in USAGE_RESPONSE.items() if k != "limits"})
     assert [(row["kind"], row["percent"]) for row in rows] == [
         ("session", 48.0),
@@ -64,7 +64,7 @@ def test_normalize_falls_back_to_window_fields() -> None:
 
 
 def test_read_from_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Запасной путь — кэш, который ведёт сам Claude Code."""
+    """The fallback is the cache that Claude Code maintains itself."""
     state = tmp_path / ".claude.json"
     state.write_text(
         json.dumps(
@@ -86,12 +86,12 @@ def test_read_from_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_read_from_cache_without_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(limits_module, "CLAUDE_STATE", tmp_path / "нет-файла.json")
+    monkeypatch.setattr(limits_module, "CLAUDE_STATE", tmp_path / "no-file.json")
     assert read_from_cache() is None
 
 
 def test_watcher_holds_value_between_refreshes(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Пока пауза не вышла, эндпоинт не дёргается."""
+    """While the pause has not run out, the endpoint is not touched."""
     calls: list[int] = []
 
     def fetch() -> PlanLimits:
@@ -105,12 +105,12 @@ def test_watcher_holds_value_between_refreshes(monkeypatch: pytest.MonkeyPatch) 
     watcher.current(now=1100.0)
     assert len(calls) == 1
 
-    watcher.current(now=1400.0)  # пауза вышла
+    watcher.current(now=1400.0)  # the pause has run out
     assert len(calls) == 2
 
 
 def test_watcher_keeps_last_value_on_rate_limit(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Отказ по частоте не должен ронять показания к устаревшему кэшу."""
+    """A rate refusal must not drop the readings back to a stale cache."""
     good = PlanLimits("api", 1.0, "max", None, [{"kind": "session", "percent": 48}])
     state = {"first": True}
 
@@ -128,7 +128,7 @@ def test_watcher_keeps_last_value_on_rate_limit(monkeypatch: pytest.MonkeyPatch)
 
     assert watcher.current(now=0.0)["source"] == "api"
     after = watcher.current(now=100.0)
-    assert after["source"] == "api"  # осталось последнее удачное, а не кэш
+    assert after["source"] == "api"  # the last successful value stayed, not the cache
     assert after["limits"][0]["percent"] == 48
 
 
@@ -144,13 +144,13 @@ def test_watcher_waits_longer_after_rate_limit(monkeypatch: pytest.MonkeyPatch) 
     watcher = LimitsWatcher(refresh_seconds=10)
 
     watcher.current(now=0.0)
-    watcher.current(now=60.0)  # обычная пауза давно вышла, но после 429 ждём дольше
+    watcher.current(now=60.0)  # the usual pause ran out long ago, but after a 429 we wait longer
     assert len(calls) == 1
 
 
 def test_watcher_without_api_uses_cache_only(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fetch() -> PlanLimits:  # pragma: no cover — не должен вызываться
-        raise AssertionError("сеть не должна трогаться при use_api=False")
+    def fetch() -> PlanLimits:  # pragma: no cover - must never be called
+        raise AssertionError("the network must not be touched with use_api=False")
 
     monkeypatch.setattr(limits_module, "fetch_from_api", fetch)
     monkeypatch.setattr(
@@ -160,7 +160,7 @@ def test_watcher_without_api_uses_cache_only(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_watcher_refresh_ignores_pause(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Кнопка в виджете спрашивает лимиты сразу, не дожидаясь паузы."""
+    """The button in the widget asks for the limits at once, without waiting out the pause."""
     calls: list[int] = []
 
     def fetch() -> PlanLimits:
@@ -171,7 +171,7 @@ def test_watcher_refresh_ignores_pause(monkeypatch: pytest.MonkeyPatch) -> None:
     watcher = LimitsWatcher(refresh_seconds=300)
 
     watcher.current(now=1000.0)
-    watcher.current(now=1010.0)  # пауза не вышла — запроса нет
+    watcher.current(now=1010.0)  # the pause has not run out - there is no request
     assert len(calls) == 1
 
     assert watcher.refresh(now=1020.0)["fetched_at"] == 2.0

@@ -1,8 +1,8 @@
-"""Тесты приёмника телеметрии Claude Code (веха E, задача E2).
+"""Tests of the Claude Code telemetry receiver (milestone E, task E2).
 
-Посылки собраны по спецификации OTLP/JSON и по описанию метрик и событий из
-https://code.claude.com/docs/en/monitoring-usage: целые едут строками, атрибуты
-— парами key/value, имена полей в camelCase.
+The payloads are built to the OTLP/JSON specification and to the description of metrics
+and events from https://code.claude.com/docs/en/monitoring-usage: integers travel as
+strings, attributes as key/value pairs, field names in camelCase.
 """
 
 from __future__ import annotations
@@ -27,25 +27,25 @@ from cburn.api.server import create_app
 from cburn.collector import otlp
 from cburn.db import connect
 
-# Наносекунды: 2026-08-14T07:00:00Z и минутой позже. Фиксированные — там, где
-# проверяется сам разбор: формат времени, дедупликация, границы окна точки.
+# Nanoseconds: 2026-08-14T07:00:00Z and a minute later. Fixed - where the parsing
+# itself is checked: the time format, deduplication, the bounds of a point window.
 START_NANO = "1786690800000000000"
 END_NANO = "1786690860000000000"
 
-#: Тот же момент датой: от него считаются периоды в тестах разбора.
+#: The same moment as a date: periods in the parsing tests are counted from it.
 FIXED_DAY = datetime(2026, 8, 14, tzinfo=UTC)
 
 
 def nanos(moment: datetime) -> str:
-    """Время в наносекундах, как его шлёт OTLP."""
+    """Time in nanoseconds, the way OTLP sends it."""
     return str(int(moment.timestamp() * 1_000_000_000))
 
 
 def now_nanos() -> str:
-    """Сейчас — для тестов, которые смотрят на срезы «за сегодня».
+    """Now - for tests that look at "today" slices.
 
-    Прибитая к дате посылка вчера попадала в сегодняшнее окно, а сегодня уже
-    нет: такие тесты обязаны жить в том же дне, что и обзор.
+    A payload nailed to a date used to fall inside today's window yesterday and no
+    longer does today: such tests must live in the same day as the overview.
     """
     return nanos(datetime.now(UTC))
 
@@ -127,7 +127,7 @@ def conn(tmp_path: Path) -> Any:
     connection.close()
 
 
-# --- разбор ------------------------------------------------------------------
+# --- parsing -------------------------------------------------------------------
 
 
 def test_metric_point_is_split_into_columns(conn: Any) -> None:
@@ -145,10 +145,10 @@ def test_metric_point_is_split_into_columns(conn: Any) -> None:
 
 
 def test_personal_attributes_are_not_stored(conn: Any) -> None:
-    """Почта и идентификаторы аккаунта в БД не нужны: считаем расход, не человека."""
+    """The email and account ids are not needed in the database: we count spend, not people."""
     payload = metrics_payload(point(1200, type="input", query_source="main"))
     payload["resourceMetrics"][0]["resource"]["attributes"].extend(
-        attrs(user__email="кто-то@example.com", organization__id="c777", user__id="65c7")
+        attrs(user__email="someone@example.com", organization__id="c777", user__id="65c7")
     )
     otlp.ingest(conn, "metrics", payload)
     stored = json.loads(conn.execute("SELECT attrs FROM otel_metrics").fetchone()[0])
@@ -156,20 +156,20 @@ def test_personal_attributes_are_not_stored(conn: Any) -> None:
 
 
 def test_conversation_text_is_never_stored(conn: Any) -> None:
-    """Человек мог включить OTEL_LOG_USER_PROMPTS для своей отладки — дашборд
-    от этого не должен становиться хранилищем переписки (ТЗ §7)."""
+    """A human may switch OTEL_LOG_USER_PROMPTS on for their own debugging - the dashboard
+    must not become a conversation store because of that (TZ §7)."""
     otlp.ingest(
         conn,
         "logs",
         logs_payload(
-            event("user_prompt", 1, prompt="секретный текст задания", prompt_length=64),
-            event("assistant_response", 2, response="ответ модели целиком", response_length=41),
+            event("user_prompt", 1, prompt="the secret text of the task", prompt_length=64),
+            event("assistant_response", 2, response="the whole model answer", response_length=41),
             event(
                 "tool_result",
                 3,
                 tool_name="Bash",
                 tool_input='{"command": "cat ~/.ssh/id_rsa"}',
-                error="ENOENT: нет такого файла",
+                error="ENOENT: no such file",
             ),
         ),
     )
@@ -177,17 +177,17 @@ def test_conversation_text_is_never_stored(conn: Any) -> None:
         row[0]
         for row in conn.execute("SELECT attrs FROM otel_events")  # type: ignore[misc]
     )
-    assert "секретный текст" not in stored
-    assert "ответ модели" not in stored
+    assert "the secret text" not in stored
+    assert "the model answer" not in stored
     assert "id_rsa" not in stored
     assert "ENOENT" not in stored
-    # Длины и имена остаются: по ним и считается всё, что нам нужно.
+    # Lengths and names stay: everything we need is counted from them.
     assert "prompt_length" in stored
     assert "Bash" in stored
 
 
 def test_nested_values_are_filtered_too(conn: Any) -> None:
-    """Содержимое не должно просочиться через вложенный список пар."""
+    """Content must not seep through a nested list of pairs."""
     record = event("tool_result", 1, tool_name="Bash")
     record["attributes"].append(
         {
@@ -195,7 +195,7 @@ def test_nested_values_are_filtered_too(conn: Any) -> None:
             "value": {
                 "kvlistValue": {
                     "values": [
-                        {"key": "response", "value": {"stringValue": "текст ответа"}},
+                        {"key": "response", "value": {"stringValue": "the answer text"}},
                         {"key": "duration_ms", "value": {"stringValue": "968"}},
                     ]
                 }
@@ -204,12 +204,12 @@ def test_nested_values_are_filtered_too(conn: Any) -> None:
     )
     otlp.ingest(conn, "logs", logs_payload(record))
     stored = conn.execute("SELECT attrs FROM otel_events").fetchone()[0]
-    assert "текст ответа" not in stored
+    assert "the answer text" not in stored
     assert "968" in stored
 
 
 def test_repeated_batch_does_not_double_the_numbers(conn: Any) -> None:
-    """Экспортёр повторяет неподтверждённую посылку — цифры от этого не растут."""
+    """The exporter repeats an unacknowledged payload - the numbers must not grow."""
     payload = metrics_payload(point(1200, type="input"))
     assert otlp.ingest(conn, "metrics", payload)["stored"] == 1
     assert otlp.ingest(conn, "metrics", payload)["stored"] == 0
@@ -242,9 +242,9 @@ def test_double_and_gauge_points_are_read(conn: Any) -> None:
 
 
 def test_broken_pieces_do_not_lose_the_rest(conn: Any) -> None:
-    """Смена формата не должна обрывать приём: непонятое считается потерей."""
-    payload = metrics_payload(point(1200, type="input"), {"timeUnixNano": END_NANO}, "мусор")
-    payload["resourceMetrics"][0]["scopeMetrics"][0]["metrics"].append({"name": "без данных"})
+    """A format change must not cut reception off: what is not understood counts as a loss."""
+    payload = metrics_payload(point(1200, type="input"), {"timeUnixNano": END_NANO}, "garbage")
+    payload["resourceMetrics"][0]["scopeMetrics"][0]["metrics"].append({"name": "no data"})
     stats = otlp.ingest(conn, "metrics", payload)
     assert stats["stored"] == 1
     assert stats["dropped"] == 3
@@ -263,7 +263,7 @@ def test_events_keep_attributes_and_dedupe_by_sequence(conn: Any) -> None:
     assert [row["name"] for row in rows] == ["api_request", "tool_decision"]
     assert rows[0]["session_id"] == "s1"
     assert json.loads(rows[0]["attrs"])["duration_ms"] == 2310
-    # Решение по разрешению есть только здесь: в транскрипт оно не попадает.
+    # The permission decision exists only here: it never reaches the transcript.
     assert json.loads(rows[1]["attrs"])["decision"] == "accept"
 
 
@@ -275,7 +275,7 @@ def test_event_name_from_body_when_attribute_is_missing(conn: Any) -> None:
 
 
 def test_histogram_is_counted_as_a_loss(conn: Any) -> None:
-    """Гистограмм Claude Code не шлёт; появятся — увидим по счётчику потерь."""
+    """Claude Code sends no histograms; if they appear, the loss counter will show it."""
     payload = metrics_payload(point(1), name="claude_code.some.histogram")
     metric = payload["resourceMetrics"][0]["scopeMetrics"][0]["metrics"][0]
     metric["histogram"] = {"dataPoints": [metric.pop("sum")["dataPoints"][0]]}
@@ -284,7 +284,7 @@ def test_histogram_is_counted_as_a_loss(conn: Any) -> None:
 
 
 def test_attribute_values_of_every_shape_are_read(conn: Any) -> None:
-    """OTLP `AnyValue` бывает не только строкой: булево, массив, вложенный список."""
+    """An OTLP `AnyValue` is not only a string: booleans, arrays, nested lists."""
     record = event("tool_result", 1)
     record["attributes"] += [
         {"key": "success", "value": {"boolValue": True}},
@@ -309,16 +309,16 @@ def test_attribute_values_of_every_shape_are_read(conn: Any) -> None:
 
 
 def test_events_without_a_session_are_still_stored(conn: Any) -> None:
-    """Событие без `session.id` — тоже событие: до первого промпта их хватает."""
+    """An event without `session.id` is an event too: before the first prompt there are plenty."""
     record = event("session_start", 1)
     record["attributes"] = [item for item in record["attributes"] if item["key"] != "session.id"]
     assert otlp.ingest(conn, "logs", logs_payload(record))["stored"] == 1
-    assert otlp.ingest(conn, "logs", logs_payload(record))["stored"] == 0  # повтор гасится
+    assert otlp.ingest(conn, "logs", logs_payload(record))["stored"] == 0  # the repeat is swallowed
     assert conn.execute("SELECT session_id FROM otel_events").fetchone()[0] is None
 
 
 def test_record_time_falls_back_to_the_observed_one(conn: Any) -> None:
-    """Часть записей приезжает без своего времени — тогда берётся время приёма."""
+    """Some records arrive without a time of their own - then the reception time is used."""
     record = event("api_request", 1)
     record["timeUnixNano"] = "0"
     assert otlp.ingest(conn, "logs", logs_payload(record))["stored"] == 1
@@ -326,7 +326,7 @@ def test_record_time_falls_back_to_the_observed_one(conn: Any) -> None:
 
 
 def test_several_resources_in_one_batch(conn: Any) -> None:
-    """Экспортёр вправе сложить в посылку несколько ресурсов и скоупов."""
+    """The exporter may put several resources and scopes into one payload."""
     payload = metrics_payload(point(10, type="input"))
     payload["resourceMetrics"].append(
         metrics_payload(point(20, type="output"))["resourceMetrics"][0]
@@ -335,7 +335,7 @@ def test_several_resources_in_one_batch(conn: Any) -> None:
 
 
 def test_snake_case_fields_are_understood(conn: Any) -> None:
-    """OTLP/JSON разрешает и оригинальные имена полей protobuf."""
+    """OTLP/JSON allows the original protobuf field names too."""
     payload = {
         "resource_metrics": [
             {
@@ -366,13 +366,13 @@ def test_snake_case_fields_are_understood(conn: Any) -> None:
     assert conn.execute("SELECT value, kind FROM otel_metrics").fetchone()["kind"] == "cli"
 
 
-# --- эндпоинт ----------------------------------------------------------------
+# --- endpoint ------------------------------------------------------------------
 
 
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     db_path = tmp_path / "api.db"
-    connect(db_path).close()  # схема: lifespan в тестах не запускается
+    connect(db_path).close()  # the schema: lifespan does not run in tests
     monkeypatch.setattr(paths, "CONFIG_PATH", tmp_path / "config.toml")
     app = create_app(
         db_path=db_path,
@@ -397,7 +397,7 @@ def stored_metrics(client: TestClient) -> int:
 def test_endpoint_accepts_metrics(client: TestClient) -> None:
     response = client.post("/otlp/v1/metrics", json=metrics_payload(point(1200, type="input")))
     assert response.status_code == 200
-    assert response.json() == {}  # так по протоколу выглядит успешный экспорт
+    assert response.json() == {}  # that is what a successful export looks like by protocol
     assert stored_metrics(client) == 1
 
 
@@ -413,22 +413,22 @@ def test_endpoint_accepts_gzip(client: TestClient) -> None:
 
 
 def test_traces_are_acknowledged_but_not_stored(client: TestClient) -> None:
-    """Трассы (бета) подтверждаются: 4xx загнал бы экспортёр в повторы."""
+    """Traces (beta) are acknowledged: a 4xx would drive the exporter into retries."""
     assert client.post("/otlp/v1/traces", json={"resourceSpans": []}).status_code == 200
-    assert client.post("/otlp/v1/чего-то", json={}).status_code == 404
+    assert client.post("/otlp/v1/whatever", json={}).status_code == 404
 
 
 def test_broken_body_is_acknowledged(client: TestClient) -> None:
-    response = client.post("/otlp/v1/metrics", content="не json".encode())
+    response = client.post("/otlp/v1/metrics", content=b"not json")
     assert response.status_code == 200
     assert stored_metrics(client) == 0
 
 
 def test_undecodable_batches_are_visible_in_status(client: TestClient) -> None:
-    """Если выставить protocol=http/protobuf, посылки пойдут, а мы их не поймём.
+    """With protocol=http/protobuf set, payloads will arrive and we will not understand them.
 
-    Статус обязан это показать: «посылок не было» отправило бы человека искать
-    проблему не там.
+    The status must show that: "no payloads arrived" would send the human hunting in
+    the wrong place.
     """
     client.post("/otlp/v1/metrics", content=b"\x00\x01protobuf")
     state = client.get("/api/otel").json()
@@ -459,10 +459,10 @@ def test_status_endpoint_shows_what_arrived(client: TestClient) -> None:
 
 
 def test_concurrent_batches_do_not_lock_the_database(client: TestClient) -> None:
-    """Посылки приходят из разных потоков, рядом пишут watcher и чистка.
+    """Payloads arrive from different threads, the watcher and the cleanup write nearby.
 
-    SQLite пускает одного писателя за раз, поэтому важно, что параллельные
-    посылки не роняют приём: соединение ждёт своей очереди, а не отдаёт ошибку.
+    SQLite admits one writer at a time, so what matters is that parallel payloads do not
+    break reception: the connection waits its turn instead of returning an error.
     """
     batches = [
         logs_payload(event("api_request", index, model="claude-opus-5")) for index in range(40)
@@ -476,30 +476,30 @@ def test_concurrent_batches_do_not_lock_the_database(client: TestClient) -> None
     conn = connect(client.db_path, apply_schema=False)  # type: ignore[attr-defined]
     try:
         assert conn.execute("SELECT COUNT(*) FROM otel_events").fetchone()[0] == len(batches)
-        # Счётчик приёмов сходится с числом посылок: инкремент не потерялся.
+        # The reception counter matches the number of payloads: no increment was lost.
         assert conn.execute("SELECT batches FROM otel_ingest").fetchone()[0] == len(batches)
     finally:
         conn.close()
 
 
 def test_locked_database_asks_for_a_retry(client: TestClient) -> None:
-    """Отказ честнее молчаливого подтверждения: по 503 экспортёр повторит
-    посылку сам, а по 200 данные пропали бы."""
+    """A refusal is more honest than a silent acknowledgement: on a 503 the exporter repeats
+    the payload itself, while on a 200 the data would be gone."""
     with mock.patch.object(otlp, "ingest", side_effect=sqlite3.OperationalError("locked")):
         response = client.post("/otlp/v1/logs", json=logs_payload(event("api_request", 1)))
     assert response.status_code == 503
 
-    # Повтор после того, как база освободилась, проходит обычным порядком.
+    # A repeat once the database is free goes through in the usual way.
     assert (
         client.post("/otlp/v1/logs", json=logs_payload(event("api_request", 1))).status_code == 200
     )
 
 
 def test_parallel_writers_wait_for_each_other(tmp_path: Path) -> None:
-    """Каждый запрос пишет своим соединением из своего потока — ровно так же,
-    как это делает сервер. Писатель в SQLite один, остальные ждут очереди."""
+    """Every request writes through its own connection from its own thread - exactly the
+    way the server does it. SQLite has one writer, the rest wait their turn."""
     db_path = tmp_path / "parallel.db"
-    connect(db_path).close()  # схема
+    connect(db_path).close()  # the schema
 
     def write(index: int) -> dict[str, int]:
         conn = connect(db_path, apply_schema=False)
@@ -519,15 +519,15 @@ def test_parallel_writers_wait_for_each_other(tmp_path: Path) -> None:
         conn.close()
 
 
-# --- срок хранения -----------------------------------------------------------
+# --- retention -----------------------------------------------------------------
 
 
 def test_old_telemetry_is_pruned(conn: Any) -> None:
-    """Событий приходит по несколько на ход — без срока хранения БД растёт
-    быстрее полезных данных."""
+    """Events arrive several per turn - without a retention the database grows
+    faster than the useful data."""
     otlp.ingest(conn, "metrics", metrics_payload(point(1200, type="input")))
     otlp.ingest(conn, "logs", logs_payload(event("api_request", 1)))
-    now = datetime(2026, 9, 14, tzinfo=UTC)  # месяц спустя
+    now = datetime(2026, 9, 14, tzinfo=UTC)  # a month later
 
     assert otlp.prune(conn, keep_days=60, now=now) == {"metrics": 0, "events": 0}
     assert otlp.prune(conn, keep_days=7, now=now) == {"metrics": 1, "events": 1}
@@ -535,7 +535,7 @@ def test_old_telemetry_is_pruned(conn: Any) -> None:
 
 
 def test_pruning_keeps_recent_and_never_touches_turns(conn: Any) -> None:
-    """Чистка не трогает данные парсера: у них своя история и свой смысл."""
+    """The cleanup does not touch parser data: it has its own history and its own meaning."""
     with conn:
         conn.execute("INSERT INTO sessions (id) VALUES ('s1')")
         conn.execute(
@@ -555,7 +555,7 @@ def test_zero_days_means_keep_everything(conn: Any) -> None:
 
 
 def test_status_reports_volume(conn: Any) -> None:
-    """По объёму видно, работает ли срок хранения и во что данные обходятся."""
+    """The volume shows whether the retention works and what the data costs."""
     otlp.ingest(conn, "metrics", metrics_payload(point(1200, type="input")))
     otlp.ingest(conn, "logs", logs_payload(event("api_request", 1)))
     stored = otlp.status(conn)["stored"]
@@ -564,11 +564,11 @@ def test_status_reports_volume(conn: Any) -> None:
     assert stored["oldest"] == "2026-08-14T07:01:00.000000Z"
 
 
-# --- что телеметрия даёт дашборду и советчику -------------------------------
+# --- what telemetry gives the dashboard and the advisor ------------------------
 
 
 def test_off_transcript_usage_is_counted_apart(conn: Any) -> None:
-    """Служебные запросы считаются отдельно: в транскрипте их нет вовсе."""
+    """Service requests are counted separately: they are not in the transcript at all."""
     otlp.ingest(
         conn,
         "metrics",
@@ -595,12 +595,12 @@ def test_off_transcript_usage_is_counted_apart(conn: Any) -> None:
     assert usage["tokens"] == 535
     assert usage["input_tokens"] == 517
     assert usage["cost_usd"] == 1.0
-    assert usage["share"] == 0.5  # половина того, что телеметрия видела за период
+    assert usage["share"] == 0.5  # half of what telemetry saw over the period
     assert usage["request_kinds"][0]["source"] == "generate_session_title"
 
 
 def test_permission_decisions_are_split_by_source(conn: Any) -> None:
-    """Ручное подтверждение останавливает работу, автоматическое — нет."""
+    """A manual confirmation stops the work, an automatic one does not."""
     otlp.ingest(
         conn,
         "logs",
@@ -618,7 +618,7 @@ def test_permission_decisions_are_split_by_source(conn: Any) -> None:
 
 
 def test_permission_mode_switches_are_counted(conn: Any) -> None:
-    """Уход в acceptEdits раз за разом значит, что правила разрешений мешают."""
+    """Going into acceptEdits over and over means the permission rules are in the way."""
     otlp.ingest(
         conn,
         "logs",
@@ -630,11 +630,11 @@ def test_permission_mode_switches_are_counted(conn: Any) -> None:
     )
     stats = metrics.otel_permissions(conn, datetime(2026, 8, 14, tzinfo=UTC))
     assert stats["mode_switches"][0] == {"mode": "acceptEdits", "switches": 2}
-    assert stats["decisions"] == 0  # переключение режима — не решение по инструменту
+    assert stats["decisions"] == 0  # a mode switch is not a decision about a tool
 
 
 def test_permission_breakdown_has_a_tail_limit(conn: Any) -> None:
-    """MCP-инструментов на машине бывают десятки: хвост ест бюджет дайджеста."""
+    """A machine can carry dozens of MCP tools: the tail eats the digest budget."""
     otlp.ingest(
         conn,
         "logs",
@@ -659,7 +659,7 @@ def test_permission_breakdown_has_a_tail_limit(conn: Any) -> None:
 
 
 def test_digest_carries_work_done(conn: Any) -> None:
-    """Советчику нужен не только расход, но и что за него сделано."""
+    """The advisor needs not only the spend but also what was done for it."""
     otlp.ingest(
         conn,
         "metrics",
@@ -677,7 +677,7 @@ def test_digest_carries_work_done(conn: Any) -> None:
 
 
 def test_digest_marks_missing_telemetry(conn: Any) -> None:
-    """Без телеметрии секции помечены прочерком: ноль подтверждений — не факт."""
+    """Without telemetry the sections are marked with a dash: zero confirmations is not a fact."""
     built = digest.build(conn, datetime(2026, 8, 14, tzinfo=UTC))
     assert built["permissions"]["available"] is False
     assert built["off_transcript"]["available"] is False
@@ -703,9 +703,9 @@ def test_digest_carries_permissions_when_telemetry_works(conn: Any) -> None:
     }
 
 
-# --- занятость сессии по событиям -------------------------------------------
+# --- session busyness by events ------------------------------------------------
 
-#: Сессия попросила инструмент в 07:00:00, смотрим на неё через полминуты.
+#: The session asked for a tool at 07:00:00, we look at it half a minute later.
 NOW = datetime(2026, 8, 14, 7, 0, 30, tzinfo=UTC)
 
 
@@ -714,7 +714,7 @@ def moment(second: int) -> str:
 
 
 def waiting_row(**extra: Any) -> dict[str, Any]:
-    """Сессия, которая попросила инструмент и с тех пор молчит."""
+    """A session that asked for a tool and has been quiet ever since."""
     return {
         "last_record_kind": "assistant",
         "last_stop_reason": "tool_use",
@@ -725,50 +725,50 @@ def waiting_row(**extra: Any) -> dict[str, Any]:
 
 
 def test_decision_event_means_the_tool_is_running() -> None:
-    """Решение по разрешению есть — сессия работает, а не ждёт человека."""
+    """There is a permission decision - the session works rather than waits for the human."""
     row = waiting_row(otel_seen_at=moment(2), tool_decided_at=moment(2))
     assert metrics.session_status(row, NOW) == metrics.STATUS_WORKING
 
 
 def test_silent_telemetry_means_waiting_for_a_human() -> None:
-    """Телеметрия работает, решения нет — это висящий запрос разрешения.
+    """Telemetry works, there is no decision - this is a hanging permission request.
 
-    Раньше здесь смотрели на потомков процесса, и инструменты без своего
-    процесса (MCP-вызовы, `WebFetch`) выглядели ожиданием ошибочно.
+    Previously the process children were consulted here, and tools without a process
+    of their own (MCP calls, `WebFetch`) looked like waiting by mistake.
     """
     row = waiting_row(otel_seen_at=moment(1), busy_since=moment(1))
     assert metrics.session_status(row, NOW) == metrics.STATUS_PERMISSION
 
 
 def test_without_telemetry_processes_still_decide() -> None:
-    """Без телеметрии остаётся прежнее правило — по дереву процессов."""
+    """Without telemetry the old rule remains - by the process tree."""
     assert metrics.session_status(waiting_row(busy_since=moment(1)), NOW) == metrics.STATUS_WORKING
     assert metrics.session_status(waiting_row(), NOW) == metrics.STATUS_PERMISSION
 
 
 def test_stale_telemetry_is_not_trusted() -> None:
-    """Телеметрию выключили посреди работы — молчание перестаёт быть ответом."""
+    """Telemetry was switched off mid-work - silence stops being an answer."""
     stale = datetime(2026, 8, 14, 6, 0, tzinfo=UTC).strftime(metrics.TS_FORMAT)
     row = waiting_row(otel_seen_at=stale, busy_since=moment(1))
     assert metrics.session_status(row, NOW) == metrics.STATUS_WORKING
 
 
 def test_decision_before_the_request_does_not_count() -> None:
-    """Решение по прошлому инструменту не разрешает следующий."""
+    """A decision about the previous tool does not allow the next one."""
     past = datetime(2026, 8, 14, 6, 59, tzinfo=UTC).strftime(metrics.TS_FORMAT)
     row = waiting_row(otel_seen_at=moment(1), tool_decided_at=past)
     assert metrics.session_status(row, NOW) == metrics.STATUS_PERMISSION
 
 
 def test_fresh_request_is_never_a_permission_prompt() -> None:
-    """Первые секунды инструмент просто работает: события едут пачкой раз в
-    несколько секунд, и решение по разрешению может быть ещё в пути."""
+    """For the first seconds the tool is simply running: events travel in batches every
+    few seconds, and the permission decision may still be on its way."""
     just_now = datetime(2026, 8, 14, 7, 0, 5, tzinfo=UTC)
     row = waiting_row(otel_seen_at=moment(1))
     assert metrics.session_status(row, just_now) == metrics.STATUS_WORKING
 
 
-# --- срез телеметрии в обзоре и фильтры -------------------------------------
+# --- the telemetry slice in the overview and the filters -----------------------
 
 
 def test_overview_carries_telemetry(client: TestClient) -> None:
@@ -795,17 +795,17 @@ def test_overview_carries_telemetry(client: TestClient) -> None:
 
 
 def test_overview_reuses_the_telemetry_slice(client: TestClient) -> None:
-    """Обзор уходит подписчикам каждую секунду, а срез телеметрии считается по
-    десяткам тысяч событий — пересчитывать его на каждый тик незачем."""
+    """The overview goes to subscribers every second, while the telemetry slice is counted
+    over tens of thousands of events - recomputing it on every tick is pointless."""
     at = now_nanos()
     client.post("/otlp/v1/logs", json=logs_payload(event("api_request", 1, at=at)))
 
-    # Срок жизни задаётся явно: на настоящие пять секунд полагаться нельзя —
-    # под нагрузкой полного прогона запросы расходятся дальше, и «свежий»
-    # срез успевает протухнуть между двумя строчками теста.
+    # The lifetime is set explicitly: relying on real five seconds is not an option -
+    # under the load of a full run the requests drift further apart, and a "fresh"
+    # slice manages to go stale between two lines of the test.
     with mock.patch.object(server, "OTEL_CACHE_SECONDS", 3600):
         assert client.get("/api/overview").json()["otel"]["active"] is True
-        # Новое событие в готовый срез уже не попадает: он ещё свежий.
+        # A new event no longer makes it into the ready slice: it is still fresh.
         client.post(
             "/otlp/v1/logs", json=logs_payload(event("api_error", 2, at=at, status_code="429"))
         )
@@ -825,7 +825,7 @@ def test_overview_without_telemetry_says_so(client: TestClient) -> None:
 
 
 def test_period_bounds_are_respected(conn: Any) -> None:
-    """Точка старше периода в счёт не идёт: обзор считает с местной полуночи."""
+    """A point older than the period does not count: the overview starts at local midnight."""
     otlp.ingest(conn, "metrics", metrics_payload(point(517, query_source="auxiliary")))
     later = datetime(2026, 8, 14, 8, tzinfo=UTC)
     assert metrics.otel_usage(conn, later)["tokens"] == 0
@@ -834,9 +834,9 @@ def test_period_bounds_are_respected(conn: Any) -> None:
 
 
 def test_project_filter_narrows_telemetry(conn: Any) -> None:
-    """Фильтр по проекту работает и здесь: сессии те же, что у остальных цифр."""
+    """The project filter works here too: the sessions are the same as for the other numbers."""
     with conn:
-        conn.execute("INSERT INTO projects (id, slug) VALUES (1, '-Users-x-первый')")
+        conn.execute("INSERT INTO projects (id, slug) VALUES (1, '-Users-x-first')")
         conn.execute("INSERT INTO sessions (id, project_id) VALUES ('s1', 1)")
     otlp.ingest(conn, "metrics", metrics_payload(point(517, query_source="auxiliary")))
     otlp.ingest(
@@ -847,26 +847,26 @@ def test_project_filter_narrows_telemetry(conn: Any) -> None:
         ),
     )
     since = datetime(2026, 8, 14, tzinfo=UTC)
-    assert metrics.otel_usage(conn, since, project="первый")["tokens"] == 517
-    assert metrics.otel_usage(conn, since, project="второй")["tokens"] == 0
-    assert metrics.otel_permissions(conn, since, project="первый")["manual"] == 1
-    assert metrics.otel_permissions(conn, since, project="второй")["manual"] == 0
+    assert metrics.otel_usage(conn, since, project="first")["tokens"] == 517
+    assert metrics.otel_usage(conn, since, project="second")["tokens"] == 0
+    assert metrics.otel_permissions(conn, since, project="first")["manual"] == 1
+    assert metrics.otel_permissions(conn, since, project="second")["manual"] == 0
 
-    # Дайджест по проекту не должен смешивать в одной секции свои цифры с
-    # общемашинными: активное время фильтруется так же, как расход.
+    # A per-project digest must not mix its own numbers with machine-wide ones in one
+    # section: active time is filtered the same way as spend.
     otlp.ingest(
         conn,
         "metrics",
         metrics_payload(point(90, type="user"), name="claude_code.active_time.total"),
     )
-    assert metrics.otel_work(conn, since, project="первый")["active_seconds"] == 90
-    assert metrics.otel_work(conn, since, project="второй")["active_seconds"] == 0
-    built = digest.build(conn, since, project="второй")["off_transcript"]
+    assert metrics.otel_work(conn, since, project="first")["active_seconds"] == 90
+    assert metrics.otel_work(conn, since, project="second")["active_seconds"] == 0
+    built = digest.build(conn, since, project="second")["off_transcript"]
     assert built["available"] is False
 
 
 def test_mcp_startup_cost_is_counted(conn: Any) -> None:
-    """Сервер стартует заново в каждой сессии, даже если его не позвали."""
+    """A server starts anew in every session, even if it was never called."""
     otlp.ingest(
         conn,
         "logs",
@@ -886,8 +886,8 @@ def test_mcp_startup_cost_is_counted(conn: Any) -> None:
                 duration_ms="2190",
                 **{"plugin.name": "chrome-devtools-mcp"},
             ),
-            # Отключение несёт то же поле, но означает прожитое время: сложить
-            # его со временем подключения значило бы соврать вчетверо.
+            # A disconnect carries the same field but means the lifetime lived: adding
+            # it to the connection time would lie fourfold.
             event(
                 "mcp_server_connection",
                 3,
@@ -901,13 +901,13 @@ def test_mcp_startup_cost_is_counted(conn: Any) -> None:
                 status="failed",
                 duration_ms="120",
                 error_code="ENOENT",
-                **{"plugin.name": "сломанный"},
+                **{"plugin.name": "broken"},
             ),
         ),
     )
     stats = metrics.otel_mcp(conn, datetime(2026, 8, 14, tzinfo=UTC))
     assert stats["connect_seconds"] == pytest.approx(3.94)
-    assert stats["seconds_per_session"] == pytest.approx(3.94)  # все события одной сессии
+    assert stats["seconds_per_session"] == pytest.approx(3.94)  # all events from one session
     assert stats["failures"] == 1
     assert stats["servers"][0] == {
         "server": "chrome-devtools-mcp",
@@ -937,13 +937,13 @@ def test_digest_carries_mcp_startup_cost(conn: Any) -> None:
 
 
 def test_loaded_plugins_show_what_they_bring(conn: Any) -> None:
-    """Плагин бесплатен, а его MCP-сервер и скиллы — нет: они грузятся всегда."""
+    """A plugin is free, its MCP server and skills are not: they load every time."""
     otlp.ingest(
         conn,
         "logs",
         logs_payload(
             event("plugin_loaded", 1, has_mcp="true", skill_path_count=0, **{"plugin.name": "pw"}),
-            # Тот же плагин в другой сессии — в списке он остаётся одной строкой.
+            # The same plugin in another session - it stays one row in the list.
             event("plugin_loaded", 2, has_mcp="true", skill_path_count=0, **{"plugin.name": "pw"}),
             event(
                 "plugin_loaded",
@@ -965,13 +965,13 @@ def test_loaded_plugins_show_what_they_bring(conn: Any) -> None:
 
 
 def test_digest_omits_mcp_connections_without_telemetry(conn: Any) -> None:
-    """Без телеметрии раздела нет вовсе — пустой список читался бы как «серверов нет»."""
+    """Without telemetry the section is absent - an empty list would read as "no servers"."""
     assert "connections" not in digest.build(conn, datetime(2026, 8, 14, tzinfo=UTC))["mcp"]
 
 
 def test_slash_commands_are_counted(conn: Any) -> None:
-    """В транскрипте от слэш-команды остаётся разметка, а не имя: парсер её не
-    разбирает, телеметрия называет команду прямо."""
+    """In the transcript a slash command leaves markup rather than a name: the parser does
+    not unpack it, telemetry names the command directly."""
     otlp.ingest(
         conn,
         "logs",
@@ -992,15 +992,15 @@ def test_slash_commands_are_counted(conn: Any) -> None:
     assert stats["prompts"] == 4
     assert stats["avg_length"] == 30.0
     assert stats["commands"][0] == {"command": "clear", "source": "builtin", "calls": 2}
-    assert len(stats["commands"]) == 2  # промпт без команды в список не попадает
+    assert len(stats["commands"]) == 2  # a prompt without a command does not enter the list
 
     built = digest.build(conn, datetime(2026, 8, 14, tzinfo=UTC))["off_transcript"]
     assert built["prompts"]["commands"][0]["command"] == "clear"
 
 
 def test_hook_time_is_counted(conn: Any) -> None:
-    """Хук выполняется между ходами: в транскрипте на его месте просто пауза,
-    и HTTP-хук к недоступному сервису там неотличим от раздумий модели."""
+    """A hook runs between turns: in the transcript there is just a pause in its place,
+    and an HTTP hook to an unreachable service is indistinguishable from model thinking."""
     otlp.ingest(
         conn,
         "logs",
@@ -1025,7 +1025,7 @@ def test_hook_time_is_counted(conn: Any) -> None:
                 hook_event="PreToolUse",
                 total_duration_ms="6",
             ),
-            # Начало выполнения времени ещё не знает — считать надо завершения.
+            # The start of execution does not know the time yet - completions are what count.
             event("hook_execution_start", 4, hook_event="Stop"),
         ),
     )
@@ -1040,14 +1040,14 @@ def test_hook_time_is_counted(conn: Any) -> None:
 
 
 def test_registered_hooks_are_listed_once(conn: Any) -> None:
-    """Хуки регистрируются заново в каждой сессии — считаются уникальные пары."""
+    """Hooks are registered anew in every session - unique pairs are counted."""
     otlp.ingest(
         conn,
         "logs",
         logs_payload(
             event("hook_registered", 1, hook_event="SessionStart", hook_type="http"),
             event("hook_registered", 2, hook_event="Stop", hook_type="http"),
-            event("hook_registered", 3, hook_event="Stop", hook_type="http"),  # вторая сессия
+            event("hook_registered", 3, hook_event="Stop", hook_type="http"),  # the second session
             event("hook_registered", 4, hook_event="PreToolUse", hook_type="command"),
         ),
     )
@@ -1060,8 +1060,8 @@ def test_registered_hooks_are_listed_once(conn: Any) -> None:
 
 
 def test_session_starts_are_labelled(conn: Any) -> None:
-    """`start_type` размечает запуски: транскрипт такой разметки не несёт,
-    там продолжение видно только по копиям ходов."""
+    """`start_type` marks the starts: the transcript carries no such marking,
+    there a continuation is visible only through copied turns."""
     name = "claude_code.session.count"
     otlp.ingest(conn, "metrics", metrics_payload(point(1, start_type="fresh"), name=name))
     otlp.ingest(conn, "metrics", metrics_payload(point(1, start_type="resume"), name=name))
@@ -1075,13 +1075,13 @@ def test_session_starts_are_labelled(conn: Any) -> None:
 
     counts = metrics.otel_sessions(conn, datetime(2026, 8, 14, tzinfo=UTC))
     assert counts["resumed"] == 2
-    assert counts["telemetry"] == 1  # все точки об одной сессии
+    assert counts["telemetry"] == 1  # all the points are about one session
     assert counts["transcripts"] == 1
     assert {row["start_type"] for row in counts["starts"]} == {"fresh", "resume", "continue"}
 
 
 def test_work_done_is_counted_from_metrics(conn: Any) -> None:
-    """Строки кода и активное время считает сам Claude Code — в истории их нет."""
+    """Lines of code and active time are counted by Claude Code itself - history has neither."""
     lines = "claude_code.lines_of_code.count"
     active = "claude_code.active_time.total"
     otlp.ingest(conn, "metrics", metrics_payload(point(120, type="added"), name=lines))
@@ -1092,13 +1092,13 @@ def test_work_done_is_counted_from_metrics(conn: Any) -> None:
     work = metrics.otel_work(conn, datetime(2026, 8, 14, tzinfo=UTC))
     assert work["lines_added"] == 120
     assert work["lines_removed"] == 35
-    # Активное время — сумма обоих видов: и человек за клавиатурой, и работа CLI.
+    # Active time is the sum of both kinds: the human at the keyboard and the CLI work.
     assert work["active_seconds"] == 300
     assert work["waiting_seconds"] == 210
 
 
 def test_api_failures_are_visible_only_here(conn: Any) -> None:
-    """Сорвавшийся запрос в транскрипт не попадает: там только итоговый ответ."""
+    """A failed request never reaches the transcript: there is only the final answer there."""
     otlp.ingest(
         conn,
         "logs",
@@ -1107,7 +1107,7 @@ def test_api_failures_are_visible_only_here(conn: Any) -> None:
             event("api_error", 2, status_code="429", attempt=2),
             event("api_error", 3, status_code="529", attempt=1),
             event("api_refusal", 4),
-            event("api_request", 5),  # удавшийся запрос ошибкой не считается
+            event("api_request", 5),  # a successful request does not count as an error
         ),
     )
     stats = metrics.otel_errors(conn, datetime(2026, 8, 14, tzinfo=UTC))
@@ -1118,7 +1118,7 @@ def test_api_failures_are_visible_only_here(conn: Any) -> None:
 
 
 def test_client_failures_are_counted_apart(conn: Any) -> None:
-    """Сбой внутри клиента — другая беда, чем отказ сети: работа обрывается."""
+    """A failure inside the client is another trouble than a network refusal: work breaks off."""
     otlp.ingest(
         conn,
         "logs",
@@ -1130,7 +1130,7 @@ def test_client_failures_are_counted_apart(conn: Any) -> None:
         ),
     )
     stats = metrics.otel_errors(conn, datetime(2026, 8, 14, tzinfo=UTC))
-    assert stats["errors"] == 1  # отказ сети считается своим счётчиком
+    assert stats["errors"] == 1  # a network refusal is counted by its own counter
     assert stats["internal"] == [
         {"error": "TypeError", "count": 2},
         {"error": "SyntaxError", "count": 1},
@@ -1138,8 +1138,8 @@ def test_client_failures_are_counted_apart(conn: Any) -> None:
 
 
 def test_tool_times_come_from_events(conn: Any) -> None:
-    """Время в инструменте есть только в телеметрии: в транскрипте между
-    запросом и результатом лежит и ожидание разрешения."""
+    """Time inside a tool exists only in telemetry: in the transcript the wait for a
+    permission lies between the request and the result."""
     otlp.ingest(
         conn,
         "logs",
@@ -1150,12 +1150,12 @@ def test_tool_times_come_from_events(conn: Any) -> None:
         ),
     )
     rows = metrics.session_tool_times(conn, "s1")
-    assert [row["tool"] for row in rows] == ["Bash", "Read"]  # порядок по времени
+    assert [row["tool"] for row in rows] == ["Bash", "Read"]  # ordered by time
     assert rows[0]["calls"] == 2
     assert rows[0]["seconds"] == 5.0
     assert rows[0]["slowest"] == 4.032
     assert rows[0]["failures"] == 1
-    assert metrics.session_tool_times(conn, "нет-такой") == []
+    assert metrics.session_tool_times(conn, "no-such") == []
 
 
 def test_session_endpoint_carries_tool_times(client: TestClient) -> None:
@@ -1177,7 +1177,7 @@ def test_session_endpoint_carries_tool_times(client: TestClient) -> None:
 
 
 def test_session_list_reads_the_decision_from_the_database(conn: Any) -> None:
-    """Сквозная проверка: событие в БД доходит до статуса в списке сессий."""
+    """An end-to-end check: an event in the database reaches the status in the session list."""
     asked = datetime(2026, 8, 14, 7, 0, tzinfo=UTC)
     with conn:
         conn.execute(

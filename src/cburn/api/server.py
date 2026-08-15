@@ -1,12 +1,12 @@
-"""HTTP и WebSocket на 127.0.0.1 (задача A5, ТЗ §5).
+"""HTTP and WebSocket on 127.0.0.1 (task A5, TZ §5).
 
-Наружу сервер не смотрит: слушает только localhost. Фронт общается с бэком
-исключительно через эти эндпоинты — прямых обращений к файловой системе у него
-нет, иначе обёртка Tauri на M5 потребовала бы переделки.
+The server does not face outwards: it listens on localhost only. The frontend talks to
+the backend exclusively through these endpoints - it has no direct filesystem access,
+otherwise the Tauri wrapper in M5 would have demanded a rewrite.
 
-Watcher живёт в том же процессе: он в своём потоке дочитывает транскрипты и
-через `on_ingest` толкает событие в очередь asyncio, откуда оно уходит всем
-подписчикам `/ws`.
+The watcher lives in the same process: in its own thread it reads transcript tails and
+through `on_ingest` pushes an event into an asyncio queue, from where it goes to every
+subscriber of `/ws`.
 """
 
 from __future__ import annotations
@@ -56,33 +56,33 @@ from ..processes import live_state, process_for_session, terminate
 
 log = logging.getLogger(__name__)
 
-#: Как часто обзор уходит подписчикам, даже когда в транскриптах тихо. Без
-#: этого стрелка замирала бы на последнем ходе: окна burn rate скользят, и в
-#: паузе расход должен падать сам. Пересчёт обзора стоит около 2 мс, так что
-#: секундный такт ничего не нагружает.
+#: How often the overview goes to subscribers even when the transcripts are quiet.
+#: Without this the needle would freeze at the last turn: burn rate windows slide, and
+#: in a pause the spend must fall by itself. Recomputing the overview costs about 2 ms,
+#: so a one-second tick loads nothing.
 TICK_SECONDS = 1.0
 
-#: Как часто сверять сессии с процессами Claude Code. Чаще, чем появляются и
-#: заканчиваются сессии, потому что тем же проходом обновляется занятость —
-#: она меняется на каждой команде. Дорогой `claude agents --json` при этом
-#: кэшируется внутри `processes`, наружу каждый раз ходит только `ps`.
+#: How often to reconcile sessions with Claude Code processes. More often than sessions
+#: appear and end, because the same pass refreshes busyness - and that changes with
+#: every command. The expensive `claude agents --json` is cached inside `processes`
+#: meanwhile, only `ps` goes out every time.
 LIVENESS_SECONDS = 5.0
 
-#: Насколько живёт готовый срез телеметрии. Экспортёр шлёт посылки раз в
-#: 5-10 секунд, чаще пересчитывать нечего, а стоит он на порядок дороже
-#: остального обзора (`tools/otel_bench.py`).
+#: How long a ready telemetry slice lives. The exporter sends payloads every
+#: 5-10 seconds, there is nothing to recompute more often, and it costs an order of
+#: magnitude more than the rest of the overview (`tools/otel_bench.py`).
 OTEL_CACHE_SECONDS = 5.0
 
-#: Опрос живости: живые сессии и момент запуска их самого молодого потомка.
-#: None — спросить не удалось (см. `processes.live_state`).
+#: The liveness poll: live sessions and the start moment of their youngest child.
+#: None means asking failed (see `processes.live_state`).
 LivenessProbe = Callable[[], dict[str, datetime | None] | None]
 
-#: Собранный фронт (задача A6). Пока его нет, отдаётся заглушка.
+#: The built frontend (task A6). Until it exists, a stub is served.
 WEB_DIST = Path(__file__).resolve().parents[3] / "web" / "dist"
 
 
 class Hub:
-    """Подписчики WebSocket и рассылка им событий."""
+    """WebSocket subscribers and the broadcast to them."""
 
     def __init__(self) -> None:
         self._clients: set[WebSocket] = set()
@@ -103,7 +103,7 @@ class Hub:
         for socket in clients:
             try:
                 await socket.send_json(message)
-            except Exception:  # отвалившийся клиент не должен ломать рассылку
+            except Exception:  # a dropped client must not break the broadcast
                 await self.leave(socket)
 
     @property
@@ -120,15 +120,15 @@ def create_app(
     liveness: LivenessProbe | None = None,
     advisor_run: Any = None,
 ) -> FastAPI:
-    """Собрать приложение.
+    """Assemble the application.
 
-    `watch=False` — для тестов, где watcher не нужен; `limits`, `liveness` и
-    `advisor_run` подменяются там же, чтобы тесты не ходили ни в связку ключей,
-    ни в сеть, ни в `claude agents --json`, ни в `claude -p`.
+    `watch=False` is for tests where the watcher is not needed; `limits`, `liveness` and
+    `advisor_run` are swapped there too, so that tests touch neither the keychain, nor
+    the network, nor `claude agents --json`, nor `claude -p`.
     """
     hub = Hub()
     events: asyncio.Queue[IngestStats] = asyncio.Queue()
-    # Лимиты живут отдельно от БД: они приходят от Anthropic, а не из транскриптов.
+    # Limits live apart from the database: they come from Anthropic, not from transcripts.
     plan_limits = limits or LimitsWatcher()
 
     def open_db() -> Any:
@@ -136,7 +136,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        with connect(db_path) as conn:  # схема должна существовать до первого запроса
+        with connect(db_path) as conn:  # the schema must exist before the first request
             pricing.recalculate(conn, config.load())
         loop = asyncio.get_running_loop()
         watcher: TranscriptWatcher | None = None
@@ -145,24 +145,24 @@ def create_app(
             root = projects_dir or paths.CLAUDE_PROJECTS_DIR
 
             def publish(stats: IngestStats) -> None:
-                # Вызывается в потоке watcher, а очередь принадлежит циклу
-                # asyncio — отсюда call_soon_threadsafe.
+                # Called in the watcher thread, while the queue belongs to the asyncio
+                # loop - hence call_soon_threadsafe.
                 loop.call_soon_threadsafe(events.put_nowait, stats)
 
             watcher = TranscriptWatcher(root, db_path=db_path, on_ingest=publish)
             watcher.start()
             pump = asyncio.create_task(_pump(events, hub, collect_overview))
-        # Тикер не зависит от watcher: окна burn rate скользят и без новых ходов.
+        # The ticker does not depend on the watcher: burn rate windows slide without new turns.
         ticker = asyncio.create_task(_ticker(hub, collect_overview))
-        # Советчик стоит денег на каждом такте, поэтому включается только
-        # конфигом и пропускает такты без активности (задача D3).
+        # The advisor costs money on every tick, so it is switched on by config only
+        # and skips ticks without activity (task D3).
         advice_loop = asyncio.create_task(scheduler.loop(open_db, config.load, runner=advisor_run))
-        # Телеметрия копится быстрее полезных данных — чистка на старте и раз
-        # в сутки (веха E). Данные парсера при этом не трогаются.
+        # Telemetry piles up faster than the useful data - a cleanup at start and once
+        # a day (milestone E). Parser data is left alone in the process.
         housekeeping = asyncio.create_task(_prune_otel(open_db))
         ask_live = liveness or _default_liveness
-        # Первый проход — до первого запроса: иначе живая сессия успеет
-        # мигнуть «закончилась».
+        # The first pass happens before the first request: otherwise a live session
+        # would manage to blink "finished".
         await _refresh_liveness(open_db, ask_live)
         probe = asyncio.create_task(_liveness(open_db, ask_live))
         try:
@@ -178,9 +178,9 @@ def create_app(
 
     app = FastAPI(title="cburn", lifespan=lifespan)
 
-    #: Готовый срез телеметрии и время его расчёта: обзор уходит подписчикам
-    #: каждую секунду, а телеметрия за день считается по десяткам тысяч событий
-    #: и меняется не чаще, чем экспортёр шлёт посылки.
+    #: A ready telemetry slice and the time it was computed: the overview goes to
+    #: subscribers every second, while a day of telemetry is counted over tens of
+    #: thousands of events and changes no more often than the exporter sends.
     otel_cache: dict[str, Any] = {"at": 0.0, "value": None}
 
     def collect_otel(conn: Any, moment: datetime) -> dict[str, Any]:
@@ -196,7 +196,7 @@ def create_app(
             payload = overview(conn, otel=collect_otel(conn, datetime.now(UTC)))
         finally:
             conn.close()
-        # Запрос к Anthropic блокирующий и раз в пять минут — в поток.
+        # The request to Anthropic is blocking and happens every five minutes - into a thread.
         payload["plan"] = await asyncio.to_thread(plan_limits.current)
         return payload
 
@@ -206,7 +206,7 @@ def create_app(
 
     @app.get("/api/notify")
     async def api_notify_state() -> dict[str, Any]:
-        """Состояние уведомлений: стоит ли пауза и что уходило последним (D5)."""
+        """Notification state: whether a pause is on and what went out last (D5)."""
         conn = open_db()
         try:
             until = notifier.paused_until(conn)
@@ -227,9 +227,9 @@ def create_app(
 
     @app.post("/api/notify/pause")
     async def api_notify_pause(on: bool = True) -> dict[str, Any]:
-        """Тишина на два часа или снятие паузы (пункт трея и кнопка в UI).
+        """Two hours of silence or lifting the pause (the tray item and the UI button).
 
-        `crit` сквозь паузу всё равно проходит — решает `notifier.dispatch`.
+        `crit` passes through the pause anyway - that is decided by `notifier.dispatch`.
         """
         conn = connect(db_path, apply_schema=False)
         try:
@@ -241,7 +241,7 @@ def create_app(
 
     @app.get("/api/advice")
     async def api_advice(limit: int = 20) -> dict[str, Any]:
-        """История разборов со вложенными советами (экран «Советы», задача D6)."""
+        """Analysis history with nested tips (the "Advice" screen, task D6)."""
         conn = open_db()
         try:
             return {"runs": advice_history(conn, limit)}
@@ -250,7 +250,7 @@ def create_app(
 
     @app.post("/api/advice/items/{item_id}")
     async def api_advice_status(item_id: int, status: str) -> dict[str, Any]:
-        """Принять или отклонить совет. Отклонённый не придёт снова."""
+        """Accept or dismiss a tip. A dismissed one will not come again."""
         conn = connect(db_path, apply_schema=False)
         try:
             try:
@@ -265,9 +265,9 @@ def create_app(
 
     @app.post("/api/advice/run")
     async def api_advice_run(period: str = "24h") -> dict[str, Any]:
-        """Разобрать период сейчас, не дожидаясь такта.
+        """Analyse the period now, without waiting for a tick.
 
-        Стоит денег, поэтому отдельной кнопкой с подтверждением.
+        It costs money, hence a separate button with a confirmation.
         """
         settings = config.load()
 
@@ -291,12 +291,12 @@ def create_app(
 
     @app.get("/api/config")
     async def api_config() -> dict[str, Any]:
-        """Настройки как они лежат в файле (экран «Настройки», задача C3)."""
+        """Settings exactly as they sit in the file (the "Settings" screen, task C3)."""
         return {"config": config.load(), "path": str(paths.CONFIG_PATH)}
 
     @app.put("/api/config")
     async def api_config_save(payload: dict[str, Any]) -> dict[str, Any]:
-        """Записать настройки. Цены применяются сразу: пересчёт стоит секунды."""
+        """Write the settings. Prices are applied at once: recomputing takes seconds."""
         incoming = payload.get("config")
         if not isinstance(incoming, dict):
             raise HTTPException(status_code=400, detail="ждём объект config")
@@ -306,8 +306,8 @@ def create_app(
         config.save(incoming)
 
         def apply_prices() -> None:
-            # Соединение открывается здесь же: объект SQLite принадлежит потоку,
-            # в котором создан, а пересчёт уходит в отдельный.
+            # The connection is opened right here: an SQLite object belongs to the thread
+            # it was created in, and the recomputation goes into a separate one.
             conn = connect(db_path, apply_schema=False)
             try:
                 pricing.recalculate(conn, incoming)
@@ -319,7 +319,7 @@ def create_app(
 
     @app.post("/api/plan/refresh")
     async def api_plan_refresh() -> dict[str, Any]:
-        """Спросить лимиты немедленно: обычный такт — раз в пять минут."""
+        """Ask for the limits immediately: the usual tick is every five minutes."""
         return {"plan": await asyncio.to_thread(plan_limits.refresh)}
 
     @app.get("/api/sessions")
@@ -329,7 +329,7 @@ def create_app(
         status: str | None = None,
         period: str | None = None,
     ) -> dict[str, Any]:
-        """Экран «Сессии»: фильтры по проекту, статусу и периоду (задача C1)."""
+        """The "Sessions" screen: filters by project, status and period (task C1)."""
         conn = open_db()
         try:
             return {
@@ -362,11 +362,11 @@ def create_app(
                     {"tool": tool, "calls": calls}
                     for tool, calls in session_tools(conn, session_id)
                 ],
-                # Сколько времени ушло в каждый инструмент — знает телеметрия (веха E).
+                # How much time went into each tool is known to telemetry (milestone E).
                 "tool_times": session_tool_times(conn, session_id),
-                # Линия работы: resume рассыпает одну работу по нескольким сессиям.
+                # The work line: resume scatters one piece of work over several sessions.
                 "chain": session_chain(conn, session_id),
-                # Экран «Сессия» (задача C2): график контекста и лента ходов.
+                # The "Session" screen (task C2): the context chart and the turn feed.
                 "turns": session_turns(conn, session_id),
                 "events": session_events(conn, session_id),
             }
@@ -375,7 +375,7 @@ def create_app(
 
     @app.post("/api/sessions/{session_id}/hide")
     async def api_hide(session_id: str, hidden: bool = True) -> dict[str, Any]:
-        """Убрать сессию с дашборда или вернуть её обратно."""
+        """Remove a session from the dashboard or bring it back."""
         conn = connect(db_path, apply_schema=False)
         try:
             if not set_hidden(conn, session_id, hidden):
@@ -386,11 +386,11 @@ def create_app(
 
     @app.post("/api/sessions/{session_id}/close")
     async def api_close(session_id: str) -> dict[str, Any]:
-        """Завершить процесс сессии и убрать её с дашборда.
+        """Terminate the session process and remove it from the dashboard.
 
-        Процесс берётся из `claude agents --json` — это точная связка с
-        `sessionId`. Если сессии там нет, она уже закончилась: просто убираем
-        карточку.
+        The process comes from `claude agents --json` - that is the exact link to the
+        `sessionId`. If the session is not there, it has already finished: we just remove
+        the card.
         """
         conn = connect(db_path, apply_schema=False)
         try:
@@ -411,16 +411,16 @@ def create_app(
 
     @app.post("/otlp/v1/{signal}")
     async def otlp_export(signal: str, request: Request) -> Response:
-        """Приёмник официальной телеметрии Claude Code (веха E, ТЗ §2).
+        """The receiver of official Claude Code telemetry (milestone E, TZ §2).
 
-        Claude Code шлёт сюда посылки OTLP/JSON, когда в его окружении задан
-        `OTEL_EXPORTER_OTLP_ENDPOINT` на этот адрес (`cburn otel` печатает
-        нужные переменные). Порт свой сервер не занимает: телеметрия приходит
-        на тот же localhost:8799, что и дашборд.
+        Claude Code sends OTLP/JSON payloads here when its environment has
+        `OTEL_EXPORTER_OTLP_ENDPOINT` pointed at this address (`cburn otel` prints the
+        variables needed). It occupies no port of its own: telemetry arrives at the same
+        localhost:8799 as the dashboard.
 
-        Ответ всегда пустой JSON — так по протоколу выглядит успешный экспорт.
-        Выключенный в конфиге приёмник тоже подтверждает посылку: 4xx заставил
-        бы экспортёр копить повторы и жаловаться в лог Claude Code.
+        The answer is always empty JSON - that is what a successful export looks like by
+        protocol. A receiver switched off in the config acknowledges the payload too: a
+        4xx would make the exporter pile up retries and complain into the Claude Code log.
         """
         if signal not in otlp.SIGNALS:
             raise HTTPException(status_code=404, detail="неизвестный сигнал OTLP")
@@ -430,16 +430,16 @@ def create_app(
         try:
             payload = otlp.decode(body, request.headers.get("content-encoding"))
         except Exception:
-            # Обычно это `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`: посылки
-            # идут, а мы их не понимаем. Молча их проглотить нельзя — тогда
-            # `cburn otel` скажет «посылок не было», и человек будет искать
-            # проблему не там. Отметка в счётчике потерь показывает правду.
-            log.warning("посылка OTLP (%s) не разобрана: %s байт", signal, len(body))
+            # Usually this is `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`: payloads
+            # arrive and we do not understand them. Swallowing them silently is not an
+            # option - then `cburn otel` would say "no payloads arrived" and the human
+            # would hunt in the wrong place. A mark in the loss counter shows the truth.
+            log.warning("OTLP payload (%s) not parsed: %s bytes", signal, len(body))
             await asyncio.to_thread(_note_undecodable, open_db, signal)
             return JSONResponse({})
 
         def write() -> dict[str, int]:
-            # Соединение SQLite принадлежит потоку, в котором создано.
+            # An SQLite connection belongs to the thread it was created in.
             conn = connect(db_path, apply_schema=False)
             try:
                 return otlp.ingest(conn, signal, payload)
@@ -449,18 +449,18 @@ def create_app(
         try:
             stats = await asyncio.to_thread(write)
         except sqlite3.OperationalError as exc:
-            # Писатель в SQLite один: если рядом идёт долгая транзакция (полная
-            # переиндексация), очередь может и не дождаться. Отказ с 503 честнее
-            # молчаливого подтверждения — экспортёр повторит посылку сам.
-            log.warning("посылка OTLP (%s) не записана: %s", signal, exc)
+            # SQLite has a single writer: if a long transaction runs nearby (a full
+            # reindex), the queue may not wait it out. Refusing with a 503 is more honest
+            # than a silent acknowledgement - the exporter will repeat the payload itself.
+            log.warning("OTLP payload (%s) not stored: %s", signal, exc)
             return JSONResponse({}, status_code=503)
         if stats["dropped"]:
-            log.info("OTLP (%s): не разобрано кусков — %s", signal, stats["dropped"])
+            log.info("OTLP (%s): chunks not parsed - %s", signal, stats["dropped"])
         return JSONResponse({})
 
     @app.get("/api/otel")
     async def api_otel() -> dict[str, Any]:
-        """Что дошло по телеметрии: приёмы, метрики и события (веха E)."""
+        """What arrived over telemetry: receptions, metrics and events (milestone E)."""
         conn = open_db()
         try:
             return otlp.status(conn) | {"enabled": config.load().get("otel", {}).get("enabled")}
@@ -476,7 +476,7 @@ def create_app(
         await hub.join(socket)
         await socket.send_json({"type": "overview", "data": await collect_overview()})
         try:
-            while True:  # входящие сообщения не нужны, ждём разрыва
+            while True:  # incoming messages are not needed, we wait for the disconnect
                 await socket.receive_text()
         except WebSocketDisconnect:
             pass
@@ -492,10 +492,10 @@ def _default_liveness() -> dict[str, datetime | None] | None:
 
 
 async def _refresh_liveness(open_db: Any, probe: LivenessProbe) -> None:
-    """Один проход сверки `is_live` со списком процессов Claude Code (задача B4).
+    """One pass reconciling `is_live` with the list of Claude Code processes (task B4).
 
-    Опрос синхронный и не быстрый (около 1,3 с), поэтому уходит в поток: цикл
-    событий должен успевать раздавать обзор каждую секунду.
+    The poll is synchronous and not fast (about 1.3 s), so it goes into a thread: the
+    event loop must keep handing out the overview every second.
     """
     try:
         ids = await asyncio.to_thread(probe)
@@ -505,38 +505,38 @@ async def _refresh_liveness(open_db: Any, probe: LivenessProbe) -> None:
         finally:
             conn.close()
         if changed:
-            log.info("живость сессий: обновлено %s", changed)
+            log.info("session liveness: %s updated", changed)
     except asyncio.CancelledError:
         raise
-    except Exception:  # фоновая задача не должна падать молча
-        log.exception("не удалось обновить живость сессий")
+    except Exception:  # a background task must not fail silently
+        log.exception("could not refresh session liveness")
 
 
 async def _liveness(open_db: Any, probe: LivenessProbe) -> None:
-    """Периодическая сверка живости."""
+    """Periodic liveness reconciliation."""
     while True:
         await asyncio.sleep(LIVENESS_SECONDS)
         await _refresh_liveness(open_db, probe)
 
 
-#: Как часто убирать устаревшую телеметрию. Реже суток смысла нет: срок
-#: хранения считается в сутках, а удаление стоит доли секунды.
+#: How often to remove stale telemetry. Less often than a day makes no sense: the
+#: retention is counted in days, and the deletion costs fractions of a second.
 PRUNE_SECONDS = 24 * 3600
 
 
 def _note_undecodable(open_db: Any, signal: str) -> None:
-    """Отметить непонятую посылку в счётчиках приёма (веха E)."""
+    """Mark an incomprehensible payload in the reception counters (milestone E)."""
     conn = open_db()
     try:
         otlp.note_ingest(conn, signal, stored=0, dropped=1)
-    except sqlite3.OperationalError as exc:  # база занята — отметка не стоит повтора
-        log.warning("отметка о непонятой посылке не записана: %s", exc)
+    except sqlite3.OperationalError as exc:  # the database is busy - the mark is not worth a retry
+        log.warning("the mark about an incomprehensible payload was not stored: %s", exc)
     finally:
         conn.close()
 
 
 def _prune_once(open_db: Any, keep_days: int) -> dict[str, int]:
-    """Одна чистка в своём соединении: объект SQLite принадлежит потоку."""
+    """One cleanup in its own connection: an SQLite object belongs to the thread."""
     conn = open_db()
     try:
         return otlp.prune(conn, keep_days)
@@ -545,25 +545,25 @@ def _prune_once(open_db: Any, keep_days: int) -> dict[str, int]:
 
 
 async def _prune_otel(open_db: Any) -> None:
-    """Чистка телеметрии по сроку хранения: сразу и дальше раз в сутки."""
+    """Telemetry cleanup by retention: right away and once a day afterwards."""
     while True:
         try:
-            # Чтение конфига тоже внутри: файл правят руками, и опечатка в
-            # `keep_days` не должна тихо убивать фоновую задачу навсегда.
+            # Reading the config is inside too: the file is edited by hand, and a typo in
+            # `keep_days` must not quietly kill the background task forever.
             keep_days = int((config.load().get("otel") or {}).get("keep_days") or 0)
             await asyncio.to_thread(_prune_once, open_db, keep_days)
         except asyncio.CancelledError:
             raise
-        except Exception:  # фоновая задача не должна падать молча
-            log.exception("не удалось убрать устаревшую телеметрию")
+        except Exception:  # a background task must not fail silently
+            log.exception("could not remove stale telemetry")
         await asyncio.sleep(PRUNE_SECONDS)
 
 
 async def _ticker(hub: Hub, collect: Any) -> None:
-    """Периодический обзор: показания прибора не должны застывать в паузах."""
+    """The periodic overview: the instrument readings must not freeze during pauses."""
     while True:
         await asyncio.sleep(TICK_SECONDS)
-        if hub.size == 0:  # некому показывать — незачем и считать
+        if hub.size == 0:  # nobody to show it to - nothing to compute either
             continue
         payload = await _collect(collect)
         if payload is not None:
@@ -574,15 +574,15 @@ async def _collect(collect: Any) -> dict[str, Any] | None:
     try:
         return await collect()
     except Exception:
-        log.exception("не удалось собрать обзор")
+        log.exception("could not build the overview")
         return None
 
 
 async def _pump(events: asyncio.Queue[IngestStats], hub: Hub, collect: Any) -> None:
-    """Событие от watcher → свежий обзор всем подписчикам."""
+    """An event from the watcher -> a fresh overview for every subscriber."""
     while True:
         await events.get()
-        # Пачку событий подряд схлопываем: обзор всё равно считается целиком.
+        # A burst of events in a row is collapsed: the overview is computed whole anyway.
         while not events.empty():
             events.get_nowait()
         payload = await _collect(collect)
@@ -591,11 +591,11 @@ async def _pump(events: asyncio.Queue[IngestStats], hub: Hub, collect: Any) -> N
 
 
 class Frontend(StaticFiles):
-    """Статика фронта с разной политикой кеша для оболочки и ассетов.
+    """Frontend statics with different cache policies for the shell and the assets.
 
-    `index.html` браузер обязан сверять каждый раз: иначе после пересборки он
-    берёт из кеша старую оболочку и грузит несуществующий бандл. Сами ассеты
-    Vite именует с хешем содержимого, поэтому их можно кешировать навсегда.
+    The browser must revalidate `index.html` every time: otherwise after a rebuild it
+    takes the old shell from the cache and loads a bundle that does not exist. The assets
+    themselves are named by Vite with a content hash, so they can be cached forever.
     """
 
     async def get_response(self, path: str, scope: Scope) -> Response:
@@ -608,7 +608,7 @@ class Frontend(StaticFiles):
 
 
 def _mount_frontend(app: FastAPI) -> None:
-    """Раздать собранный фронт, если он есть (задача A6)."""
+    """Serve the built frontend if it exists (task A6)."""
     if (WEB_DIST / "index.html").exists():
         app.mount("/", Frontend(directory=WEB_DIST, html=True), name="web")
         return

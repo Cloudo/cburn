@@ -1,7 +1,7 @@
-"""Конфиг ~/.config/cburn/config.toml (TZ §8).
+"""Config ~/.config/cburn/config.toml (TZ §8).
 
-Файла может не быть — тогда работают дефолты. Пользовательские значения
-накладываются поверх дефолтов посекционно, незнакомые ключи сохраняются.
+The file may be missing - then the defaults apply. User values are layered
+over the defaults section by section, unknown keys are kept.
 """
 
 from __future__ import annotations
@@ -38,25 +38,25 @@ DEFAULTS: dict[str, Any] = {
         "daily_summary_at": "21:00",
     },
     "server": {"port": 8799},
-    # Приём официальной телеметрии Claude Code (веха E). Сам по себе флаг
-    # ничего не включает: телеметрию задаёт окружение Claude Code, см. `cburn otel`.
-    # События идут пачкой на каждый ход и каждый вызов инструмента — около
-    # 400 байт на событие, поэтому у них свой срок хранения; 0 — хранить всё.
+    # Receiving official Claude Code telemetry (milestone E). The flag alone
+    # switches nothing on: telemetry is set by Claude Code's environment, see `cburn otel`.
+    # Events arrive in bunches on every turn and every tool call, around
+    # 400 bytes each, so they have their own retention; 0 means keep everything.
     "otel": {"enabled": True, "keep_days": 30},
     "prices": {},
 }
 
 
 def load(path: Path | None = None) -> dict[str, Any]:
-    """Прочитать конфиг, наложив его поверх дефолтов.
+    """Read the config, layering it over the defaults.
 
-    Путь берётся из `paths` в момент вызова, а не при импорте: иначе его не
-    подменить ни в тестах, ни второй конфигурацией — ровно так же устроен
-    `db.connect`.
+    The path is taken from `paths` at call time, not at import: otherwise it could not
+    be swapped in tests or by a second configuration - `db.connect` is built
+    exactly the same way.
     """
     path = path or paths.CONFIG_PATH
     if path == paths.CONFIG_PATH and not path.exists():
-        paths.migrate_legacy()  # конфиг мог остаться под прежним именем проекта
+        paths.migrate_legacy()  # the config may still sit under the former project name
     config = deepcopy(DEFAULTS)
     if not path.exists():
         return config
@@ -70,9 +70,9 @@ def load(path: Path | None = None) -> dict[str, Any]:
     return config
 
 
-#: Что и в каких границах разрешено править экраном «Настройки» (задача C3).
-#: Порог не должен быть отрицательным, порт — вне пользовательского диапазона,
-#: а модель советчика — незнакомым словом: такой конфиг тише всего ломает работу.
+#: What the "Settings" screen may edit and within which bounds (task C3).
+#: A threshold must not be negative, a port must stay inside the user range,
+#: and the advisor model must be a known word: such a config breaks work most quietly.
 NUMERIC_LIMITS: dict[tuple[str, str], tuple[float, float]] = {
     ("thresholds", "context_warn"): (1_000, 10_000_000),
     ("thresholds", "context_crit"): (1_000, 10_000_000),
@@ -80,19 +80,19 @@ NUMERIC_LIMITS: dict[tuple[str, str], tuple[float, float]] = {
     ("thresholds", "burn_rate_warn_per_min"): (100, 100_000_000),
     ("analyzer", "interval_minutes"): (5, 24 * 60),
     ("server", "port"): (1_024, 65_535),
-    # Ноль — не чистить вовсе; верхняя граница просто отсекает опечатки.
+    # Zero means never prune; the upper bound just cuts off typos.
     ("otel", "keep_days"): (0, 3_650),
 }
 
 ANALYZER_MODELS = {"haiku", "sonnet", "opus"}
 TELEGRAM_MODES = {"bridge", "bot", "off"}
 
-#: Колонки прайса: те же четыре составляющих расхода, что и в `model_prices`.
+#: Price columns: the same four parts of the spend as in `model_prices`.
 PRICE_KEYS = ("input", "output", "cache_write_5m", "cache_write_1h", "cache_read")
 
 
 def validate(config: dict[str, Any]) -> list[str]:
-    """Проверить конфиг перед записью; вернуть список понятных человеку ошибок."""
+    """Check the config before writing; return a list of human-readable errors."""
     errors: list[str] = []
     for (section, key), (low, high) in NUMERIC_LIMITS.items():
         value = (config.get(section) or {}).get(key)
@@ -149,7 +149,7 @@ def _is_time(value: Any) -> bool:
 
 
 def save(config: dict[str, Any], path: Path | None = None) -> None:
-    """Записать конфиг (экран «Настройки»). Путь — как в `load`, на момент вызова."""
+    """Write the config (the "Settings" screen). The path is resolved as in `load`, at call time."""
     path = path or paths.CONFIG_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("wb") as fh:

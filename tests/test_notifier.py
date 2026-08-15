@@ -1,7 +1,7 @@
-"""Тесты уведомлений (задача D5, ТЗ §7).
+"""Notification tests (task D5, TZ §7).
 
-Сеть здесь не поднимается: канал подменяется, а правила проверяются как чистые
-функции — они и написаны так, чтобы это было возможно.
+No network is raised here: the channel is swapped, and the rules are checked as pure
+functions - they were written that way exactly to make it possible.
 """
 
 from __future__ import annotations
@@ -27,57 +27,57 @@ def conn(tmp_path: Path) -> Any:
     connection.close()
 
 
-# --- правила -----------------------------------------------------------------
+# --- rules ---------------------------------------------------------------------
 
 
 def test_digest_goes_only_when_there_is_something_to_say() -> None:
-    """Часовая выжимка без важных советов — это спам, а не польза."""
-    assert rules.digest_message("info", "текст") is None
-    assert rules.digest_message(None, "текст") is None
-    assert rules.digest_message("warn", "текст").kind == "digest"
-    assert rules.digest_message("crit", "текст").severity == "crit"
+    """An hourly summary without important tips is spam, not a benefit."""
+    assert rules.digest_message("info", "text") is None
+    assert rules.digest_message(None, "text") is None
+    assert rules.digest_message("warn", "text").kind == "digest"
+    assert rules.digest_message("crit", "text").severity == "crit"
 
 
 def test_daily_summary_goes_once_a_day() -> None:
-    """Сводка уходит после назначенного часа и ровно один раз."""
+    """The digest goes out after the appointed hour and exactly once."""
     morning = datetime(2026, 8, 14, 9, 0).astimezone()
     evening = datetime(2026, 8, 14, 21, 30).astimezone()
 
-    assert rules.daily_message(morning, "21:00", None, "итог") is None
-    first = rules.daily_message(evening, "21:00", None, "итог")
+    assert rules.daily_message(morning, "21:00", None, "total") is None
+    first = rules.daily_message(evening, "21:00", None, "total")
     assert first is not None and first.kind == "daily"
-    # Уже отправляли сегодня после срока — второй раз не шлём.
-    assert rules.daily_message(evening, "21:00", evening, "итог") is None
-    # Вчерашняя отправка сегодняшнюю не отменяет.
-    assert rules.daily_message(evening, "21:00", evening - timedelta(days=1), "итог") is not None
+    # Already sent today after the deadline - we do not send a second time.
+    assert rules.daily_message(evening, "21:00", evening, "total") is None
+    # Yesterday's send does not cancel today's.
+    assert rules.daily_message(evening, "21:00", evening - timedelta(days=1), "total") is not None
 
 
 def test_daily_summary_survives_broken_time() -> None:
-    """Кривое время в конфиге не должно ронять такт."""
-    assert rules.daily_message(NOW, "не время", None, "итог") is None
+    """A malformed time in the config must not bring the tick down."""
+    assert rules.daily_message(NOW, "not a time", None, "total") is None
 
 
 def test_alerts_respect_cooldown() -> None:
-    """Одна сессия не будит чаще, чем раз в полчаса."""
-    candidates = [("s1", "warn", "контекст 160k")]
+    """One session does not wake you more often than once every half hour."""
+    candidates = [("s1", "warn", "context 160k")]
     assert rules.alert_messages(NOW, candidates, {}) != []
     assert rules.alert_messages(NOW, candidates, {"s1": NOW - timedelta(minutes=10)}) == []
     assert rules.alert_messages(NOW, candidates, {"s1": NOW - timedelta(minutes=31)}) != []
 
 
 def test_pause_lets_crit_through() -> None:
-    """Пауза — это «не отвлекай по мелочам», а не «выключи прибор»."""
+    """The pause means "do not bother me with small things", not "switch the instrument off"."""
     quiet = NOW + timedelta(hours=1)
     assert rules.allowed(rules.Message("alert", "…", "warn"), quiet, NOW) is False
     assert rules.allowed(rules.Message("alert", "…", "crit"), quiet, NOW) is True
     assert rules.allowed(rules.Message("alert", "…", "warn"), None, NOW) is True
 
 
-# --- отправка и память -------------------------------------------------------
+# --- sending and memory ---------------------------------------------------------
 
 
 class Sent:
-    """Канал, который никуда не ходит, а запоминает отправленное."""
+    """A channel that goes nowhere but remembers what was sent."""
 
     def __init__(self, mode: str = "bridge", error: str | None = None) -> None:
         self.mode = mode
@@ -93,18 +93,18 @@ class Sent:
 def test_dispatch_records_what_was_sent(conn: Any) -> None:
     channel = Sent()
     with mock.patch.object(notifier, "Channel", return_value=channel):
-        sent = notifier.dispatch(conn, [rules.Message("alert", "горит", "crit", "s1")], {})
+        sent = notifier.dispatch(conn, [rules.Message("alert", "burning", "crit", "s1")], {})
     assert sent == 1
-    assert channel.messages == [("crit", "горит")]
+    assert channel.messages == [("crit", "burning")]
     row = conn.execute("SELECT kind, key, severity, ok FROM notifications").fetchone()
     assert (row["kind"], row["key"], row["severity"], row["ok"]) == ("alert", "s1", "crit", 1)
 
 
 def test_failed_send_is_remembered_as_failed(conn: Any) -> None:
-    """Неудачу видно в истории: иначе cooldown промолчит о том, что не дошло."""
-    channel = Sent(error="бридж ответил 500")
+    """A failure shows in the history: otherwise the cooldown hides what never arrived."""
+    channel = Sent(error="the bridge answered 500")
     with mock.patch.object(notifier, "Channel", return_value=channel):
-        sent = notifier.dispatch(conn, [rules.Message("alert", "горит", "warn", "s1")], {})
+        sent = notifier.dispatch(conn, [rules.Message("alert", "burning", "warn", "s1")], {})
     assert sent == 0
     assert conn.execute("SELECT ok FROM notifications").fetchone()[0] == 0
 
@@ -116,8 +116,8 @@ def test_pause_holds_everything_but_crit(conn: Any) -> None:
         notifier.dispatch(
             conn,
             [
-                rules.Message("alert", "мелочь", "warn", "s1"),
-                rules.Message("alert", "горит", "crit", "burn"),
+                rules.Message("alert", "a trifle", "warn", "s1"),
+                rules.Message("alert", "burning", "crit", "burn"),
             ],
             {},
             now=NOW,
@@ -126,21 +126,21 @@ def test_pause_holds_everything_but_crit(conn: Any) -> None:
 
 
 def test_off_channel_sends_nothing(conn: Any) -> None:
-    """Канал `off` выключает отправку, но прибор продолжает считать."""
+    """The `off` channel disables sending, but the instrument keeps counting."""
     channel = Sent(mode="off")
     with mock.patch.object(notifier, "Channel", return_value=channel):
-        assert notifier.dispatch(conn, [rules.Message("daily", "итог")], {}) == 0
+        assert notifier.dispatch(conn, [rules.Message("daily", "total")], {}) == 0
     assert channel.messages == []
     assert conn.execute("SELECT COUNT(*) FROM notifications").fetchone()[0] == 0
 
 
 def test_alerts_come_from_the_same_numbers_as_the_dashboard(conn: Any) -> None:
-    """Тревога не считает сама: пороги и цифры те же, что на экране."""
+    """The alert does no counting of its own: the thresholds and numbers are those on screen."""
     overview = {
         "burn": {"1m": {"tokens_per_min": 120_000}},
         "live_sessions": [
-            {"id": "s1", "title": "большая", "last_context": 200_000},
-            {"id": "s2", "title": "обычная", "last_context": 10_000},
+            {"id": "s1", "title": "big", "last_context": 200_000},
+            {"id": "s2", "title": "ordinary", "last_context": 10_000},
         ],
     }
     config = {"thresholds": {"burn_rate_warn_per_min": 50_000, "context_crit": 150_000}}
@@ -165,17 +165,17 @@ def test_alert_is_not_repeated_within_cooldown(conn: Any) -> None:
 def test_digest_text_mentions_cost_and_titles() -> None:
     text = notifier.digest_text(
         {"cost_usd": 0.07, "max_severity": "warn"},
-        [{"title": "Закрыть линию работы", "severity": "warn"}],
+        [{"title": "Close the work line", "severity": "warn"}],
     )
     assert "$0.07" in text
-    assert "Закрыть линию работы" in text
+    assert "Close the work line" in text
 
 
-# --- пауза через API ---------------------------------------------------------
+# --- the pause through the API ----------------------------------------------------
 
 
 def test_pause_endpoint_holds_and_releases(tmp_path: Path) -> None:
-    """Кнопка в трее и в окне зовёт один и тот же эндпоинт (задача D5)."""
+    """The tray button and the window button call the very same endpoint (task D5)."""
     from fastapi.testclient import TestClient
 
     from cburn.api.server import create_app
@@ -204,7 +204,7 @@ def test_notify_state_shows_what_was_sent(tmp_path: Path) -> None:
     conn = connect(db_path)
     channel = Sent()
     with mock.patch.object(notifier, "Channel", return_value=channel):
-        notifier.dispatch(conn, [rules.Message("daily", "итог дня")], {})
+        notifier.dispatch(conn, [rules.Message("daily", "the day total")], {})
     conn.close()
 
     app = create_app(db_path=db_path, projects_dir=tmp_path, watch=False, liveness=lambda: None)

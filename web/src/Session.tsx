@@ -1,6 +1,6 @@
-// Экран «Сессия» (задача C2): график роста контекста по ходам с видимыми
-// моментами автосуммаризации и ветвления, лента ходов, разбивка по моделям.
-// Главный вопрос экрана — где сессия раздулась и когда пора делать /clear.
+// The "Session" screen (task C2): the context growth chart over turns with visible
+// moments of auto-compaction and branching, the turn feed, the model breakdown.
+// The screen's main question is where the session bloated and when to run /clear.
 
 import { useEffect, useMemo } from "react";
 
@@ -8,7 +8,7 @@ import { clockTime, compact, duration, grouped, modelLabel, spent, toolLabel, us
 import { useLang } from "./i18n";
 import { useSession, type SessionEvent, type SessionTurn } from "./api";
 
-/** Зоны контекста по ТЗ §4: до 80k спокойно, до 150k пора оглядеться. */
+/** Context zones from TZ §4: up to 80k is calm, up to 150k is time to look around. */
 const WARN = 80_000;
 const CRIT = 150_000;
 
@@ -36,7 +36,7 @@ export function Session({ id }: { id: string }) {
 
   const { session, turns, events, models, tools, chain } = data;
   const idle = turns.filter((turn) => turn.is_idle).length;
-  // Время в инструменте знает только телеметрия — без неё колонка пустует.
+  // Only telemetry knows the time inside a tool - without it the column stays empty.
   const seconds = new Map(
     (data.tool_times ?? [])
       .filter((row) => row.tool && row.seconds)
@@ -155,8 +155,8 @@ function Fact({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** График контекста по ходам. Ось X — порядковый номер хода, а не время:
- *  паузы между ходами бывают часами, и по времени график вырождается в полку. */
+/** The context chart over turns. The X axis is the turn number, not the time:
+ *  pauses between turns run into hours, and by time the chart degenerates into a shelf. */
 function ContextChart({ turns, events }: { turns: SessionTurn[]; events: SessionEvent[] }) {
   const { t } = useLang();
   const width = 1000;
@@ -172,7 +172,7 @@ function ContextChart({ turns, events }: { turns: SessionTurn[]; events: Session
   const y = (value: number) => height - (value / peak) * height;
   const line = turns.map((turn, index) => `${x(index)},${y(turn.context_estimate)}`).join(" ");
 
-  // Веха ставится на ближайший по времени ход: у неё своё время, а ось — ходы.
+  // A milestone is placed on the nearest turn in time: it has its own time, the axis has turns.
   const marks = events
     .map((event) => {
       const index = turns.findIndex((turn) => turn.ts >= event.ts);

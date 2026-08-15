@@ -1,18 +1,18 @@
-"""Смоук на настоящей истории `~/.claude/projects` (задача B8).
+"""A smoke test over the real `~/.claude/projects` history (task B8).
 
-По умолчанию не гоняется: тест зависит от машины, а не от репозитория, и в CI
-его данных нет. Запуск руками:
+It does not run by default: the test depends on the machine rather than on the
+repository, and CI has no data for it. To run it by hand:
 
     .venv/bin/python -m pytest -m real_history -q -s
 
-Что он проверяет. Формат транскриптов недокументирован и меняется между
-версиями Claude Code, поэтому единственное настоящее требование к парсеру —
-терпимость: незнакомая запись не должна ронять обход. Тест падает только на
-исключении разбора; всё остальное он печатает как отчёт, чтобы после
-обновления Claude Code было видно, что изменилось.
+What it checks. The transcript format is undocumented and changes between Claude Code
+versions, so the only real requirement for the parser is tolerance: an unknown record
+must not bring the walk down. The test fails only on a parsing exception; everything
+else it prints as a report, so that after a Claude Code update it is visible what
+changed.
 
-Обезличенные фикстуры версий 2.1.220–228 лежат в `fixtures/transcripts/`
-и гоняются обычным прогоном — они страхуют разбор без реальной истории.
+Anonymised fixtures of versions 2.1.220-228 live in `fixtures/transcripts/`
+and run in the ordinary pass - they cover parsing without the real history.
 """
 
 from __future__ import annotations
@@ -37,12 +37,12 @@ pytestmark = pytest.mark.real_history
 def history() -> Path:
     root = paths.CLAUDE_PROJECTS_DIR
     if not root.is_dir() or not any(root.rglob("*.jsonl")):
-        pytest.skip(f"нет транскриптов в {root}")
+        pytest.skip(f"no transcripts in {root}")
     return root
 
 
 def test_parser_survives_every_line(history: Path) -> None:
-    """Ни одна строка настоящей истории не роняет разбор."""
+    """Not a single line of the real history brings parsing down."""
     kinds: collections.Counter[str] = collections.Counter()
     unknown: collections.Counter[tuple[str, str]] = collections.Counter()
     broken: list[str] = []
@@ -55,29 +55,29 @@ def test_parser_survives_every_line(history: Path) -> None:
                 lines += 1
                 try:
                     record = parse_line(raw)
-                except Exception as exc:  # noqa: BLE001 — ровно то, что ловит тест
+                except Exception as exc:  # noqa: BLE001 - exactly what the test catches
                     broken.append(f"{path}:{line_no}: {exc!r}")
                     continue
                 if record is None:
-                    kinds["не разобрана"] += 1
+                    kinds["not parsed"] += 1
                     continue
                 kinds[record.kind] += 1
                 if record.kind is RecordKind.UNKNOWN:
                     unknown[(record.raw_type, record.version or "—")] += 1
 
-    print(f"\nфайлов {files}, строк {lines}")
+    print(f"\nfiles {files}, lines {lines}")
     for kind, count in kinds.most_common():
         print(f"  {kind:<14} {count}")
-    print("незнакомые типы (тип, версия):")
+    print("unknown types (type, version):")
     for (raw_type, version), count in unknown.most_common(10):
         print(f"  {raw_type:<24} {version:<10} {count}")
 
-    assert not broken, "разбор упал на строках:\n" + "\n".join(broken[:20])
-    assert kinds[RecordKind.ASSISTANT] > 0, "ходов не нашлось — парсер потерял формат"
+    assert not broken, "parsing failed on lines:\n" + "\n".join(broken[:20])
+    assert kinds[RecordKind.ASSISTANT] > 0, "no turns found - the parser lost the format"
 
 
 def test_full_ingest_survives_history(history: Path, tmp_path: Path) -> None:
-    """Полный обход истории в чистую БД: без падений и с непустым результатом."""
+    """A full walk over the history into a clean database: no failures and a non-empty result."""
     started = time.monotonic()
     conn = connect(tmp_path / "real.db")
     results = ingest_tree(conn, history)
@@ -94,15 +94,15 @@ def test_full_ingest_survives_history(history: Path, tmp_path: Path) -> None:
         """
     ).fetchone()
     print(
-        f"\nфайлов {len(results)}, ходов {row['turns']}, сессий {row['sessions']},"
-        f" проектов {row['projects']}, связей resume {row['linked']},"
-        f" незнакомых записей {row['unknown']}, за {elapsed:.1f} с"
+        f"\nfiles {len(results)}, turns {row['turns']}, sessions {row['sessions']},"
+        f" projects {row['projects']}, resume links {row['linked']},"
+        f" unknown records {row['unknown']}, in {elapsed:.1f} s"
     )
 
     assert row["turns"] > 0
     assert row["sessions"] > 0
-    # Ход не может принадлежать несуществующей сессии: ссылочная целостность
-    # ломается тише, чем исключение, и заметить её иначе нечем.
+    # A turn cannot belong to a non-existent session: referential integrity
+    # breaks more quietly than an exception, and there is nothing else to catch it.
     orphans = conn.execute(
         "SELECT COUNT(*) FROM turns WHERE session_id NOT IN (SELECT id FROM sessions)"
     ).fetchone()[0]
@@ -110,30 +110,30 @@ def test_full_ingest_survives_history(history: Path, tmp_path: Path) -> None:
 
 
 def test_digest_finds_the_signals_the_report_found(history: Path, tmp_path: Path) -> None:
-    """Приёмка M3 (задача D7): дайджест видит то же, что нашлось руками.
+    """The M3 acceptance (task D7): the digest sees the same things that were found by hand.
 
-    Прототипный отчёт по navuik/core держался на трёх вещах: разросшаяся
-    мега-сессия, холостые ходы и один и тот же скрипт, прогнанный через heredoc
-    десятки раз. Сам вызов модели сюда не входит — он стоит денег и делается
-    руками; проверяется, что советчику есть на что опереться.
+    The prototype report on navuik/core rested on three things: an overgrown mega-session,
+    idle turns and one and the same script driven through a heredoc dozens of times. The
+    model call itself is not part of this - it costs money and is done by hand; what is
+    checked is that the advisor has something to lean on.
     """
     conn = connect(tmp_path / "acceptance.db")
     ingest_tree(conn, history)
-    # Цены берём из пользовательского конфига: без них стоимость нулевая, а
-    # «тяжёлые сессии» — вопрос про деньги.
+    # Prices come from the user config: without them the cost is zero, while
+    # "heavy sessions" is a question about money.
     pricing.recalculate(conn, config.load())
     payload = digest.build(conn, datetime.now(UTC) - timedelta(days=30), config=config.load())
 
     heavy = max(payload["sessions"], key=lambda row: row["cost_usd"])
     print(
-        f"\nмега-сессия {heavy['id'][:8]}: ходов {heavy['turns']}, "
-        f"${heavy['cost_usd']:.2f}, за порогом {heavy['over_context_limit']}"
+        f"\nmega-session {heavy['id'][:8]}: turns {heavy['turns']}, "
+        f"${heavy['cost_usd']:.2f}, over the threshold {heavy['over_context_limit']}"
     )
-    print(f"холостые ходы: {payload['idle']['turns']} ({payload['idle']['share']:.1%})")
-    print(f"heredoc: {payload['tools']['heredoc_calls']} вызовов")
+    print(f"idle turns: {payload['idle']['turns']} ({payload['idle']['share']:.1%})")
+    print(f"heredoc: {payload['tools']['heredoc_calls']} calls")
 
-    assert heavy["turns"] > 500, "мега-сессия должна быть видна"
-    assert heavy["over_context_limit"], "и должна быть помечена как переросшая порог"
-    assert payload["idle"]["turns"] > 0, "холостые ходы должны считаться"
-    assert payload["tools"]["heredoc_calls"] > 0, "повторные heredoc должны быть видны"
-    assert payload["size"]["within_limit"], "дайджест обязан влезать в лимит"
+    assert heavy["turns"] > 500, "the mega-session must be visible"
+    assert heavy["over_context_limit"], "and must be marked as past the threshold"
+    assert payload["idle"]["turns"] > 0, "idle turns must be counted"
+    assert payload["tools"]["heredoc_calls"] > 0, "repeated heredocs must be visible"
+    assert payload["size"]["within_limit"], "the digest must fit into the limit"

@@ -1,4 +1,4 @@
-"""Тесты слежения за транскриптами (задача A4)."""
+"""Tests of watching the transcripts (task A4)."""
 
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ def count_turns(db_path: Path) -> int:
     conn = sqlite3.connect(db_path)
     try:
         return int(conn.execute("SELECT COUNT(*) FROM turns").fetchone()[0])
-    except sqlite3.OperationalError:  # схема ещё не создана
+    except sqlite3.OperationalError:  # the schema does not exist yet
         return 0
     finally:
         conn.close()
@@ -62,16 +62,16 @@ def count_turns(db_path: Path) -> int:
 
 @pytest.fixture
 def root(tmp_path: Path) -> Path:
-    projects = tmp_path / "projects" / "проект"
+    projects = tmp_path / "projects" / "project"
     projects.mkdir(parents=True)
     return projects
 
 
-# --- главная проверка A4 -----------------------------------------------------
+# --- the main A4 check ----------------------------------------------------------
 
 
 def test_append_to_transcript_creates_turn(root: Path, tmp_path: Path) -> None:
-    """Дописанная строка приводит к появлению хода в БД."""
+    """An appended line leads to a turn appearing in the database."""
     db_path = tmp_path / "watch.db"
     seen: list[IngestStats] = []
     watcher = TranscriptWatcher(
@@ -79,25 +79,25 @@ def test_append_to_transcript_creates_turn(root: Path, tmp_path: Path) -> None:
     )
     with watcher:
         append(root / "s1.jsonl", assistant("msg_1"))
-        assert wait_for(lambda: count_turns(db_path) == 1), "ход не появился в БД"
+        assert wait_for(lambda: count_turns(db_path) == 1), "the turn did not reach the database"
 
         append(root / "s1.jsonl", assistant("msg_2", uuid="u2"))
-        assert wait_for(lambda: count_turns(db_path) == 2), "второй ход не появился"
+        assert wait_for(lambda: count_turns(db_path) == 2), "the second turn did not appear"
 
-    assert seen, "обработчик on_ingest не вызывался"
+    assert seen, "the on_ingest handler was never called"
     assert sum(stats.turns_new for stats in seen) == 2
 
 
 def test_new_file_in_new_project_is_picked_up(root: Path, tmp_path: Path) -> None:
-    """Каталог проекта, созданный после старта, тоже под наблюдением."""
+    """A project directory created after the start is watched too."""
     db_path = tmp_path / "watch.db"
     with TranscriptWatcher(root.parent, debounce=DEBOUNCE, db_path=db_path):
-        append(root.parent / "новый-проект" / "s2.jsonl", assistant("msg_1", session="s2"))
+        append(root.parent / "new-project" / "s2.jsonl", assistant("msg_1", session="s2"))
         assert wait_for(lambda: count_turns(db_path) == 1)
 
 
 def test_initial_scan_reads_what_accumulated_offline(root: Path, tmp_path: Path) -> None:
-    """То, что записалось до старта, дочитывается при запуске."""
+    """Whatever was written before the start is read at startup."""
     append(root / "s1.jsonl", assistant("msg_1"))
     db_path = tmp_path / "watch.db"
     with TranscriptWatcher(root.parent, debounce=DEBOUNCE, db_path=db_path):
@@ -116,11 +116,11 @@ def test_initial_scan_can_be_skipped(root: Path, tmp_path: Path) -> None:
         watcher.stop()
 
 
-# --- очередь и дебаунс -------------------------------------------------------
+# --- the queue and the debounce ---------------------------------------------------
 
 
 def test_debounce_collapses_burst_of_events(root: Path, tmp_path: Path) -> None:
-    """Пачка событий по одному файлу разбирается одним проходом."""
+    """A burst of events on one file is parsed in a single pass."""
     db_path = tmp_path / "watch.db"
     passes: list[IngestStats] = []
     watcher = TranscriptWatcher(root.parent, debounce=0.3, db_path=db_path, on_ingest=passes.append)
@@ -131,11 +131,11 @@ def test_debounce_collapses_burst_of_events(root: Path, tmp_path: Path) -> None:
             time.sleep(0.02)
         assert wait_for(lambda: count_turns(db_path) == 5)
 
-    assert len(passes) <= 2, f"дебаунс не собрал пачку: {len(passes)} проходов"
+    assert len(passes) <= 2, f"the debounce did not gather the burst: {len(passes)} passes"
 
 
 def test_queue_holds_until_debounce_elapses(tmp_path: Path) -> None:
-    """Файл не берётся в работу раньше срока (проверка очереди без ФС)."""
+    """A file is not taken into work before its time (a queue check without the FS)."""
     watcher = TranscriptWatcher(tmp_path, debounce=10.0)
     watcher.enqueue([tmp_path / "s1.jsonl"])
     assert watcher._due(time.monotonic()) == []
@@ -143,9 +143,9 @@ def test_queue_holds_until_debounce_elapses(tmp_path: Path) -> None:
 
 
 def test_only_jsonl_is_queued(tmp_path: Path) -> None:
-    """Посторонние файлы каталога Claude Code игнорируются."""
+    """Foreign files in the Claude Code directory are ignored."""
     watcher = TranscriptWatcher(tmp_path, debounce=0)
-    watcher.enqueue([tmp_path / "s1.jsonl", tmp_path / "заметка.txt", tmp_path / "db.sqlite"])
+    watcher.enqueue([tmp_path / "s1.jsonl", tmp_path / "note.txt", tmp_path / "db.sqlite"])
     assert watcher._due(time.monotonic() + 1) == [tmp_path / "s1.jsonl"]
 
 
@@ -156,13 +156,13 @@ def test_repeated_events_do_not_multiply_queue(tmp_path: Path) -> None:
     assert len(watcher._due(time.monotonic() + 1)) == 1
 
 
-# --- устойчивость ------------------------------------------------------------
+# --- resilience -------------------------------------------------------------------
 
 
 def test_broken_line_does_not_stop_watching(root: Path, tmp_path: Path) -> None:
     db_path = tmp_path / "watch.db"
     with TranscriptWatcher(root.parent, debounce=DEBOUNCE, db_path=db_path):
-        append(root / "s1.jsonl", "{битый json")
+        append(root / "s1.jsonl", "{broken json")
         append(root / "s1.jsonl", assistant("msg_1"))
         assert wait_for(lambda: count_turns(db_path) == 1)
 
@@ -171,7 +171,7 @@ def test_failing_callback_does_not_stop_watching(root: Path, tmp_path: Path) -> 
     db_path = tmp_path / "watch.db"
 
     def boom(stats: IngestStats) -> None:
-        raise RuntimeError("обработчик упал")
+        raise RuntimeError("the handler failed")
 
     with TranscriptWatcher(root.parent, debounce=DEBOUNCE, db_path=db_path, on_ingest=boom):
         append(root / "s1.jsonl", assistant("msg_1"))
@@ -188,7 +188,7 @@ def test_stop_is_idempotent(root: Path, tmp_path: Path) -> None:
 
 
 def test_claude_dir_is_not_written_to(root: Path, tmp_path: Path) -> None:
-    """Инвариант: в каталоге транскриптов ничего не появляется и не меняется."""
+    """The invariant: nothing appears or changes inside the transcript directory."""
     path = root / "s1.jsonl"
     append(path, assistant("msg_1"))
     before = {p: p.stat().st_mtime_ns for p in sorted(root.parent.rglob("*"))}
@@ -201,7 +201,7 @@ def test_claude_dir_is_not_written_to(root: Path, tmp_path: Path) -> None:
 
 
 def test_connection_lives_in_worker_thread(root: Path, tmp_path: Path) -> None:
-    """SQLite не терпит соединение между потоками — оно создаётся в рабочем."""
+    """SQLite does not tolerate a connection across threads - it is created in the worker."""
     db_path = tmp_path / "watch.db"
     errors: list[BaseException] = []
     original = TranscriptWatcher._ingest
@@ -209,7 +209,7 @@ def test_connection_lives_in_worker_thread(root: Path, tmp_path: Path) -> None:
     def guard(self, conn, path):  # type: ignore[no-untyped-def]
         try:
             return original(self, conn, path)
-        except BaseException as exc:  # pragma: no cover - страховка теста
+        except BaseException as exc:  # pragma: no cover - a test safety net
             errors.append(exc)
             raise
 

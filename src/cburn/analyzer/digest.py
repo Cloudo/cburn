@@ -1,19 +1,19 @@
-"""Дайджест периода без LLM (задача D1, ТЗ §6).
+"""The period digest without an LLM (task D1, TZ §6).
 
-Это вход советчика: всё, что он должен знать о периоде, собрано заранее и
-посчитано в SQL. Модель получает JSON, а не транскрипты.
+This is the advisor's input: everything it has to know about the period is collected
+beforehand and computed in SQL. The model gets JSON, not transcripts.
 
-Приватность (ТЗ §7, инвариант проекта). В дайджест попадают только:
+Privacy (TZ §7, a project invariant). Only these things reach the digest:
 
-* числа — токены, стоимость, счётчики, доли;
-* имена инструментов и нормализованные bash-команды («первое слово +
-  подкоманда», аргументы отброшены ещё при разборе);
-* идентификаторы сессий и имена проектов;
-* размеры файлов инструкций, но не их содержимое.
+* numbers - tokens, cost, counters, shares;
+* tool names and normalised bash commands ("first word + subcommand",
+  arguments were dropped back at parse time);
+* session ids and project names;
+* sizes of instruction files, but not their contents.
 
-Ни текста переписки, ни промптов, ни названий сессий здесь нет: `ai-title`
-пересказывает разговор, значит это тоже содержимое. Фрагменты команд включаются
-только под флагом `analyzer.allow_snippets` — на сегодня их не включает никто.
+Neither conversation text, nor prompts, nor session titles are here: `ai-title`
+retells the conversation, so it is content too. Command snippets are included only
+under the `analyzer.allow_snippets` flag - as of today nobody switches it on.
 """
 
 from __future__ import annotations
@@ -25,19 +25,19 @@ from typing import Any
 
 from .. import metrics, paths
 
-#: Потолок дайджеста из ТЗ: 20k токенов. Считаем грубо — 4 символа на токен;
-#: точный счёт стоил бы обращения к API, а нужен порядок величины.
+#: The digest ceiling from the spec: 20k tokens. We count roughly - 4 characters per
+#: token; an exact count would cost an API call, and an order of magnitude is enough.
 TOKEN_LIMIT = 20_000
 CHARS_PER_TOKEN = 4
 
-#: Сколько строк держать в каждом списке. Дальше хвост не несёт информации,
-#: но исправно ест бюджет.
+#: How many rows to keep in each list. Beyond that the tail carries no information
+#: while eating the budget just fine.
 TOP_COMMANDS = 20
 TOP_SESSIONS = 10
 TOP_TOOLS = 12
 
-#: Инструменты, которые сами по себе ничего не решают: чтение и поиск. Ход,
-#: где были только они, — механическая работа, и Opus на ней избыточен (ТЗ §6).
+#: Tools that decide nothing on their own: reading and searching. A turn that held
+#: only those is mechanical work, and Opus is overkill for it (TZ §6).
 MECHANICAL_TOOLS = {"Read", "Glob", "Grep", "LS", "NotebookRead", "TodoWrite"}
 
 
@@ -49,7 +49,7 @@ def build(
     config: dict[str, Any] | None = None,
     project: str | None = None,
 ) -> dict[str, Any]:
-    """Собрать дайджест периода. Возвращает JSON-совместимый словарь."""
+    """Build the period digest. Returns a JSON-compatible dict."""
     settings = config or {}
     thresholds = settings.get("thresholds") or {}
     context_crit = int(thresholds.get("context_crit") or 150_000)
@@ -77,11 +77,11 @@ def build(
 
 
 def _tools(conn: sqlite3.Connection, since: datetime, project: str | None) -> dict[str, Any]:
-    """Профиль инструментов и топ нормализованных команд.
+    """The tool profile and the top normalised commands.
 
-    Heredoc виден отдельной строкой (`python3 <<`): один и тот же скрипт,
-    прогнанный десять раз, — заметный расход, а по имени команды он
-    неотличим от обычного вызова.
+    A heredoc shows up as a row of its own (`python3 <<`): the same script driven
+    through ten times is a noticeable spend, yet by command name it is
+    indistinguishable from an ordinary call.
     """
     profile = metrics.tool_profile(conn, since, limit=TOP_COMMANDS, project=project)
     return {
@@ -97,9 +97,9 @@ def _tools(conn: sqlite3.Connection, since: datetime, project: str | None) -> di
 def _heavy_sessions(
     conn: sqlite3.Connection, since: datetime, context_crit: int, project: str | None
 ) -> list[dict]:
-    """Сессии, которые стоит показать советчику: дорогие и раздутые.
+    """Sessions worth showing to the advisor: expensive and bloated ones.
 
-    Названий здесь нет намеренно: `ai-title` — пересказ разговора.
+    There are no titles here on purpose: `ai-title` is a retelling of the conversation.
     """
     clause, params = metrics.project_filter(project, "s.id")
     rows = conn.execute(
@@ -117,8 +117,8 @@ def _heavy_sessions(
           JOIN turns AS t ON t.session_id = s.id AND t.ts >= ?
          WHERE s.hidden = 0{clause}
          GROUP BY s.id
-         -- Без цен стоимость у всех нулевая, и один порядок по ней дал бы
-         -- случайный список: тогда сортируем по объёму.
+         -- Without prices the cost is zero for everyone, and a single ordering by it
+         -- would give a random list: then we sort by volume.
          ORDER BY cost_usd DESC, (SUM(t.cache_read) + SUM(t.output_tokens)) DESC
          LIMIT ?
         """,  # noqa: S608
@@ -131,10 +131,10 @@ def _heavy_sessions(
 
 
 def _chains(conn: sqlite3.Connection, since: datetime, project: str | None) -> list[dict]:
-    """Линии работы: одна задача, продолженная через resume несколько раз.
+    """Work lines: one task carried through resume several times over.
 
-    Из ручного отчёта: 87% расхода ушло в две незакрытые линии — и увидеть это
-    можно только собрав цепочку целиком.
+    From the manual report: 87% of the spend went into two unclosed lines - and seeing
+    that is only possible once the whole chain is assembled.
     """
     clause, params = metrics.project_filter(project, "s.id")
     rows = conn.execute(
@@ -164,9 +164,9 @@ def _chains(conn: sqlite3.Connection, since: datetime, project: str | None) -> l
 
 
 def _mechanical_opus(conn: sqlite3.Connection, since: datetime, project: str | None) -> dict:
-    """Доля Opus на ходах, где были только чтение и поиск.
+    """The share of Opus on turns that held only reading and searching.
 
-    Прямой кандидат в советы: такую работу тянет модель попроще.
+    A direct candidate for advice: a simpler model handles such work.
     """
     clause, params = metrics.project_filter(project, "t.session_id")
     placeholders = ",".join("?" * len(MECHANICAL_TOOLS))
@@ -194,11 +194,11 @@ def _mechanical_opus(conn: sqlite3.Connection, since: datetime, project: str | N
 
 
 def _mcp(conn: sqlite3.Connection, since: datetime, project: str | None) -> dict:
-    """MCP-серверы: сколько раз каждый реально позвали за период.
+    """MCP servers: how many times each one was actually called during the period.
 
-    Подключённые, но ни разу не позванные серверы — тоже расход: их описания
-    висят в каждом запросе. Список подключённых лежит в конфигах Claude Code,
-    и читать их здесь мы не будем — счёт вызовов уже отвечает на вопрос.
+    Servers that are connected but never called are a spend too: their descriptions hang
+    in every request. The list of connected ones lives in the Claude Code configs, and we
+    will not read those here - the call count already answers the question.
     """
     clause, params = metrics.project_filter(project, "t.session_id")
     rows = conn.execute(
@@ -222,13 +222,13 @@ def _mcp(conn: sqlite3.Connection, since: datetime, project: str | None) -> dict
         ],
         "calls": sum(servers.values()),
     }
-    # Сколько стоит сам факт подключения, знает только телеметрия: сервер
-    # стартует заново в каждой сессии, даже если его ни разу не позвали.
+    # What the mere fact of connecting costs is known only to telemetry: a server
+    # starts anew in every session, even if it is never called.
     connections = metrics.otel_mcp(conn, since, project=project)
     if connections["servers"]:
         profile["connections"] = connections
-    # Откуда серверы берутся: плагин тянет за собой MCP, скиллы и команды,
-    # и всё это грузится в каждую сессию независимо от того, нужно ли оно.
+    # Where the servers come from: a plugin drags MCP, skills and commands along,
+    # and all of it loads in every session whether it is needed or not.
     plugins = metrics.otel_plugins(conn, since, project=project)
     if plugins:
         profile["plugins"] = plugins
@@ -238,11 +238,11 @@ def _mcp(conn: sqlite3.Connection, since: datetime, project: str | None) -> dict
 def _permissions(
     conn: sqlite3.Connection, since: datetime, until: datetime | None, project: str | None
 ) -> dict:
-    """Подтверждения разрешений: сколько раз работа останавливалась ради ответа.
+    """Permission confirmations: how many times work stopped waiting for an answer.
 
-    Считается по телеметрии — в транскрипт Claude Code не пишет ни вопрос
-    «разрешить?», ни ответ на него (веха E). Без телеметрии секция помечена
-    `available: false`, иначе советчик прочтёт ноль подтверждений как факт.
+    Counted from telemetry - Claude Code writes neither the "allow?" question nor the
+    answer to it into the transcript (milestone E). Without telemetry the section is
+    marked `available: false`, otherwise the advisor reads zero confirmations as a fact.
     """
     stats = metrics.otel_permissions(conn, since, until, project)
     if not stats["decisions"]:
@@ -253,11 +253,11 @@ def _permissions(
 def _off_transcript(
     conn: sqlite3.Connection, since: datetime, until: datetime | None, project: str | None
 ) -> dict:
-    """Расход служебных запросов, которых нет в транскриптах (веха E).
+    """The spend of service requests that are absent from transcripts (milestone E).
 
-    Советчику это нужно, чтобы не объяснять расхождение цифр случайностью:
-    остальные разделы дайджеста считаны по транскриптам и на эту величину
-    занижены.
+    The advisor needs this so it does not explain a number mismatch by chance:
+    the other digest sections are counted from transcripts and are understated
+    by exactly this much.
     """
     usage = metrics.otel_usage(conn, since, until, project)
     work = metrics.otel_work(conn, since, until, project)
@@ -279,26 +279,26 @@ def _off_transcript(
         "cost_usd": usage["cost_usd"],
         "share_of_cost": round(usage["share"], 4),
         "kinds": usage["request_kinds"],
-        # Сколько времени работа реально шла и что получилось на выходе:
-        # расход сам по себе ни хорош, ни плох — важно, что за него сделано.
+        # How long work actually ran and what came out of it: the spend is neither
+        # good nor bad on its own - what matters is what was done for it.
         "active_minutes": round(work["active_seconds"] / 60, 1),
         "lines_added": work["lines_added"],
         "lines_removed": work["lines_removed"],
-        # Слэш-команды: в транскрипте от них остаются только блоки разметки,
-        # а парсер их не разбирает — телеметрия называет команду прямо.
+        # Slash commands: in the transcript only markup blocks remain of them,
+        # and the parser does not unpack those - telemetry names the command directly.
         "prompts": prompts,
-        # Хуки выполняются между ходами, и в транскрипте от них остаётся
-        # только пауза: HTTP-хук к недоступному сервису отнимает десятки
-        # секунд на каждом промпте, а по файлам истории это не отличить.
+        # Hooks run between turns, and all that remains of them in the transcript
+        # is a pause: an HTTP hook to an unreachable service eats tens of seconds
+        # on every prompt, and from the history files that is indistinguishable.
         "hooks": hooks,
     }
 
 
 def _instructions() -> dict:
-    """Размер постоянных инструкций: они едут в каждый запрос.
+    """The size of the persistent instructions: they ride along with every request.
 
-    Считаются байты и оценка токенов, содержимое не читается наружу — но
-    объём того, что вы платите за каждый ход, знать полезно.
+    Bytes and a token estimate are counted, the contents are never read out - but
+    knowing the size of what you pay for on every turn is useful.
     """
     files = []
     for path in (paths.CLAUDE_MD,):
@@ -310,7 +310,7 @@ def _instructions() -> dict:
 
 
 def _size(digest: dict[str, Any]) -> dict[str, Any]:
-    """Во что дайджест обойдётся советчику."""
+    """What the digest will cost the advisor."""
     text = json.dumps(digest, ensure_ascii=False)
     tokens = len(text) // CHARS_PER_TOKEN
     return {

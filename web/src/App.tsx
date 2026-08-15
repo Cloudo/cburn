@@ -37,7 +37,7 @@ import {
 
 const WINDOWS = ["10s", "1m", "5m", "60m"] as const;
 
-//: Статусы в порядке важности: первым открывается таб, где что-то происходит.
+//: Statuses in order of importance: the tab that opens first is the one where something happens.
 const STATUSES: SessionStatus[] = ["permission", "working", "answered", "idle", "done"];
 
 const COLORS = {
@@ -66,8 +66,8 @@ function slicesOf(source: Usage, t: (key: string) => string): Slice[] {
   ];
 }
 
-/** Экран выбирается хэшем: #/sessions. Роутер ради двух страниц не нужен, а
- *  адрес должен переживать перезагрузку и жить в закладках. */
+/** The screen is chosen by the hash: #/sessions. A router for two pages is overkill, but
+ *  the address must survive a reload and live in bookmarks. */
 function useScreen(): string {
   const [screen, setScreen] = useState(() => window.location.hash.replace(/^#\/?/, ""));
   useEffect(() => {
@@ -164,7 +164,7 @@ export default function App() {
   );
 }
 
-/** Солнце и луна: кнопка показывает, куда переключит, а не что сейчас. */
+/** Sun and moon: the button shows what it switches to, not what is on now. */
 function SunIcon() {
   return (
     <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" focusable="false">
@@ -190,9 +190,9 @@ function MoonIcon() {
   );
 }
 
-//: Обзор от сервера, который не знает про штампы времени: в паре «фронт из
-//: web/dist + давно запущенный процесс» такое бывает, и падать из-за этого
-//: всему дашборду нельзя.
+//: An overview from a server that knows nothing about timestamps: in the pair "frontend
+//: from web/dist + a long-running process" that happens, and the whole dashboard must
+//: not fall over because of it.
 const NO_STAMPS: Stamps = {
   last_turn: null,
   today_turn: null,
@@ -200,17 +200,17 @@ const NO_STAMPS: Stamps = {
   idle_turn: null,
 };
 
-//: Сколько лимиты подписки могут молчать, прежде чем метка станет тревожной.
-//: Обычный такт — пять минут, так что вдвое больший разрыв означает не тишину
-//: в работе, а неудачные запросы к Anthropic.
+//: How long the subscription limits may stay quiet before the mark turns alarming.
+//: The usual tick is five minutes, so a gap twice that means not quiet work
+//: but failed requests to Anthropic.
 const PLAN_STALE_SECONDS = 600;
 
-/** Содержимое виджетов. Раскладку и видимость держит Dashboard.
+/** The widget contents. The layout and visibility are held by Dashboard.
  *
- * У каждого виджета своё время последних данных: обзор пересчитывается каждую
- * секунду, но события в нём появляются, только когда что-то происходит. Дневные
- * виджеты стоят на последнем ходе с полуночи, лента — на последнем ходе вообще,
- * лимиты подписки — на ответе Anthropic. */
+ * Every widget has its own time of last data: the overview is recomputed every
+ * second, but events appear in it only when something happens. The daily widgets
+ * stand on the last turn since midnight, the feed on the last turn of all,
+ * the subscription limits on the answer from Anthropic. */
 function buildWidgets(
   data: Overview,
   refresh: () => Promise<void>,
@@ -314,8 +314,8 @@ function buildWidgets(
   ];
 }
 
-/** Окно усреднения — в шапке виджета, в одной гамме с часами: меняют его
- *  редко, а места в теле прибора он занимал целую строку. */
+/** The averaging window sits in the widget header, in the same tone as the clock: it is
+ *  changed rarely, and in the instrument body it used to take a whole line. */
 function WindowPicker({ value, onChange }: { value: string; onChange: (key: string) => void }) {
   const { t } = useLang();
   return (
@@ -339,16 +339,16 @@ function WindowPicker({ value, onChange }: { value: string; onChange: (key: stri
 function GaugeWidget({ data, window }: { data: Overview; window: string }) {
   const { t } = useLang();
   const burn = data.burn[window];
-  // Разбивка всегда за то же окно, что и стрелка: два разных периода рядом
-  // читались как одно целое и путали.
+  // The breakdown always covers the same window as the needle: two different periods
+  // side by side read as one whole and confused.
   const slices = slicesOf(burn.usage, t);
   const peak = Math.max(...WINDOWS.map((key) => data.burn[key].output_per_min), 500);
   const total = slices.reduce((sum, item) => sum + item.value, 0);
 
   return (
     <>
-      {/* Разбивка — сбоку от прибора: по бокам полукруга остаётся пустое поле,
-          а список из четырёх строк как раз в него укладывается. */}
+      {/* The breakdown sits beside the instrument: empty space is left along the sides
+          of the semicircle, and a list of four rows fits into it exactly. */}
       <div className="gauge-row">
         <Gauge value={burn.tokens_per_min} slices={slices} caption={t(`window.caption.${window}`)} />
 
@@ -398,14 +398,14 @@ function TodayWidget({ data }: { data: Overview }) {
           <dt>{t("today.cacheWrite")}</dt>
           <dd>{grouped(data.today.cache_write)}</dd>
         </div>
-        {/* Тариф подписочный: это не счёт, а «сколько стоило бы по API» (ТЗ §4). */}
+        {/* The rate is the subscription one: this is not a bill but "what it would cost over the API" (TZ §4). */}
         <div className="today-wide">
           <dt>{t("today.cost")}</dt>
           <dd>{usd(data.today.cost_usd)}</dd>
         </div>
       </dl>
-      {/* Свой расход рядом с чужим: прибор, который стоит дороже того, что
-          экономит, — плохой прибор (задача C4). */}
+      {/* Our own spend next to everyone else's: an instrument that costs more than it
+          saves is a bad instrument (task C4). */}
       {advisor !== undefined && advisor.ticks > 0 && (
         <p className="hint">
           {t("today.advisor", {
@@ -456,8 +456,8 @@ function FeedWidget({ data }: { data: Overview }) {
   const { t } = useLang();
   return (
     <>
-      {/* Классы те же, что у строк: на узких экранах колонки прячутся по ним,
-          иначе подписи разъехались бы относительно значений. */}
+      {/* The classes are the same as on the rows: on narrow screens columns hide by them,
+          otherwise the captions would drift away from the values. */}
       <div className="turn turn-head" aria-hidden="true">
         <span>{t("feed.time")}</span>
         <span className="turn-model">{t("feed.model")}</span>
@@ -491,8 +491,8 @@ function SessionBoard({
     items: sessions.filter((session) => session.status === key),
   }));
 
-  // Пока вкладку не выбрали руками, открыта первая, где что-то есть: смотреть
-  // на пустой список «ждёт разрешения» смысла нет.
+  // Until a tab is chosen by hand, the first non-empty one is open: staring at an
+  // empty "waiting for permission" list is pointless.
   const active = chosen ?? counts.find((status) => status.items.length > 0)?.key ?? "working";
   const shown = counts.find((status) => status.key === active)?.items ?? [];
 
@@ -596,7 +596,7 @@ function SessionCard({ session, now }: { session: LiveSession; now: string }) {
       </p>
       <div className="session-meta">
         <code>{session.id.slice(0, 8)}</code>
-        {/* Полный путь — в подсказке: на карточке важно короткое имя. */}
+        {/* The full path is in the tooltip: on the card the short name is what matters. */}
         <span className="session-project" title={session.root_path ?? undefined}>
           {session.project ?? "—"}
         </span>

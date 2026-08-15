@@ -1,7 +1,7 @@
 """CLI `cburn` (TZ §10).
 
-Реализовано: `paths`, `initdb`, `reindex`, `prices`, `sessions`, `session`, `serve`, `otel`.
-Фильтры по проекту и периоду и команда `stats` — задача B7.
+Implemented: `paths`, `initdb`, `reindex`, `prices`, `sessions`, `session`, `serve`, `otel`.
+Project and period filters and the `stats` command are task B7.
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_filters(stats)
     sessions = sub.add_parser("sessions", help="список сессий")
     sessions.add_argument("-n", "--limit", type=int, default=20, help="сколько показать")
-    # Список и так ограничен -n, поэтому по умолчанию он за всю историю.
+    # The list is already bounded by -n, so by default it covers the whole history.
     _add_filters(sessions, period="all")
     session = sub.add_parser("session", help="детали одной сессии")
     session.add_argument("session_id", help="полный id или его начало")
@@ -91,7 +91,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _add_filters(parser: argparse.ArgumentParser, *, period: str = "7d") -> None:
-    """Общие фильтры: проект подстрокой пути, период — `today`, `24h`, `7d`, `all`."""
+    """Shared filters: project as a path substring, period as `today`, `24h`, `7d`, `all`."""
     parser.add_argument("--project", help="часть имени или пути проекта, например cburn")
     parser.add_argument(
         "--period",
@@ -101,7 +101,7 @@ def _add_filters(parser: argparse.ArgumentParser, *, period: str = "7d") -> None
 
 
 def _since(period: str) -> datetime | None:
-    """Начало периода; разбор общий с экраном «Сессии»."""
+    """The start of a period; the parsing is shared with the "Sessions" screen."""
     try:
         return period_start(period)
     except ValueError as exc:
@@ -179,11 +179,11 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _otel_env(port: int) -> dict[str, str]:
-    """Переменные окружения, которыми Claude Code включает телеметрию (веха E).
+    """The environment variables Claude Code switches telemetry on with (milestone E).
 
-    Кодировка `http/json`: приёмник разбирает её штатным json и живёт на том же
-    порту, что дашборд. Интервалы короче стандартных (60 и 5 секунд), потому
-    что телеметрия здесь идёт на живой прибор, а не в хранилище на потом.
+    The `http/json` encoding: the receiver parses it with the standard json module and
+    lives on the same port as the dashboard. The intervals are shorter than the standard
+    ones (60 and 5 seconds), because here telemetry feeds a live instrument, not storage.
     """
     return {
         "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
@@ -197,10 +197,10 @@ def _otel_env(port: int) -> dict[str, str]:
 
 
 def _otel(show_env: bool, show_settings: bool, port: int | None, prune: bool = False) -> int:
-    """Состояние приёма телеметрии и способ её включить.
+    """The state of telemetry reception and the way to switch it on.
 
-    Сами переменные окружения приложение не прописывает: `~/.claude` открыт
-    только на чтение, а трогать профиль шелла за человека — не его дело.
+    The application does not write the environment variables itself: `~/.claude` is open
+    read-only, and touching the shell profile on a human's behalf is not its business.
     """
     bind_port = port or int(config.load()["server"]["port"])
     env = _otel_env(bind_port)
@@ -230,8 +230,8 @@ def _otel(show_env: bool, show_settings: bool, port: int | None, prune: bool = F
             f"{signal:8}: посылок {row['batches']}, записей {row['stored']}, "
             f"потеряно {row['dropped']}, последняя {row['last_at']}"
         )
-    # Посылки идут, а записей нет — почти всегда это чужая кодировка: приёмник
-    # читает только `http/json`, а `http/protobuf` разобрать нечем.
+    # Payloads arrive but no records appear - almost always that is a foreign encoding:
+    # the receiver reads only `http/json`, and `http/protobuf` cannot be parsed here.
     if state["signals"] and not any(row["stored"] for row in state["signals"].values()):
         print(
             "посылки приходят, но не разобраны — проверьте"
@@ -268,7 +268,7 @@ def _otel(show_env: bool, show_settings: bool, port: int | None, prune: bool = F
 
 
 def _serve(host: str, port: int | None, reload: bool) -> int:
-    """Поднять API вместе с watcher в одном процессе."""
+    """Bring up the API together with the watcher in one process."""
     import uvicorn
 
     from .api.server import create_app
@@ -292,16 +292,16 @@ def _thousands(value: int) -> str:
 
 
 def _usd(value: float) -> str:
-    """Доллары с разрядами. Подписка ими не оплачивается — это вес расхода."""
+    """Dollars with separators. A subscription is not paid in them - it is the spend weight."""
     return "$" + f"{value:,.2f}".replace(",", " ")
 
 
 def _reindex(full: bool = False, project: str | None = None) -> int:
-    """Дочитать все транскрипты (задача B2).
+    """Read all the transcripts (task B2).
 
-    `--full` сбрасывает сохранённые offset и читает файлы целиком: нужно, когда
-    поменялась логика разбора — например, чтобы проставить связи resume-форков
-    на уже прочитанной истории. Повторные ходы гасятся по `message_id`.
+    `--full` resets the stored offsets and reads the files whole: needed when the parsing
+    logic has changed - for instance, to fill in resume-fork links over already read
+    history. Repeated turns are swallowed by `message_id`.
     """
     started = time.monotonic()
     roots = _project_dirs(project)
@@ -311,14 +311,14 @@ def _reindex(full: bool = False, project: str | None = None) -> int:
     with connect() as conn:
         pricing.sync_prices(conn, config.load())
         if full:
-            with conn:  # выводимые из данных вещи собираются заново, иначе задвоятся
+            with conn:  # things derived from the data are rebuilt, otherwise they double
                 conn.execute("DELETE FROM files")
                 conn.execute("DELETE FROM raw_events")
                 conn.execute("DELETE FROM raw_event_counts")
                 conn.execute("UPDATE sessions SET parent_session_id = NULL")
         results = [stats for root in roots for stats in ingest_tree(conn, root, on_file=_progress)]
     if sys.stderr.isatty():
-        print(file=sys.stderr)  # закрыть строку прогресса
+        print(file=sys.stderr)  # close the progress line
     lines = sum(result.lines for result in results)
     turns = sum(result.turns_new for result in results)
     known = sum(result.turns_known for result in results)
@@ -329,7 +329,7 @@ def _reindex(full: bool = False, project: str | None = None) -> int:
 
 
 def _project_dirs(project: str | None) -> list[Path]:
-    """Каталоги транскриптов для обхода: весь корень или только нужный проект."""
+    """Transcript directories to walk: the whole root or only the project asked for."""
     root = paths.CLAUDE_PROJECTS_DIR
     if not project:
         return [root]
@@ -337,14 +337,14 @@ def _project_dirs(project: str | None) -> list[Path]:
 
 
 def _progress(done: int, total: int, path: Path) -> None:
-    """Живая строка обхода. В пайп не пишется: там нужен только итог."""
+    """A live walk line. It is not written into a pipe: there only the result matters."""
     if not sys.stderr.isatty():
         return
     print(f"\r{done}/{total}  {path.name[:36]:<36}", end="", file=sys.stderr, flush=True)
 
 
 def _advise(project: str | None, period: str, model: str | None, dry_run: bool) -> int:
-    """Прогнать дайджест через советчик (задача D2)."""
+    """Run the digest through the advisor (task D2)."""
     cfg = config.load()
     chosen = model or cfg["analyzer"]["model"]
     since = _since(period) or datetime.fromtimestamp(0, UTC)
@@ -378,7 +378,7 @@ def _advise(project: str | None, period: str, model: str | None, dry_run: bool) 
 
 
 def _digest(project: str | None, period: str, out: str | None) -> int:
-    """Собрать дайджест периода — вход советчика (задача D1)."""
+    """Build the period digest - the advisor's input (task D1)."""
     since = _since(period) or datetime.fromtimestamp(0, UTC)
     with connect() as conn:
         payload = digest.build(conn, since, config=config.load(), project=project)
@@ -393,7 +393,7 @@ def _digest(project: str | None, period: str, out: str | None) -> int:
 
 
 def _events(show: str | None) -> int:
-    """Незнакомые записи: что встречается и как выглядит (задача B6)."""
+    """Unknown records: what shows up and what it looks like (task B6)."""
     with connect() as conn:
         if show:
             rows = conn.execute(
@@ -424,7 +424,7 @@ def _events(show: str | None) -> int:
 
 
 def _prices(init: bool) -> int:
-    """Применить `[prices]` из конфига ко всей истории."""
+    """Apply `[prices]` from the config to the whole history."""
     cfg = config.load()
     if init and not cfg["prices"]:
         cfg["prices"] = pricing.sample_prices()
@@ -452,15 +452,15 @@ def _prices(init: bool) -> int:
 
 
 def _stats(project: str | None, period: str) -> int:
-    """Сводка расхода за период (ТЗ §4, задача B7)."""
+    """The spend summary for a period (TZ §4, task B7)."""
     since = _since(period) or datetime.fromtimestamp(0, UTC)
     with connect() as conn:
         usage = window_usage(conn, since, project=project)
         models = model_share(conn, since, project=project)
         profile = tool_profile(conn, since, project=project)
         idle = idle_turns(conn, since, project=project)
-        # Служебные запросы Claude Code в транскрипт не попадают: без этой
-        # строки сводка молча занижала бы расход (веха E).
+        # Claude Code service requests never reach the transcript: without this line
+        # the summary would quietly understate the spend (milestone E).
         off_transcript = otel_usage(conn, since, project=project)
         permissions = otel_permissions(conn, since, project=project)
     if not usage["turns"]:
@@ -507,7 +507,7 @@ def _stats(project: str | None, period: str) -> int:
 
 
 def _model_label(model: str) -> str:
-    """Короткое имя модели: `claude-` и дата выпуска в выводе только мешают."""
+    """A short model name: `claude-` and the release date only get in the way here."""
     short = model.removeprefix("claude-")
     head, _, tail = short.rpartition("-")
     return head if head and tail.isdigit() and len(tail) == 8 else short
@@ -543,7 +543,7 @@ def _sessions(limit: int, project: str | None = None, period: str = "all") -> in
 
 
 def _resolve_session_id(conn: object, prefix: str) -> str | None:
-    """Разрешить id по префиксу — вводить полный uuid руками неудобно."""
+    """Resolve an id by prefix - typing a full uuid by hand is inconvenient."""
     rows = list(
         conn.execute(  # type: ignore[attr-defined]
             "SELECT id FROM sessions WHERE id LIKE ? ORDER BY last_at DESC", (prefix + "%",)

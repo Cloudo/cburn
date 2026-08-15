@@ -1,5 +1,5 @@
-"""Советчик (TZ §6, M3).
+"""Advisor (TZ §6, M3).
 
-Шаг 1 — дайджест без LLM (агрегаты, до 20k токенов, без текста переписки);
-шаг 2 — `claude -p` на haiku, ответ — JSON-массив советов; совет без evidence отбрасывается.
+Step 1 - a digest without an LLM (aggregates, up to 20k tokens, no conversation text);
+step 2 - `claude -p` on haiku, the answer is a JSON array of tips; a tip without evidence is cut.
 """

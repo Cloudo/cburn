@@ -1,16 +1,16 @@
-//! Поднять сервер дашборда, если он ещё не отвечает (задача F3).
+//! Bring the dashboard server up if it does not answer yet (task F3).
 //!
-//! Приложение — «один .app», который человек кладёт в автозапуск вместо
-//! launchd-агента (ТЗ §11 M5). Python-часть при этом остаётся установленной
-//! отдельно: упаковывать интерпретатор внутрь .app ради локального инструмента
-//! незачем, а вот найти уже установленную команду и запустить её — можно.
+//! The application is "one .app" a human puts into autostart instead of the
+//! launchd agent (TZ §11 M5). The Python part stays installed separately:
+//! packing an interpreter inside the .app for a local tool is pointless,
+//! while finding an already installed command and running it is not.
 //!
-//! Где ищется команда, по порядку:
-//! 1. `CBURN_SERVE` — если задана, выполняется как есть;
-//! 2. привычные места установки (`~/.local/bin`, homebrew, каталог разработки).
+//! Where the command is looked for, in order:
+//! 1. `CBURN_SERVE` - if set, it is executed as it is;
+//! 2. the usual install locations (`~/.local/bin`, homebrew, the development directory).
 //!
-//! Ничего не найдено — окно всё равно откроется и честно покажет «нет связи»:
-//! молча подменять сервер своими силами приложение не должно.
+//! Nothing found - the window still opens and honestly shows "offline":
+//! the application must not quietly stand in for the server on its own.
 
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -18,10 +18,10 @@ use std::time::Duration;
 
 use crate::tray::DASHBOARD;
 
-/// Сколько ждать ответа сервера, прежде чем считать, что его нет.
+/// How long to wait for the server answer before deciding it is absent.
 const PROBE_TIMEOUT: Duration = Duration::from_millis(700);
 
-/// Запущен ли сервер прямо сейчас.
+/// Whether the server is running right now.
 pub fn is_running() -> bool {
     ureq::get(&format!("{DASHBOARD}/api/health"))
         .timeout(PROBE_TIMEOUT)
@@ -29,7 +29,7 @@ pub fn is_running() -> bool {
         .is_ok()
 }
 
-/// Найти команду запуска и выполнить её в фоне. Возвращает путь, если запустили.
+/// Find the start command and run it in the background. Returns the path if we started it.
 pub fn start_if_needed() -> Option<PathBuf> {
     if is_running() {
         return None;
@@ -46,7 +46,7 @@ pub fn start_if_needed() -> Option<PathBuf> {
         "/opt/homebrew/bin/cburn".to_string(),
         "/usr/local/bin/cburn".to_string(),
         format!("{home}/code/cburn/.venv/bin/cburn"),
-        format!("{home}/code/cloudo-dash/.venv/bin/cburn"), // каталог прежнего имени
+        format!("{home}/code/cloudo-dash/.venv/bin/cburn"), // the directory of the former name
     ];
     candidates
         .iter()
@@ -56,8 +56,8 @@ pub fn start_if_needed() -> Option<PathBuf> {
 }
 
 fn spawn(program: PathBuf, args: &[&str]) -> Option<PathBuf> {
-    // Вывод уходит в никуда: у сервера свой лог рядом с базой, а держать
-    // трубы открытыми ради него незачем — приложение переживёт его перезапуск.
+    // The output goes nowhere: the server has its own log next to the database, and
+    // keeping pipes open for it is pointless - the application survives its restart.
     Command::new(&program)
         .args(args)
         .stdout(Stdio::null())

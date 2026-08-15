@@ -1,13 +1,13 @@
-// Тема оформления. Как язык и раскладка, это дело браузера: выбор живёт
-// в localStorage, а сервер про него не знает. Пока выбора не сделали, тема
-// следует за системной и переключается вместе с ней.
+// The colour theme. Like the language and the layout, this is the browser's business:
+// the choice lives in localStorage and the server knows nothing about it. Until a choice
+// is made, the theme follows the system one and switches together with it.
 
 import { useEffect, useState } from "react";
 
 export type Theme = "dark" | "light";
 
 const STORAGE_KEY = "cburn.theme";
-const RENAMED_KEY = "cloudo-dash.theme"; // ключ прежнего имени проекта
+const RENAMED_KEY = "cloudo-dash.theme"; // the key of the former project name
 
 function system(): Theme {
   return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
@@ -25,8 +25,8 @@ export function useTheme(): { theme: Theme; setTheme: (next: Theme) => void } {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
 
-  // Пока тему не выбрали руками, она едет за системной: сменился режим
-  // в macOS — сменился и дашборд, без перезагрузки.
+  // Until the theme is chosen by hand, it rides the system one: the macOS mode
+  // changed - the dashboard changed too, without a reload.
   useEffect(() => {
     if (stored()) return;
     const media = window.matchMedia("(prefers-color-scheme: light)");
@@ -39,7 +39,7 @@ export function useTheme(): { theme: Theme; setTheme: (next: Theme) => void } {
     try {
       localStorage.setItem(STORAGE_KEY, next);
     } catch {
-      // приватный режим — выбор просто не запомнится
+      // private mode - the choice simply will not be remembered
     }
     setTheme(next);
   };

@@ -1,4 +1,4 @@
-"""Тесты парсера строки транскрипта (задача A1)."""
+"""Tests of the transcript line parser (task A1)."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def parse_fixture(path: Path) -> list[ParsedRecord]:
 
 
 def test_fixtures_present() -> None:
-    """Фикстуры должны покрывать все версии Claude Code из истории."""
+    """The fixtures must cover every Claude Code version from history."""
     assert {path.stem for path in FIXTURES} >= {
         "v2.1.220",
         "v2.1.222",
@@ -30,15 +30,15 @@ def test_fixtures_present() -> None:
     }
 
 
-# --- мусор на входе ---------------------------------------------------------
+# --- garbage on input ---------------------------------------------------------
 
 
 @pytest.mark.parametrize(
     "raw",
-    ["", "   ", "\n", "{битый json", '{"type": "assistant"', "null", "[1, 2]", '"строка"', "42"],
+    ["", "   ", "\n", "{broken json", '{"type": "assistant"', "null", "[1, 2]", '"a string"', "42"],
 )
 def test_broken_line_returns_none(raw: str) -> None:
-    """Битая строка не роняет разбор и не притворяется записью."""
+    """A broken line does not bring parsing down and does not pretend to be a record."""
     assert parse_line(raw) is None
 
 
@@ -53,7 +53,7 @@ def test_record_without_type_is_unknown() -> None:
 
 
 def test_usage_splits_cache_write_by_ttl() -> None:
-    """Запись в 1h-кэш тарифицируется иначе, чем в 5m, — считаем раздельно."""
+    """A write into the 1h cache is billed differently from the 5m one - counted separately."""
     line = json.dumps(
         {
             "type": "assistant",
@@ -94,7 +94,7 @@ def test_usage_splits_cache_write_by_ttl() -> None:
 
 
 def test_usage_without_cache_creation_falls_back_to_flat_field() -> None:
-    """Без разбивки по TTL всё уходит в 5m, но сумма остаётся верной."""
+    """Without a TTL breakdown everything goes to 5m, but the total stays correct."""
     line = json.dumps(
         {
             "type": "assistant",
@@ -108,7 +108,7 @@ def test_usage_without_cache_creation_falls_back_to_flat_field() -> None:
 
 
 def test_usage_ignores_junk_values() -> None:
-    """Незнакомые или неверные типы полей не должны ломать разбор."""
+    """Unknown or wrong field types must not break parsing."""
     line = json.dumps(
         {
             "type": "assistant",
@@ -116,7 +116,7 @@ def test_usage_ignores_junk_values() -> None:
                 "id": "m",
                 "usage": {
                     "input_tokens": None,
-                    "output_tokens": "много",
+                    "output_tokens": "a lot",
                     "cache_read_input_tokens": 10,
                     "unknown_field": {"a": 1},
                 },
@@ -136,13 +136,13 @@ def test_assistant_without_usage() -> None:
     assert record.usage is None
 
 
-# --- ход ≠ запись -----------------------------------------------------------
+# --- a turn is not a record ---------------------------------------------------
 
 
 def test_one_turn_is_split_across_records_with_identical_usage() -> None:
-    """Ответ разложен по блокам, usage в каждой записи полный и одинаковый.
+    """The answer is spread over blocks, the usage in each record is full and identical.
 
-    Суммировать его по записям нельзя — ключ хода `message_id`.
+    It must not be summed across records - the turn key is `message_id`.
     """
     usage = {"output_tokens": 1432, "cache_read_input_tokens": 628079}
     blocks = [
@@ -171,7 +171,7 @@ def test_one_turn_is_split_across_records_with_identical_usage() -> None:
     assert tools[0].detail == "ls"
 
 
-# --- инструменты ------------------------------------------------------------
+# --- tools --------------------------------------------------------------------
 
 
 def test_tool_use_blocks_are_collected() -> None:
@@ -187,7 +187,7 @@ def test_tool_use_blocks_are_collected() -> None:
                         "type": "tool_use",
                         "id": "t2",
                         "name": "Bash",
-                        "input": {"command": "git commit -m 'секрет'"},
+                        "input": {"command": "git commit -m 'secret'"},
                     },
                     {"type": "tool_use", "name": "mcp__playwright__browser_click", "input": {}},
                 ],
@@ -201,8 +201,8 @@ def test_tool_use_blocks_are_collected() -> None:
         "Bash",
         "mcp__playwright__browser_click",
     ]
-    assert record.tools[0].detail is None  # путь в БД не попадает
-    assert record.tools[1].detail == "git commit"  # аргументы отброшены
+    assert record.tools[0].detail is None  # the path never reaches the database
+    assert record.tools[1].detail == "git commit"  # the arguments are dropped
     assert record.tools[0].tool_use_id == "t1"
 
 
@@ -210,13 +210,13 @@ def test_tool_use_blocks_are_collected() -> None:
     ("command", "expected"),
     [
         ("git status --short", "git status"),
-        ("git commit -m 'многословное сообщение'", "git commit"),
+        ("git commit -m 'a wordy message'", "git commit"),
         ("ls", "ls"),
         ("ls -la /Users/secret", "ls"),
         ("sed -n 1,50p file.py", "sed"),
-        ("cd /Users/x && npm run build", "npm run"),  # `cd` — префикс, а не команда
-        ("cat a.txt | grep пароль", "cat"),
-        ("/usr/local/bin/python3 script.py", "python3"),  # имя файла — не подкоманда
+        ("cd /Users/x && npm run build", "npm run"),  # `cd` is a prefix, not a command
+        ("cat a.txt | grep password", "cat"),
+        ("/usr/local/bin/python3 script.py", "python3"),  # a file name is not a subcommand
         ("docker compose up -d", "docker compose"),
         ("echo 'hi' > /tmp/x", "echo"),
         ("  ", None),
@@ -229,11 +229,11 @@ def test_normalize_command(command: str | None, expected: str | None) -> None:
 
 
 def test_normalize_command_keeps_no_paths() -> None:
-    """Приватность: в нормализованной команде не остаётся путей и аргументов."""
+    """Privacy: no paths and no arguments are left in the normalised command."""
     assert "/Users" not in (normalize_command("grep -r pattern /Users/me/secret") or "")
 
 
-# --- user: промпт против результата инструмента ------------------------------
+# --- user: a prompt versus a tool result ----------------------------------------
 
 
 def test_tool_result_is_not_a_prompt() -> None:
@@ -251,35 +251,35 @@ def test_tool_result_is_not_a_prompt() -> None:
 
 @pytest.mark.parametrize(
     "content",
-    ["привет", [{"type": "text", "text": "привет"}]],
+    ["hello", [{"type": "text", "text": "hello"}]],
 )
 def test_prompt_text_from_both_content_shapes(content: object) -> None:
-    """Контент промпта бывает и строкой, и массивом блоков."""
+    """Prompt content comes both as a string and as an array of blocks."""
     record = parse_line(json.dumps({"type": "user", "message": {"content": content}}))
     assert record is not None
     assert record.kind is RecordKind.PROMPT
-    assert record.prompt_text == "привет"
+    assert record.prompt_text == "hello"
 
 
 def test_prompt_without_prompt_source_is_still_a_prompt() -> None:
-    """`promptSource` есть меньше чем у 5% user-записей — на него не опираемся."""
-    record = parse_line(json.dumps({"type": "user", "message": {"content": "вопрос"}}))
+    """`promptSource` is present on less than 5% of user records - we do not rely on it."""
+    record = parse_line(json.dumps({"type": "user", "message": {"content": "question"}}))
     assert record is not None
     assert record.kind is RecordKind.PROMPT
     assert record.prompt_source is None
 
 
 def test_prompt_text_is_truncated() -> None:
-    record = parse_line(json.dumps({"type": "user", "message": {"content": "я" * 500}}))
+    record = parse_line(json.dumps({"type": "user", "message": {"content": "x" * 500}}))
     assert record is not None
     assert record.prompt_text is not None
     assert len(record.prompt_text) == 200
 
 
 def test_compact_summary_flag() -> None:
-    """Автосуммаризация видна флагом на user-записи, типа `summary` больше нет."""
+    """Auto-compaction shows as a flag on a user record, the `summary` type is gone."""
     line = json.dumps(
-        {"type": "user", "isCompactSummary": True, "message": {"content": "сжатый пересказ"}}
+        {"type": "user", "isCompactSummary": True, "message": {"content": "a compacted retelling"}}
     )
     record = parse_line(line)
     assert record is not None
@@ -295,7 +295,7 @@ def test_image_only_prompt_has_no_text() -> None:
     assert record.prompt_text is None
 
 
-# --- общие поля -------------------------------------------------------------
+# --- common fields ---------------------------------------------------------------
 
 
 def test_common_fields_and_sidechain() -> None:
@@ -338,47 +338,47 @@ def test_common_fields_and_sidechain() -> None:
         "frame-link",
         "agent-name",
         "summary",
-        "неизвестный-тип-из-будущего",
+        "unknown-type-from-the-future",
     ],
 )
 def test_other_types_go_to_unknown_with_payload(raw_type: str) -> None:
-    """Незнакомые типы не теряются: их складывает в raw_events индексатор."""
-    record = parse_line(json.dumps({"type": raw_type, "uuid": "u1", "поле": "значение"}))
+    """Unknown types are not lost: the indexer stashes them into raw_events."""
+    record = parse_line(json.dumps({"type": raw_type, "uuid": "u1", "field": "value"}))
     assert record is not None
     assert record.kind is RecordKind.UNKNOWN
     assert record.raw_type == raw_type
     assert record.uuid == "u1"
-    assert record.payload["поле"] == "значение"
+    assert record.payload["field"] == "value"
 
 
-# --- фикстуры реальных версий ------------------------------------------------
+# --- fixtures of real versions -----------------------------------------------------
 
 
 @pytest.mark.parametrize("path", FIXTURES, ids=lambda path: path.stem)
 def test_fixture_parses_without_losses(path: Path) -> None:
-    """Каждая строка фикстуры разбирается, ходы ассистента несут полный usage."""
+    """Every fixture line parses, assistant turns carry full usage."""
     lines = path.read_text().splitlines()
     records = parse_fixture(path)
     assert len(records) == len(lines)
 
     assistants = [record for record in records if record.kind is RecordKind.ASSISTANT]
-    assert assistants, "в фикстуре нет ходов ассистента"
+    assert assistants, "the fixture has no assistant turns"
     for record in assistants:
         assert record.usage is not None
         assert record.message_id
         assert record.model
         assert record.ts
 
-    # Ключевое поле разведки: запись в 1h-кэш встречается в реальной истории.
+    # The key finding of the survey: a write into the 1h cache occurs in real history.
     assert any(record.usage.cache_write_1h > 0 for record in assistants if record.usage)
     assert all(record.kind is not RecordKind.UNKNOWN or record.raw_type for record in records)
 
 
 @pytest.mark.parametrize("path", FIXTURES, ids=lambda path: path.stem)
 def test_fixture_usage_matches_jq_style_sum(path: Path) -> None:
-    """Сумма по ходам (не по записям) совпадает с независимым подсчётом.
+    """The sum over turns (not over records) matches an independent count.
 
-    Независимый подсчёт — по `message.id` из сырого JSON, как это сделал бы `jq`.
+    The independent count goes by `message.id` from the raw JSON, the way `jq` would do it.
     """
     by_message: dict[str, int] = {}
     for line in path.read_text().splitlines():
@@ -400,17 +400,17 @@ def test_fixture_usage_matches_jq_style_sum(path: Path) -> None:
 
 @pytest.mark.parametrize("path", FIXTURES, ids=lambda path: path.stem)
 def test_fixture_records_outnumber_turns(path: Path) -> None:
-    """Записей ассистента больше, чем ходов: один ответ разложен по блокам."""
+    """There are more assistant records than turns: one answer is spread over blocks."""
     assistants = [r for r in parse_fixture(path) if r.kind is RecordKind.ASSISTANT]
     turns = {record.message_id for record in assistants}
     assert len(assistants) > len(turns)
 
 
-# --- слияние usage внутри хода -----------------------------------------------
+# --- merging usage inside a turn ----------------------------------------------------
 
 
 def test_usage_merge_takes_elementwise_max() -> None:
-    """Записи одного хода несут расход неравномерно: часть из них нулевая."""
+    """Records of one turn carry the spend unevenly: some of them are zero."""
     from cburn.collector.parser import Usage
 
     empty = Usage()
@@ -418,8 +418,8 @@ def test_usage_merge_takes_elementwise_max() -> None:
         input_tokens=2, output_tokens=106, cache_read=5000, cache_write_5m=1, cache_write_1h=7
     )
     assert empty.merge(full) == full
-    assert full.merge(empty) == full  # порядок чтения не влияет
-    assert full.merge(full) == full  # повтор не суммируется
+    assert full.merge(empty) == full  # the read order does not matter
+    assert full.merge(full) == full  # a repeat is not summed
 
 
 def test_usage_merge_combines_partial_records() -> None:
@@ -429,44 +429,44 @@ def test_usage_merge_combines_partial_records() -> None:
     assert merged == Usage(input_tokens=3, output_tokens=10, cache_read=5, cache_write_1h=7)
 
 
-# --- служебные обёртки в промптах --------------------------------------------
+# --- service wrappers in prompts -----------------------------------------------------
 
 
 def test_service_blocks_are_stripped_from_prompt() -> None:
-    """Подпись сессии — вопрос человека, а не контекст IDE вокруг него."""
+    """The session caption is the human's question, not the IDE context around it."""
     content = (
         "<ide_opened_file>The user opened the file /Users/x/ROADMAP.md</ide_opened_file>"
-        "что у нас дальше по плану?"
+        "what is next on the plan?"
     )
     record = parse_line(json.dumps({"type": "user", "message": {"content": content}}))
     assert record is not None
-    assert record.prompt_text == "что у нас дальше по плану?"
+    assert record.prompt_text == "what is next on the plan?"
 
 
 def test_several_service_blocks_are_stripped() -> None:
     content = (
-        "<system-reminder>напоминание</system-reminder>\n"
-        "<local-command-caveat>предупреждение</local-command-caveat>\n"
-        "почини тесты"
+        "<system-reminder>a reminder</system-reminder>\n"
+        "<local-command-caveat>a caveat</local-command-caveat>\n"
+        "fix the tests"
     )
     record = parse_line(json.dumps({"type": "user", "message": {"content": content}}))
     assert record is not None
-    assert record.prompt_text == "почини тесты"
+    assert record.prompt_text == "fix the tests"
 
 
 def test_angle_brackets_inside_normal_prompt_survive() -> None:
-    """Обычный текст с угловыми скобками не считается служебным блоком."""
-    content = "почему `a <b> c` не парсится?"
+    """Ordinary text with angle brackets does not count as a service block."""
+    content = "why does `a <b> c` not parse?"
     record = parse_line(json.dumps({"type": "user", "message": {"content": content}}))
     assert record is not None
     assert record.prompt_text == content
 
 
-# --- название сессии и слэш-команды ------------------------------------------
+# --- the session title and slash commands ---------------------------------------------
 
 
 def test_slash_command_prompt_becomes_command_name() -> None:
-    """Запуск слэш-команды — это предупреждение и блоки команды, без живого текста."""
+    """Running a slash command is a caveat and command blocks, without live text."""
     content = (
         "<local-command-caveat>Caveat: The messages below were generated by the user while "
         "running local commands. DO NOT respond to these messages.</local-command-caveat>\n"
@@ -478,8 +478,8 @@ def test_slash_command_prompt_becomes_command_name() -> None:
 
 
 def test_service_only_prompt_has_no_text() -> None:
-    """Стена служебного текста подписью сессии не станет."""
-    content = "<local-command-caveat>Caveat: не отвечай на это</local-command-caveat>"
+    """A wall of service text will not become the session caption."""
+    content = "<local-command-caveat>Caveat: do not answer this</local-command-caveat>"
     record = parse_line(json.dumps({"type": "user", "message": {"content": content}}))
     assert record is not None
     assert record.prompt_text is None
@@ -490,10 +490,10 @@ def test_service_only_prompt_has_no_text() -> None:
     [("ai-title", "aiTitle", "ai"), ("custom-title", "customTitle", "custom")],
 )
 def test_title_records(raw_type: str, field: str, source: str) -> None:
-    record = parse_line(json.dumps({"type": raw_type, field: "Разбор роадмапа", "sessionId": "s1"}))
+    record = parse_line(json.dumps({"type": raw_type, field: "Roadmap review", "sessionId": "s1"}))
     assert record is not None
     assert record.kind is RecordKind.TITLE
-    assert record.title == "Разбор роадмапа"
+    assert record.title == "Roadmap review"
     assert record.title_source == source
     assert record.session_id == "s1"
 
@@ -504,26 +504,26 @@ def test_title_record_without_value_is_unknown() -> None:
     assert record.kind is RecordKind.UNKNOWN
 
 
-# --- нормализация команд: обёртки и подкоманды -------------------------------
+# --- command normalisation: wrappers and subcommands ------------------------------------
 
 
 @pytest.mark.parametrize(
     ("command", "expected"),
     [
-        # `cd` в истории оказался самой частой «командой» — это префикс,
-        # а не то, что делает ход.
+        # In history `cd` turned out to be the most frequent "command" - it is a prefix,
+        # not what the turn actually does.
         ("cd /Users/x/project && npm run build", "npm run"),
         ("cd /a && cd /b && make test", "make test"),
-        ("cd ~/code", "cd"),  # смена каталога и есть вся команда
-        ("S=/tmp/secret python3 script.py", "python3"),  # присваивание — не команда
+        ("cd ~/code", "cd"),  # a directory change is the whole command
+        ("S=/tmp/secret python3 script.py", "python3"),  # an assignment is not a command
         ("env FOO=1 pytest -q", "pytest"),
         ("sudo systemctl restart nginx", "systemctl restart"),
         ("time make build", "make build"),
-        # Подкоманда только у команд из белого списка: иначе имя файла
-        # попадает в БД вопреки требованию приватности.
+        # A subcommand only for commands from the allowlist: otherwise a file name
+        # reaches the database against the privacy requirement.
         ("cat README", "cat"),
         ("cat a | grep b", "cat"),
-        ("git commit -m 'сообщение'", "git commit"),
+        ("git commit -m 'message'", "git commit"),
         ("docker compose up -d", "docker compose"),
         ("glab mr view 42", "glab mr"),
     ],
@@ -533,7 +533,7 @@ def test_normalize_command_wrappers(command: str, expected: str) -> None:
 
 
 def test_normalized_command_keeps_no_file_names() -> None:
-    """Приватность: ни путь, ни имя файла в нормализованной команде не остаются."""
+    """Privacy: neither a path nor a file name is left in the normalised command."""
     for command in ("cat /Users/me/secrets.env", "cd /Users/me/private && ls", "vim notes.md"):
         result = normalize_command(command) or ""
         assert "/" not in result

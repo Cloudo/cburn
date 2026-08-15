@@ -10,30 +10,30 @@ dist/
 .ruff_cache/
 .mypy_cache/
 
-# Данные приложения (локальные, в репозиторий не попадают)
+# Application data (local, never committed)
 *.db
 *.db-wal
 *.db-shm
 cburn.db*
 
-# Node / фронт
+# Node / frontend
 node_modules/
 web/dist/
 
-# Артефакты браузерных проверок
+# Browser check artefacts
 .playwright-mcp/
 
-# macOS / редакторы
+# macOS / editors
 .DS_Store
 .idea/
 .vscode/
 
-# Локальные настройки Claude Code
+# Local Claude Code settings
 .claude/settings.local.json
 
-# Изолированные копии репозитория для параллельной работы
+# Isolated repository copies for parallel work
 .claude/worktrees/
 
-# Сборка десктопной обёртки (веха F): гигабайты объектных файлов.
+# The desktop wrapper build (milestone F): gigabytes of object files.
 src-tauri/target/
 src-tauri/gen/

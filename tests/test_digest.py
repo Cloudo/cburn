@@ -1,8 +1,8 @@
-"""Тесты дайджеста периода (задача D1).
+"""Tests of the period digest (task D1).
 
-Главный тест здесь — про приватность: в дайджест не должно просочиться ни
-одного слова переписки. Остальное проверяет, что советчику есть на что
-опереться: тяжёлые сессии, цепочки resume, механическая работа на Opus.
+The main test here is about privacy: not a single word of the conversation may seep
+into the digest. The rest checks that the advisor has something to lean on:
+heavy sessions, resume chains, mechanical work on Opus.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from cburn.analyzer import digest
 from cburn.collector.indexer import ingest_tree
 from cburn.db import connect
 
-SECRET = "секретное слово из переписки"
+SECRET = "a secret word from the conversation"
 
 
 def assistant(
@@ -51,7 +51,7 @@ def assistant(
             "sessionId": session,
             "timestamp": stamp,
             "requestId": f"req_{message_id}",
-            "cwd": "/Users/x/секретный-проект",
+            "cwd": "/Users/x/secret-project",
             "message": {
                 "id": message_id,
                 "model": model,
@@ -92,21 +92,21 @@ def conn(tmp_path: Path) -> sqlite3.Connection:
 
 
 def seed(conn: sqlite3.Connection, tmp_path: Path, lines: list[str], name: str = "s.jsonl") -> None:
-    root = tmp_path / "projects" / "-Users-x-секретный-проект"
+    root = tmp_path / "projects" / "-Users-x-secret-project"
     root.mkdir(parents=True, exist_ok=True)
     (root / name).write_text("\n".join(lines) + "\n")
     ingest_tree(conn, tmp_path / "projects")
 
 
 def test_digest_carries_no_conversation_text(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Ни промпта, ни ответа, ни названия сессии — только числа и имена."""
+    """No prompt, no answer, no session title - only numbers and names."""
     seed(
         conn,
         tmp_path,
         [
-            prompt("пожалуйста, почини вход по SSO для клиента ООО «Ромашка»"),
-            title("починка входа по SSO"),
-            assistant("msg_1", tools=[{"name": "Bash", "input": {"command": "grep -r пароль ."}}]),
+            prompt("please fix the SSO login for the client Daisy Ltd"),
+            title("fixing the SSO login"),
+            assistant("msg_1", tools=[{"name": "Bash", "input": {"command": "grep -r pass ."}}]),
         ],
     )
 
@@ -115,14 +115,14 @@ def test_digest_carries_no_conversation_text(conn: sqlite3.Connection, tmp_path:
     )
 
     assert SECRET not in payload
-    assert "Ромашка" not in payload
-    assert "SSO" not in payload, "названия сессий — это пересказ переписки"
-    assert "пароль" not in payload, "аргументы команд отбрасываются ещё при разборе"
-    assert "grep" in payload, "имя команды при этом видно"
+    assert "Daisy" not in payload
+    assert "SSO" not in payload, "session titles are a retelling of the conversation"
+    assert "password" not in payload, "command arguments are dropped back at parse time"
+    assert "grep" in payload, "the command name stays visible"
 
 
 def test_digest_fits_the_limit(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Дайджест укладывается в 20k токенов — ради этого все топы обрезаны."""
+    """The digest fits into 20k tokens - every top list is trimmed for that."""
     now = datetime.now(UTC)
     lines = [
         assistant(
@@ -143,21 +143,21 @@ def test_digest_fits_the_limit(conn: sqlite3.Connection, tmp_path: Path) -> None
 
 
 def test_digest_marks_heavy_sessions_and_chains(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Тяжёлая сессия и линия работы видны советчику."""
+    """A heavy session and a work line are visible to the advisor."""
     now = datetime.now(UTC)
     seed(
         conn,
         tmp_path,
-        [assistant("msg_1", session="исток", ts=now - timedelta(hours=2), cache_read=400_000)],
+        [assistant("msg_1", session="base", ts=now - timedelta(hours=2), cache_read=400_000)],
     )
     seed(
         conn,
         tmp_path,
         [
-            assistant("msg_1", session="продолжение", ts=now - timedelta(hours=2)),
-            assistant("msg_2", session="продолжение", uuid="u2", ts=now - timedelta(minutes=10)),
+            assistant("msg_1", session="resumed", ts=now - timedelta(hours=2)),
+            assistant("msg_2", session="resumed", uuid="u2", ts=now - timedelta(minutes=10)),
         ],
-        name="вторая.jsonl",
+        name="second.jsonl",
     )
 
     payload = digest.build(
@@ -167,13 +167,13 @@ def test_digest_marks_heavy_sessions_and_chains(conn: sqlite3.Connection, tmp_pa
     )
 
     heavy = {row["id"]: row for row in payload["sessions"]}
-    assert heavy["исток"]["over_context_limit"] is True
-    assert [chain["root"] for chain in payload["chains"]] == ["исток"]
+    assert heavy["base"]["over_context_limit"] is True
+    assert [chain["root"] for chain in payload["chains"]] == ["base"]
     assert payload["chains"][0]["sessions"] == 2
 
 
 def test_digest_counts_mechanical_opus(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Ход, где были только чтение и поиск, — кандидат на модель попроще."""
+    """A turn that held only reading and searching is a candidate for a simpler model."""
     now = datetime.now(UTC)
     seed(
         conn,
@@ -194,7 +194,7 @@ def test_digest_counts_mechanical_opus(conn: sqlite3.Connection, tmp_path: Path)
 
 
 def test_digest_sees_heredoc_calls(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Скрипт, прогнанный через heredoc, считается отдельно от обычных вызовов."""
+    """A script driven through a heredoc is counted apart from ordinary calls."""
     now = datetime.now(UTC)
     seed(
         conn,

@@ -1,327 +1,328 @@
 # cburn
 
-Локальный сервис-«спидометр» расхода токенов Claude Code: наблюдает за всеми
-сессиями на машине, показывает burn rate в реальном времени и раз в час
-предлагает оптимизации. Полное ТЗ — @TZ.md, оно источник истины по требованиям;
-этот файл — рабочие правила поверх него. Декомпозиция на задачи и их статус —
-в [docs/ROADMAP.md](docs/ROADMAP.md); закрывая задачу, ставить там галочку.
+A local "speedometer" service for Claude Code token spend: it watches every
+session on the machine, shows the burn rate in real time and once an hour
+suggests optimisations. The full specification is @TZ.md, and it is the source of truth for
+requirements; this file holds the working rules on top of it. The decomposition into tasks
+and their status live in [docs/ROADMAP.md](docs/ROADMAP.md); when closing a task, tick it
+there.
 
-## Стек и запуск
+## Stack and startup
 
-Python 3.11+ (FastAPI + uvicorn, watchdog, orjson, httpx) и SQLite. Фронт —
-React + Vite (каталог `web/`). Пакетный менеджер — pip в `.venv`,
-`uv` в системе нет.
+Python 3.11+ (FastAPI + uvicorn, watchdog, orjson, httpx) and SQLite. The frontend is
+React + Vite (the `web/` directory). The package manager is pip inside `.venv`,
+there is no `uv` on the system.
 
 ```bash
-.venv/bin/python -m pytest -q                                  # тесты
-.venv/bin/ruff check . && .venv/bin/ruff format --check .      # линт и формат
-.venv/bin/mypy                                                 # типы
-.venv/bin/cburn paths                                          # проверить пути
-.venv/bin/cburn reindex && .venv/bin/cburn serve                # индексация и дашборд
-cd web && npm install && npm run build                          # фронт в web/dist
+.venv/bin/python -m pytest -q                                  # tests
+.venv/bin/ruff check . && .venv/bin/ruff format --check .      # lint and format
+.venv/bin/mypy                                                 # types
+.venv/bin/cburn paths                                          # check the paths
+.venv/bin/cburn reindex && .venv/bin/cburn serve                # indexing and the dashboard
+cd web && npm install && npm run build                          # the frontend into web/dist
 ```
 
-`web/dist` в репозиторий не попадает: после клона фронт нужно собрать, иначе
-на `/` вместо дашборда отдаётся подсказка со списком эндпоинтов.
+`web/dist` is not committed: after a clone the frontend has to be built, otherwise
+`/` serves a hint with the endpoint list instead of the dashboard.
 
-Перед коммитом должны проходить все три проверки.
+All three checks must pass before a commit.
 
-## Структура
+## Structure
 
 ```
 src/cburn/
-  paths.py          пути (транскрипты, конфиг, БД) — единственное место, где они задаются
-  config.py         ~/.config/cburn/config.toml, дефолты по ТЗ §8
-  cli.py            команда `cburn`
-  db/schema.sql     схема SQLite, применяется идемпотентно при connect()
-  collector/        watchdog + инкрементальный парсер JSONL (M1)
-  api/              FastAPI: HTTP + WebSocket на 127.0.0.1 (M2)
-  analyzer/         дайджест + `claude -p` (M3)
-  collector/otlp.py приём телеметрии Claude Code по OTLP/JSON (M4)
-  notifier/         telegram-бридж и Bot API (M3)
-tests/fixtures/transcripts/   обезличенные транскрипты для тестов парсера
+  paths.py          paths (transcripts, config, database) - the single place where they are set
+  config.py         ~/.config/cburn/config.toml, defaults per TZ §8
+  cli.py            the `cburn` command
+  db/schema.sql     the SQLite schema, applied idempotently in connect()
+  collector/        watchdog + the incremental JSONL parser (M1)
+  api/              FastAPI: HTTP + WebSocket on 127.0.0.1 (M2)
+  analyzer/         the digest + `claude -p` (M3)
+  collector/otlp.py receiving Claude Code telemetry over OTLP/JSON (M4)
+  notifier/         the telegram bridge and the Bot API (M3)
+tests/fixtures/transcripts/   anonymised transcripts for the parser tests
 ```
 
-## Инварианты (нарушать нельзя)
+## Invariants (never to be broken)
 
-- **`~/.claude` — только чтение.** Никаких записей, переименований, удалений
-  в каталоге Claude Code. Своё состояние — в `~/.local/share/cburn/`.
-- **Парсер терпимый.** Формат транскриптов недокументирован и меняется между
-  версиями: незнакомые поля игнорировать, незнакомые типы записей складывать
-  в `raw_events`, битая строка пишется в лог и не останавливает обход — offset
-  двигается дальше.
-- **Инкрементальность.** Читается только хвост файла по сохранённому offset;
-  усечение и пересоздание ловятся по паре inode + size.
-- **Приватность.** Текст переписки не покидает машину. В дайджест советчика идут
-  только имена инструментов, нормализованные команды, пути и числа; включение
-  фрагментов команд — исключительно под флагом `allow_snippets`.
-- **Задел на Tauri (M5).** Фронт общается с бэком только по HTTP/WebSocket на
-  localhost — никаких прямых обращений к ФС; никаких браузерных API, которых нет
-  в системном webview. Обёртка на M5 не должна требовать переделки фронта.
-- **Раскладка дашборда — дело браузера, а не сервера.** Позиции, размеры и
-  скрытые виджеты живут в `localStorage` (`cburn.layout.v3`, ключи прежнего
-  имени проекта читаются как запасные); API про них
-  не знает. Вёрстка внутри виджета реагирует на его собственную ширину через
-  `@container`, а не на ширину окна: виджеты тянутся мышью, окно при этом не
-  меняется.
-- **Лимиты подписки берутся у Anthropic, а не считаются нами.** Claude Code
-  зовёт `GET /api/oauth/usage` с OAuth-токеном из связки ключей macOS (запись
-  `Claude Code-credentials`) и кладёт ответ в `~/.claude.json` →
-  `cachedUsageUtilization`. Тот кэш обновляется, только когда сам Claude Code
-  открывает `/usage`, и отстаёт на дни, поэтому основной путь — свой запрос
-  (не чаще раза в 5 минут, эндпоинт отвечает 429 с `Retry-After`), кэш —
-  запасной. Токен нигде не сохраняется: наружу уходят только проценты.
-- **Цены моделей — в конфиге, не в коде** (секция `[prices]`, таблица
-  `model_prices`). Хардкодить тарифы нельзя.
-- **`machine_id`** в `sessions` и `advice` заложен пустым под возможную
-  агрегацию с нескольких машин — не выпиливать.
-- **Связка сессии с процессом — `claude agents --json`.** Она печатает активные
-  сессии (в том числе интерактивные) с `pid`, `sessionId`, `cwd` и именем. Сам
-  процесс `sessionId` не выдаёт: его нет ни в аргументах, ни в открытых
-  дескрипторах — транскрипт дописывается и сразу закрывается.
-- **«Ждёт разрешения» распознаётся по процессам, а не по транскрипту.** Долгий
-  инструмент и висящий вопрос «разрешить?» выглядят в JSONL одинаково: запрос
-  инструмента без ответа. Разводит их потомок процесса сессии, запущенный после
-  запроса (`busy_since` в `sessions`); MCP-серверы и фоновые команды стартуют
-  раньше и не считаются. Инструменты без своего процесса (MCP-вызовы,
-  `WebFetch`) дольше 25 с всё равно покажутся как ожидание разрешения.
-  Где включена телеметрия, догадка не нужна: решение приходит событием
-  `tool_decision` (веха E), и ждать четверти минуты незачем. Правило по
-  процессам остаётся запасным — на сессии без телеметрии и на случай, когда
-  её выключили посреди работы (`OTEL_STALE_SECONDS` в `metrics.py`).
-- **Хуки `SessionEnd` при SIGTERM не отрабатывают.** Своего обработчика
-  сигналов у Claude Code нет: `SIGINT`/`SIGHUP`/`SIGTERM` вызывают немедленный
-  `process.exit()`, а хуки выполняются асинхронно на штатном выходе (`/exit`,
-  Ctrl+D, `/clear`, logout). Команды «завершить чужую сессию» в CLI тоже нет,
-  поэтому дашборд шлёт SIGTERM и честно предупреждает об этом в поповере.
+- **`~/.claude` is read-only.** No writes, renames or deletions inside the Claude Code
+  directory. Our own state lives in `~/.local/share/cburn/`.
+- **The parser is tolerant.** The transcript format is undocumented and changes between
+  versions: ignore unknown fields, stash unknown record types into `raw_events`, and a broken
+  line goes to the log without stopping the walk - the offset moves on.
+- **Incrementality.** Only the file tail is read from the stored offset; truncation and
+  recreation are caught by the inode + size pair.
+- **Privacy.** The conversation text never leaves the machine. Only tool names, normalised
+  commands, paths and numbers go into the advisor digest; including command fragments happens
+  exclusively under the `allow_snippets` flag.
+- **Room for Tauri (M5).** The frontend talks to the backend over HTTP/WebSocket on localhost
+  only - no direct filesystem access; no browser APIs missing from the system webview. The
+  wrapper in M5 must not require reworking the frontend.
+- **The dashboard layout is the browser's business, not the server's.** Positions, sizes and
+  hidden widgets live in `localStorage` (`cburn.layout.v3`, the keys of the former project
+  name are read as a fallback); the API knows nothing about them. The markup inside a widget
+  reacts to its own width through `@container` rather than to the window width: widgets are
+  dragged by hand while the window does not change.
+- **The subscription limits come from Anthropic, we do not count them.** Claude Code calls
+  `GET /api/oauth/usage` with an OAuth token from the macOS keychain (the
+  `Claude Code-credentials` entry) and stores the answer in `~/.claude.json` under
+  `cachedUsageUtilization`. That cache refreshes only when Claude Code itself
+  opens `/usage` and lags by days, so the main path is our own request
+  (no more often than once every 5 minutes, the endpoint answers 429 with `Retry-After`),
+  and the cache is the fallback. The token is never stored: only percentages go out.
+- **Model prices live in the config, not in the code** (the `[prices]` section, the
+  `model_prices` table). Hardcoding rates is not allowed.
+- **`machine_id`** in `sessions` and `advice` is left empty in advance for a possible
+  aggregation across several machines - do not remove it.
+- **The session-to-process link is `claude agents --json`.** It prints the active sessions
+  (interactive ones included) with `pid`, `sessionId`, `cwd` and a name. The process itself
+  does not reveal the `sessionId`: it is neither in the arguments nor in the open descriptors -
+  the transcript is appended to and closed right away.
+- **"Waiting for permission" is recognised by processes, not by the transcript.** A long tool
+  and a hanging "allow?" question look identical in the JSONL: a tool request without an
+  answer. What tells them apart is a child of the session process started after the request
+  (`busy_since` in `sessions`); MCP servers and background commands start earlier and do not
+  count. Tools without a process of their own (MCP calls, `WebFetch`) still show up as waiting
+  for a permission after 25 s.
+  Where telemetry is on, the guess is unnecessary: the decision arrives as a `tool_decision`
+  event (milestone E), and there is no reason to wait a quarter of a minute. The process rule
+  stays as the fallback - for sessions without telemetry and for the case when it was switched
+  off mid-work (`OTEL_STALE_SECONDS` in `metrics.py`).
+- **`SessionEnd` hooks do not run on SIGTERM.** Claude Code has no signal handler of its own:
+  `SIGINT`/`SIGHUP`/`SIGTERM` cause an immediate `process.exit()`, while hooks run
+  asynchronously on a regular exit (`/exit`, Ctrl+D, `/clear`, logout). There is no
+  "finish someone else's session" command in the CLI either, so the dashboard sends SIGTERM
+  and warns about that honestly in the popover.
 
-## Что уже выяснено про формат транскриптов
+## What is already known about the transcript format
 
-Проверено на реальной истории (590 МБ, версии Claude Code 2.1.220–228) — эти вещи
-расходятся с текстом ТЗ, верить надо им:
+Verified against the real history (590 MB, Claude Code versions 2.1.220-228) - these things
+diverge from the specification text, and they are what to trust:
 
-- **Запись ≠ ход**: один ответ ассистента разложен по нескольким JSONL-записям
-  (по одной на блок `thinking`/`text`/`tool_use`), и в каждой лежит полный
-  `usage`. Ключ хода — `message.id`; суммирование по записям завышает расход
-  примерно вчетверо.
-- **`usage` в записях хода неравномерен**: у части записей он ещё нулевой —
-  расход проставляется по завершении ответа (2 527 ходов из 15 197). Правильное
-  значение — поэлементный максимум по записям хода: первая запись занижает
-  расход на треть, сумма завышает в разы.
-- **Файл ≠ сессия**: в одном JSONL встречается несколько `sessionId`. Ходы
-  группируются по полю записи, имя файла — только ключ в `files`.
-- **`usage` шире ТЗ**: `cache_creation.{ephemeral_5m,ephemeral_1h}_input_tokens`,
-  `iterations[]`, `service_tier`, `speed`; рядом с записью `effort` и `requestId`.
-  Запись в 1h-кэш тарифицируется иначе, чем в 5m, — считать раздельно.
-- **Типов записей больше десятка** (`attachment`, `file-history-snapshot`,
-  `queue-operation`, `ai-title`, `frame-link`…), типа `summary` больше нет;
-  автосуммаризация видна по `isCompactSummary: true` на user-записи.
-- **`user`-записи двух сортов**: настоящий промпт и `tool_result`. Отличать по
-  наличию блока `tool_result` в контенте, а не по `promptSource` — тот есть
-  меньше чем у 5% записей. Контент промпта бывает и строкой, и массивом блоков.
-- **Сабагенты** помечены `isSidechain` и лежат в файле родительской сессии.
-- **Название сессии** — записи `ai-title` (сгенерировано) и `custom-title`
-  (задано человеком, важнее). В них только `sessionId` и текст: ни времени,
-  ни uuid, поэтому на состояние сессии они не влияют.
-- **Слэш-команда в транскрипте** — это `<local-command-caveat>` плюс блоки
-  `<command-name>`/`<command-message>`, живого текста в записи нет вовсе.
-- **Транскрипт дописывается порциями раз в 2–6 с**, и `usage` появляется только
-  вместе с завершённым ходом. Расход внутри незавершённого хода из JSONL не
-  виден: тоньше 5-секундной гранулярности без OTel (M4) не получится.
-- **Ходы между файлами дублируются**: resume копирует прошлые ходы в новый файл
-  с новым `sessionId`, сохраняя `uuid` и `message.id` (встречались копии одного
-  хода в 20 файлах). Дедупликация обязательна и идёт по `message.id`, `uuid`
-  для этого не годится.
-- **`<synthetic>`** в `message.model` — служебные ответы («No response requested»,
-  упирание в лимит) с нулевым usage и без `requestId`; в ходы не попадают.
+- **A record is not a turn**: one assistant answer is spread over several JSONL records
+  (one per `thinking`/`text`/`tool_use` block), and each carries the full `usage`. The turn
+  key is `message.id`; summing over records inflates the spend roughly fourfold.
+- **`usage` in the records of a turn is uneven**: for some records it is still zero - the
+  spend is filled in when the answer completes (2,527 turns out of 15,197). The correct value
+  is the element-wise maximum over the turn's records: the first record understates the spend
+  by a third, the sum inflates it several times over.
+- **A file is not a session**: one JSONL holds several `sessionId`s. Turns are grouped by the
+  record field, the file name is only a key in `files`.
+- **`usage` is wider than the specification**: `cache_creation.{ephemeral_5m,ephemeral_1h}_input_tokens`,
+  `iterations[]`, `service_tier`, `speed`; next to the record sit `effort` and `requestId`.
+  A write into the 1h cache is billed differently from a 5m one - count them apart.
+- **There are more than a dozen record types** (`attachment`, `file-history-snapshot`,
+  `queue-operation`, `ai-title`, `frame-link`...), and the `summary` type is gone;
+  auto-compaction shows as `isCompactSummary: true` on a user record.
+- **`user` records come in two kinds**: a real prompt and a `tool_result`. Tell them apart by
+  the presence of a `tool_result` block in the content, not by `promptSource` - that one is
+  present on less than 5% of records. Prompt content comes both as a string and as an array of
+  blocks.
+- **Subagents** are marked `isSidechain` and live in the parent session's file.
+- **The session title** comes from `ai-title` records (generated) and `custom-title` (set by a
+  human, and it wins). They hold only a `sessionId` and the text: neither a time nor a uuid,
+  so they do not affect the session state.
+- **A slash command in the transcript** is a `<local-command-caveat>` plus
+  `<command-name>`/`<command-message>` blocks, with no live text in the record at all.
+- **The transcript is appended in bursts every 2-6 s**, and `usage` appears only together with
+  a finished turn. The spend inside an unfinished turn is invisible in the JSONL: finer than a
+  5-second granularity is impossible without OTel (M4).
+- **Turns are duplicated across files**: resume copies past turns into a new file with a new
+  `sessionId`, keeping `uuid` and `message.id` (copies of one turn were seen in 20 files).
+  Deduplication is mandatory and goes by `message.id`, `uuid` will not do for it.
+- **`<synthetic>`** in `message.model` marks service answers ("No response requested", hitting
+  the limit) with zero usage and no `requestId`; they do not become turns.
 
-## Что выяснено про `claude -p` (советчик)
+## What is known about `claude -p` (the advisor)
 
-Сверено с установленной версией Claude Code 2.1.231 — контракт меняется, при
-следующей правке советчика сверять заново:
+Checked against the installed Claude Code 2.1.231 - the contract changes, so check it again
+at the next advisor edit:
 
-- **`--max-turns` больше нет.** Лишние ходы отсекаются пустым `--tools ""`
-  (без инструментов модели нечем продолжать) и `--max-budget-usd`.
-- **`--json-schema` работает и в `-p`**: разобранный ответ приходит отдельным
-  полем `structured_output`, доставать JSON из текста руками не нужно. Поле
-  `result` при этом тоже есть — там та же структура строкой.
-- **Конверт `--output-format json`** несёт `total_cost_usd`, `usage`,
-  `modelUsage` (полное имя модели), `num_turns`, `stop_reason`, `is_error`.
-- **Алиас `haiku` жив** и разворачивается в `claude-haiku-4-5-20251001`.
-- **Такт стоит около $0.08** на haiku с дайджестом в ~1,5k токенов: почти всё
-  это запись системного промпта в кэш (11k токенов). `--strict-mcp-config` и
-  `--exclude-dynamic-system-prompt-sections` его подрезают, но не обнуляют.
-  Порог «≤ $0.02 за такт» из ТЗ §10 на сегодняшнем CLI недостижим.
+- **`--max-turns` is gone.** Extra turns are cut off by an empty `--tools ""`
+  (without tools the model has nothing to continue with) and by `--max-budget-usd`.
+- **`--json-schema` works in `-p` too**: the parsed answer arrives in a separate
+  `structured_output` field, and there is no need to dig JSON out of the text by hand. The
+  `result` field is there as well - it holds the same structure as a string.
+- **The `--output-format json` envelope** carries `total_cost_usd`, `usage`,
+  `modelUsage` (the full model name), `num_turns`, `stop_reason`, `is_error`.
+- **The `haiku` alias is alive** and expands into `claude-haiku-4-5-20251001`.
+- **A tick costs about $0.08** on haiku with a digest of ~1.5k tokens: almost all of that is
+  writing the system prompt into the cache (11k tokens). `--strict-mcp-config` and
+  `--exclude-dynamic-system-prompt-sections` trim it but do not zero it out.
+  The "<= $0.02 per tick" threshold from TZ §10 is unreachable on today's CLI.
 
-## Что выяснено про телеметрию OTel (веха E)
+## What is known about OTel telemetry (milestone E)
 
-Сверено с https://code.claude.com/docs/en/monitoring-usage и с живыми прогонами
-Claude Code 2.1.222 14 августа 2026:
+Checked against https://code.claude.com/docs/en/monitoring-usage and against live runs of
+Claude Code 2.1.222 on 14 August 2026:
 
-- **Берётся `http/json`, а не gRPC.** Кодировка разбирается штатным json, так
-  что ни `grpcio`, ни `opentelemetry-proto` в зависимостях не нужны, а приёмник
-  живёт прямо в `cburn serve` и не занимает второй порт: `OTEL_EXPORTER_OTLP_ENDPOINT`
-  указывает на `http://127.0.0.1:8799/otlp`, Claude Code сам дописывает
-  `/v1/metrics` и `/v1/logs`. Порт 4317 из ТЗ §3 — это gRPC, к нему не привязываемся.
-- **Переменные окружения печатаются, а не прописываются.** Телеметрия включается
-  только окружением самого Claude Code, а `~/.claude` у нас read-only, поэтому
-  `cburn otel` показывает готовые строки (`--env`, `--settings`), а вставляет их
-  человек. Клиент читает окружение на старте — нужен перезапуск.
-- **Метрики приходят delta-счётчиками**, повтор неподтверждённой посылки
-  возможен, поэтому у каждой точки считается отпечаток (имя + окно + атрибуты):
-  без него ретрай удваивал бы цифры.
-- **`query_source` разводит основную работу и служебную.** В метриках он огрублён
-  до `main` / `auxiliary` / `subagent`, в событиях `api_request` точный
-  (`sdk`, `generate_session_title`). По `main` телеметрия и JSONL совпадают
-  **точно** (0% на двух сессиях, задача E3).
-- **Служебные запросы в транскрипт не попадают вовсе.** Генерация заголовка
-  сессии — отдельный вызов haiku (~535 токенов, $0.0006 за сессию), в JSONL от
-  него остаётся только запись `ai-title` без usage. То есть дашборд по
-  транскриптам занижает расход, и увидеть это можно только через OTel.
-- **События дают то, чего в транскрипте нет:** `tool_decision` с решением по
-  разрешению и его источником (`user_permanent`, `config`, `hook`) — та самая
-  частота permission-подтверждений, которой не хватило дайджесту (D1);
-  `tool_result` с `duration_ms`; `api_request` с точной ценой и длительностью;
-  `mcp_server_connection` с временем подключения сервера и его исходом.
-- **`duration_ms` у `mcp_server_connection` значит разное.** При
-  `status: connected` это время подключения (1,7-2,2 с на плагин), при
-  `disconnected` — сколько соединение прожило (десятки секунд). Складывать их
-  вместе нельзя: цифра завысится в десятки раз.
-- **Ключи с точкой в имени** (`plugin.name`, `session.id`) в `json_extract`
-  требуют кавычек: путь `$.plugin.name` читается как вложенный объект и молча
-  даёт NULL, правильно — `$."plugin.name"`.
-- **Событий больше, чем описано в документации:** живьём приходят ещё
-  `hook_registered`, `hook_execution_start`, `hook_execution_complete` со
-  списком хуков. Разбор терпимый — незнакомое событие просто ложится в таблицу.
-- **Непонятая посылка видна в счётчиках.** Приёмник читает только `http/json`;
-  при `http/protobuf` посылки идут, а разобрать их нечем. Такая посылка
-  подтверждается (повторы бессмысленны), но попадает в `dropped`, и
-  `cburn otel` показывает «посылок N, записей 0» вместо «посылок не было».
-- **Занятая база — повод попросить повтор, а не подтвердить молча.** Писатель
-  в SQLite один, рядом пишут watcher, советчик и чистка, а полная
-  переиндексация держит транзакцию дольше, чем соединение готово ждать.
-  Приёмник отвечает 503, и экспортёр повторяет посылку сам; ответ 200 в этом
-  месте потерял бы данные.
-- **Срез телеметрии в обзоре кэшируется на 5 секунд.** Замер на 100 000
-  событий (`tools/otel_bench.py`): срез за день стоит 68 мс против 4 мс у
-  всего остального обзора — дороже всего разбор JSON-атрибутов у `api_request`
-  и `tool_decision`, которых за сутки десятки тысяч. Обзор же уходит
-  подписчикам каждую секунду, а экспортёр шлёт посылки раз в 5-10 секунд,
-  так что чаще пересчитывать нечего.
-- **У телеметрии свой срок хранения.** Событий приходит по несколько на каждый
-  ход и каждый вызов инструмента, около 400 байт на штуку (37 событий на
-  минутную сессию): без ограничения таблицы обгоняют полезные данные. Чистка
-  идёт при старте сервера и раз в сутки, срок — `otel.keep_days` (по умолчанию
-  30 суток, 0 — хранить всё). Данные парсера она не трогает.
-- **Личные атрибуты и содержимое работы не сохраняются.** В каждой точке едут
-  `user.email`, `user.account_id`, `organization.id` и прочее одинаковое для
-  машины. А `OTEL_LOG_USER_PROMPTS`, `OTEL_LOG_ASSISTANT_RESPONSES`,
-  `OTEL_LOG_TOOL_DETAILS` и `OTEL_LOG_RAW_API_BODIES` заменяют `<REDACTED>`
-  настоящими текстами промптов, ответов и аргументов инструментов. Человек
-  вправе включить их для своей отладки, но дашборд от этого не должен
-  становиться хранилищем переписки: и то и другое отбрасывается при разборе
-  (`SKIPPED_ATTRS` в `collector/otlp.py`), остаются длины и счётчики.
-- **`start_type` у `session.count`** размечает запуск: `fresh`, `resume`,
-  `continue`, `agents_view`. В транскрипте продолжение видно только по копиям
-  ходов, поэтому разметка полезна сама по себе, а рядом с числом сессий у
-  парсера (`cburn otel`) работает как сверка двух каналов.
-- **Хуки съедают заметное время, и видно это только здесь.** В транскрипте на
-  месте хука просто пауза — раздумья модели от ожидания HTTP-хука там не
-  отличить. На собственной 66-секундной сессии `UserPromptSubmit` отнял 15,9 с,
-  `Stop` — 34,5 с (оба ходят в телеграм-бридж), а `PreToolUse` и `PostToolUse`
-  уложились в 6-7 мс. Длительность несёт `hook_execution_complete`
-  (`total_duration_ms`); у события начала её ещё нет.
-- **Отказ сети и сбой клиента считаются порознь.** После `api_error` с 429
-  запрос повторяется и работа продолжается, а `internal_error` обрывает её на
-  середине: потраченные токены не вернуть. Смешивать их в одном счётчике
-  значило бы прятать вторую беду за первой.
-- **`plugin_loaded` рассказывает, что тянет за собой плагин:** `has_mcp`,
-  `has_hooks`, `skill_path_count`, `command_path_count`. Сам плагин бесплатен,
-  а его MCP-сервер подключается секунды в каждой сессии — связка «плагин →
-  сервер → секунды старта» видна только через телеметрию.
-- **Слэш-команды видны только здесь.** В транскрипте от команды остаются блоки
-  `<command-name>` вместо живого текста, и парсер их не разбирает; событие
-  `user_prompt` называет команду прямо (`command_name`, `command_source`).
-- **Где эти данные применяются:** виджет «мимо транскриптов» на дашборде
-  (служебный расход, ручные подтверждения, переключения режима разрешений,
-  сорвавшиеся запросы к API, активное время и строки кода), время в инструментах на экране сессии, строки
-  «мимо истории» и «разрешения» в `cburn stats`, секции `off_transcript`
-  и `permissions` в дайджесте советчика и определение статуса «ждёт разрешения».
-  Везде телеметрия — уточнение поверх транскриптов:
-  когда её нет, всё считается по-старому, а секции дайджеста помечаются
-  `available: false`, чтобы советчик не принял отсутствие данных за ноль.
+- **We take `http/json`, not gRPC.** The encoding is parsed by the standard json module, so
+  neither `grpcio` nor `opentelemetry-proto` is needed among the dependencies, and the
+  receiver lives right inside `cburn serve` without occupying a second port:
+  `OTEL_EXPORTER_OTLP_ENDPOINT` points at `http://127.0.0.1:8799/otlp`, and Claude Code
+  appends `/v1/metrics` and `/v1/logs` itself. Port 4317 from TZ §3 is gRPC, and we do not
+  tie ourselves to it.
+- **The environment variables are printed, not written.** Telemetry is switched on only by
+  Claude Code's own environment, and `~/.claude` is read-only for us, so
+  `cburn otel` shows ready lines (`--env`, `--settings`) and a human pastes them in. The
+  client reads the environment at start - a restart is needed.
+- **Metrics arrive as delta counters**, an unacknowledged payload may be repeated, so every
+  point gets a fingerprint (name + window + attributes): without it a retry would double the
+  numbers.
+- **`query_source` separates the main work from the service one.** In the metrics it is
+  coarsened to `main` / `auxiliary` / `subagent`, while in `api_request` events it is exact
+  (`sdk`, `generate_session_title`). On `main` telemetry and the JSONL agree
+  **exactly** (0% on two sessions, task E3).
+- **Service requests never reach the transcript at all.** Generating a session title is a
+  separate haiku call (~535 tokens, $0.0006 per session), and all that remains of it in the
+  JSONL is an `ai-title` record without usage. That is, the transcript-based dashboard
+  understates the spend, and seeing this is possible only through OTel.
+- **Events give what the transcript does not:** `tool_decision` with the permission decision
+  and its source (`user_permanent`, `config`, `hook`) - the very frequency of permission
+  confirmations the digest lacked (D1); `tool_result` with `duration_ms`; `api_request` with
+  the exact price and duration; `mcp_server_connection` with the server connection time and
+  its outcome.
+- **`duration_ms` on `mcp_server_connection` means different things.** With
+  `status: connected` it is the connection time (1.7-2.2 s per plugin), with
+  `disconnected` it is how long the connection lived (tens of seconds). Adding them
+  together is not allowed: the figure inflates tenfold and more.
+- **Keys with a dot in the name** (`plugin.name`, `session.id`) require quotes in
+  `json_extract`: the path `$.plugin.name` reads as a nested object and quietly yields NULL,
+  the correct form is `$."plugin.name"`.
+- **There are more events than the documentation describes:** live runs also bring
+  `hook_registered`, `hook_execution_start`, `hook_execution_complete` with the
+  list of hooks. Parsing is tolerant - an unknown event simply lands in the table.
+- **An ununderstood payload is visible in the counters.** The receiver reads only `http/json`;
+  with `http/protobuf` the payloads arrive and there is nothing to parse them with. Such a
+  payload is acknowledged (retries are pointless) but lands in `dropped`, and
+  `cburn otel` shows "payloads N, records 0" instead of "there were no payloads".
+- **A busy database is a reason to ask for a retry, not to acknowledge silently.** SQLite has
+  one writer, the watcher, the advisor and the cleanup write nearby, and a full
+  reindex holds the transaction longer than the connection is ready to wait.
+  The receiver answers 503, and the exporter repeats the payload itself; a 200 in that place
+  would lose the data.
+- **The telemetry slice in the overview is cached for 5 seconds.** A measurement over 100,000
+  events (`tools/otel_bench.py`): a day's slice costs 68 ms against 4 ms for all the rest of
+  the overview - the most expensive part is parsing the JSON attributes of `api_request`
+  and `tool_decision`, of which there are tens of thousands a day. The overview goes
+  to subscribers every second, and the exporter sends payloads every 5-10 seconds,
+  so there is nothing to recompute more often.
+- **Telemetry has its own retention.** Events arrive several per turn and per
+  tool call, around 400 bytes each (37 events for a one-minute session): without a limit the
+  tables outgrow the useful data. The cleanup runs at server start and once a day, the
+  retention is `otel.keep_days` (30 days by default, 0 keeps everything). It does not touch
+  the parser data.
+- **Personal attributes and the content of the work are not stored.** Every point carries
+  `user.email`, `user.account_id`, `organization.id` and other things identical for the
+  machine. And `OTEL_LOG_USER_PROMPTS`, `OTEL_LOG_ASSISTANT_RESPONSES`,
+  `OTEL_LOG_TOOL_DETAILS` and `OTEL_LOG_RAW_API_BODIES` replace `<REDACTED>`
+  with the real texts of prompts, answers and tool arguments. A human is free to switch them
+  on for their own debugging, but the dashboard must not become a conversation store because
+  of it: both are dropped during parsing (`SKIPPED_ATTRS` in `collector/otlp.py`), and only
+  lengths and counters remain.
+- **`start_type` on `session.count`** marks the start: `fresh`, `resume`,
+  `continue`, `agents_view`. In the transcript a continuation is visible only through copied
+  turns, so the marking is useful in itself, and next to the parser's session count
+  (`cburn otel`) it works as a reconciliation of two channels.
+- **Hooks eat noticeable time, and that is visible only here.** In the transcript a hook is
+  just a pause - model thinking cannot be told from waiting on an HTTP hook there. On my own
+  66-second session `UserPromptSubmit` took 15.9 s and `Stop` took 34.5 s (both go to the
+  telegram bridge), while `PreToolUse` and `PostToolUse` fitted into 6-7 ms. The duration
+  comes from `hook_execution_complete` (`total_duration_ms`); the start event does not have it
+  yet.
+- **A network refusal and a client failure are counted apart.** After an `api_error` with a
+  429 the request is repeated and the work goes on, while an `internal_error` breaks it off
+  midway: the tokens spent are not coming back. Mixing them into one counter would hide the
+  second trouble behind the first.
+- **`plugin_loaded` tells what a plugin drags along:** `has_mcp`,
+  `has_hooks`, `skill_path_count`, `command_path_count`. The plugin itself is free, while its
+  MCP server takes seconds to connect in every session - the chain "plugin => server =>
+  seconds of startup" is visible only through telemetry.
+- **Slash commands are visible only here.** In the transcript a command leaves
+  `<command-name>` blocks instead of live text, and the parser does not unpack them; the
+  `user_prompt` event names the command directly (`command_name`, `command_source`).
+- **Where this data is used:** the "past the transcripts" widget on the dashboard
+  (service spend, manual confirmations, permission mode switches, failed API requests,
+  active time and lines of code), the time inside tools on the session screen, the
+  "past the history" and "permissions" lines in `cburn stats`, the `off_transcript`
+  and `permissions` sections of the advisor digest and deciding the "waiting for permission"
+  status. Everywhere telemetry is a refinement on top of the transcripts:
+  when it is absent, everything is counted the old way, and the digest sections are marked
+  `available: false`, so that the advisor does not take missing data for a zero.
 
-## Уведомления (веха D)
+## Notifications (milestone D)
 
-- **Тревога не считает сама.** Пороги и цифры берутся из того же обзора, что
-  показывает экран: иначе в телефоне и на дашборде были бы разные числа, и
-  доверия не было бы ни к тем, ни к другим.
-- **Память в базе, а не в процессе.** `notifications` хранит, что и когда
-  ушло: cooldown переживает перезапуск, а неудачная отправка помечается
-  `ok = 0` — иначе тишина после сбоя выглядела бы как «уже предупредили».
-- **Пауза не выключает прибор.** Два часа тишины держат всё, кроме `crit`:
-  если расход горит прямо сейчас, молчать нельзя. Ставится пунктом трея и
-  эндпоинтом `/api/notify/pause`.
-- **Токен бриджа не дублируется.** Читается из `~/.config/cc-tg-bridge/config.json`,
-  то есть оттуда же, откуда его читает сам бридж.
-- **Такт уведомлений живёт в цикле советчика** — он и так тикает раз в минуту,
-  а второй цикл ради двух проверок не нужен.
+- **An alert does no counting of its own.** The thresholds and the numbers come from the same
+  overview the screen shows: otherwise the phone and the dashboard would carry different
+  numbers, and neither would be trusted.
+- **The memory lives in the database, not in the process.** `notifications` stores what went
+  out and when: the cooldown survives a restart, and a failed send is marked
+  `ok = 0` - otherwise silence after a failure would look like "we already warned".
+- **A pause does not switch the instrument off.** Two hours of silence hold everything except
+  `crit`: when the spend is burning right now, staying quiet is not an option. It is set by a
+  tray item and by the `/api/notify/pause` endpoint.
+- **The bridge token is not duplicated.** It is read from `~/.config/cc-tg-bridge/config.json`,
+  that is, from where the bridge itself reads it.
+- **The notification tick lives inside the advisor loop** - it already ticks once a minute,
+  and a second loop for two checks is unnecessary.
 
-## Десктоп (веха F)
+## The desktop (milestone F)
 
-- **Окно грузит страницу с сервера, а не из файлов.** Фронт ходит к API
-  относительными путями (`api/overview`); из `tauri://` они ушли бы в никуда,
-  поэтому `frontendDist` указывает на `http://127.0.0.1:8799`. Благодаря этому
-  фронт для M5 не менялся ни строкой — критерий приёмки выполнен буквально.
-- **Трей ничего не считает сам:** раз в пять секунд берёт `/api/overview`, а
-  порог тревоги — из `/api/config`, чтобы слушаться того же числа, что правится
-  в «Настройках». Опрос в своём потоке: меню-бар живёт и без окна.
-- **`.app` поднимает сервер, если тот молчит** (`CBURN_SERVE`, затем
-  привычные места установки). Интерпретатор внутрь `.app` не упакован —
-  осознанное ограничение: Python-часть ставится отдельно, как и раньше.
-- **`dmg` не собирается:** `bundle_dmg.sh` падает на этой машине, а для «одного
-  устанавливаемого `.app`» образ не нужен. В `bundle.targets` осталось `app`.
-- **Rust ставился с `--no-modify-path`** — тулчейн лежит в `~/.cargo`, профиль
-  шелла не тронут; сборка зовётся как
+- **The window loads the page from the server, not from files.** The frontend calls the API
+  with relative paths (`api/overview`); from `tauri://` they would go nowhere,
+  so `frontendDist` points at `http://127.0.0.1:8799`. Thanks to that the
+  frontend did not change by a single line for M5 - the acceptance criterion is met literally.
+- **The tray counts nothing itself:** every five seconds it takes `/api/overview`, and the
+  alert threshold comes from `/api/config`, so that it obeys the same number that is edited
+  in "Settings". The polling lives in its own thread: the menu bar lives without the window.
+- **The `.app` raises the server when it stays quiet** (`CBURN_SERVE`, then the
+  usual install locations). The interpreter is not packed inside the `.app` -
+  a deliberate limitation: the Python part is installed separately, as before.
+- **The `dmg` is not built:** `bundle_dmg.sh` fails on this machine, and an image is not
+  needed for "one installable `.app`". Only `app` is left in `bundle.targets`.
+- **Rust was installed with `--no-modify-path`** - the toolchain lives in `~/.cargo`, the
+  shell profile was left alone; the build is called as
   `PATH=$HOME/.cargo/bin:$PATH npm run desktop:build`.
-- **Сборка десктопа идёт из корня репозитория, не из `web/`.** Tauri ищет
-  `src-tauri/` рядом с собой, а в `web/` лежит только фронт — оттуда команда
-  падает с «Couldn't recognize the current folder as a Tauri project».
+- **The desktop build runs from the repository root, not from `web/`.** Tauri looks for
+  `src-tauri/` next to itself, while `web/` holds only the frontend - from there the command
+  fails with "Couldn't recognize the current folder as a Tauri project".
 
-## Принятые решения
+## Decisions taken
 
-- Порядок работ — вертикальный срез: сначала сквозной путь «парсер → SQLite → API →
-  дашборд со стрелкой», потом глубина по M1 и M2.
-- Telegram: основной канал — эндпоинт `/notify`, который добавляется в соседний
-  проект `~/code/cc-tg-bridge` (сейчас у бриджа только `/hook` и `/health`).
-  Прямой Bot API остаётся запасным каналом в конфиге.
+- The order of work is a vertical slice: first the end-to-end path "parser => SQLite => API =>
+  a dashboard with a needle", then depth on M1 and M2.
+- Telegram: the main channel is the `/notify` endpoint added to the neighbouring
+  `~/code/cc-tg-bridge` project (the bridge currently has only `/hook` and `/health`).
+  The direct Bot API stays as the fallback channel in the config.
 
-## Соглашения
+## Conventions
 
-- Тяжёлые агрегаты считаются в SQL, не в Python.
-- Нормализованная bash-команда — единственное, что сохраняется от вызова Bash:
-  ни аргументов, ни путей, ни имён файлов. Подкоманда берётся только у команд из
-  белого списка в `parser.py`, иначе имя файла утекает в БД под видом подкоманды.
-- Хуки Claude Code для сбора данных не используются — только file watcher.
-- Коммиты по Conventional Commits (скилл `conventional-commits`), сообщения на русском.
-- Комментарии и docstring'и на русском; идентификаторы и имена полей БД — английские.
-- Внешние факты, которые меняются (спецификация OTel-метрик, имена моделей для
-  `--model`, контракт telegram-бриджа), сверяются с документацией на момент
-  реализации, а не берутся по памяти.
-- **Тест, который смотрит на срез «за сегодня», не привязывается к дате.**
-  Посылка с зашитым `2026-08-14` вчера попадала в дневное окно, а сегодня уже
-  нет — три теста телеметрии упали ровно от смены суток. Разбор проверяется
-  фиксированным временем (формат, дедупликация, границы окна), а всё, что
-  считает «сегодня» и «за сутки», строится от `datetime.now`.
+- Heavy aggregates are computed in SQL, not in Python.
+- The normalised bash command is the only thing kept from a Bash call: no arguments, no paths,
+  no file names. The subcommand is taken only for commands from the allowlist in `parser.py`,
+  otherwise a file name leaks into the database disguised as a subcommand.
+- Claude Code hooks are not used for collecting data - only the file watcher.
+- Commits follow Conventional Commits (the `conventional-commits` skill), with messages in
+  Russian.
+- Comments and docstrings are in English; the interface texts (the CLI output, the UI, the
+  notifications and the advisor prompt) stay in Russian.
+- External facts that change (the OTel metric specification, model names for
+  `--model`, the telegram bridge contract) are checked against the documentation at
+  implementation time rather than taken from memory.
+- **A test that looks at a "today" slice is not nailed to a date.** A payload with a
+  hardcoded `2026-08-14` fell inside the daily window yesterday and no longer does today -
+  three telemetry tests failed exactly at the turn of the day. Parsing is checked with a
+  fixed time (the format, deduplication, window bounds), while everything that counts "today"
+  and "over the last day" is built from `datetime.now`.
 
-## Этапы
+## Milestones
 
-| Этап | Содержимое | Статус |
+| Stage | Content | Status |
 | ---- | ---------- | ------ |
-| M1 | CLI: парсер JSONL, SQLite, `stats`/`sessions`/`session`, `reindex` | в работе |
-| M2 | FastAPI + веб-дашборд, live по WebSocket, `cburn serve`, launchd | — |
-| M3 | Советчик (`claude -p`) и уведомления в telegram | готов |
-| M4 | OTLP-приёмник, уточнение лимитов подписки, недельный разбор | готов |
-| M5 | Tauri-обёртка и трей в меню-баре | готов |
+| M1 | The CLI: the JSONL parser, SQLite, `stats`/`sessions`/`session`, `reindex` | in progress |
+| M2 | FastAPI + the web dashboard, live over WebSocket, `cburn serve`, launchd | - |
+| M3 | The advisor (`claude -p`) and telegram notifications | done |
+| M4 | The OTLP receiver, refined subscription limits, the weekly analysis | done |
+| M5 | The Tauri wrapper and the menu-bar tray | done |
 
-Критерии приёмки по каждому этапу — в ТЗ §10.
+The acceptance criteria for every stage are in TZ §10.

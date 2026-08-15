@@ -1,6 +1,6 @@
-"""Сверка E3: приёмник телеметрии на отдельном порту и своей БД.
+"""Check E3: the telemetry receiver on a separate port and its own database.
 
-Боевая база при этом не трогается — рядом уже работает обычный дашборд.
+The production database is left alone - an ordinary dashboard already runs nearby.
 """
 
 import sys

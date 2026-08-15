@@ -1,5 +1,5 @@
-// Сетка дашборда: виджеты перетаскиваются за заголовок, тянутся за угол,
-// прячутся крестиком. Всё это живёт в localStorage.
+// The dashboard grid: widgets are dragged by their header, resized by the corner,
+// hidden with the cross. All of that lives in localStorage.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import GridLayout, { type Layout } from "react-grid-layout";
@@ -21,20 +21,20 @@ export type WidgetContent = {
   id: WidgetId;
   title: string;
   body: React.ReactNode;
-  /** Время последнего события в данных виджета (мс); null — событий не было. */
+  /** The time of the last event in the widget data (ms); null means there were no events. */
   at: number | null;
-  /** Когда эти данные в последний раз пересчитывали (мс). */
+  /** When this data was last recomputed (ms). */
   checkedAt: number;
-  /** Через сколько секунд молчания метка считается несвежей. Ставится только
-   *  там, где паузу объясняет не тишина в работе, а неудачное обновление. */
+  /** After how many seconds of silence the mark counts as stale. Set only
+   *  where the pause is explained not by quiet work but by a failed refresh. */
   staleAfter?: number;
-  /** Обновить именно эти данные, не дожидаясь такта. */
+  /** Refresh exactly this data, without waiting for the tick. */
   refresh: () => Promise<void>;
-  /** Собственные переключатели виджета — в шапке, слева от метки времени. */
+  /** The widget's own toggles - in the header, to the left of the timestamp. */
   tools?: React.ReactNode;
 };
 
-/** Ширина сетки в пикселях: react-grid-layout не умеет считать её сам. */
+/** The grid width in pixels: react-grid-layout cannot compute it itself. */
 function useWidth(): [number, (node: HTMLDivElement | null) => void] {
   const [width, setWidth] = useState(1180);
   const [node, setNode] = useState<HTMLDivElement | null>(null);
@@ -63,8 +63,8 @@ export function Dashboard({ widgets }: { widgets: WidgetContent[] }) {
 
   const onLayoutChange = useCallback((next: Layout[]) => {
     setState((current) => {
-      // Скрытые виджеты в next не приходят — сохраняем их прежние места,
-      // чтобы при возврате виджет встал туда же, откуда его убрали.
+      // Hidden widgets do not arrive in next - we keep their previous places,
+      // so that on return a widget lands exactly where it was taken from.
       const moved = new Map(next.map((item) => [item.i, item]));
       const merged = current.layout.map((item) => moved.get(item.i) ?? item);
       const known = new Set(merged.map((item) => item.i));
@@ -135,7 +135,7 @@ export function Dashboard({ widgets }: { widgets: WidgetContent[] }) {
   );
 }
 
-/** Шапка виджета: имя, на какое время данные и обновление по наведению. */
+/** The widget header: the name, what time the data is for and refresh on hover. */
 function WidgetHead({ widget, onHide }: { widget: WidgetContent; onHide: () => void }) {
   const { t } = useLang();
   const [busy, setBusy] = useState(false);

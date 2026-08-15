@@ -1,13 +1,13 @@
-"""Автозапуск дашборда через launchd (задача C5, ТЗ §10).
+"""Dashboard autostart via launchd (task C5, TZ §10).
 
-Агент пользователя, а не демон системы: дашборд читает `~/.claude` и пишет в
-`~/.local/share`, root ему не нужен и вреден. Ставится в
-`~/Library/LaunchAgents/com.cloudo.cburn.plist`, логи ложатся рядом с
-базой — туда же, куда пишет `tools/restart-serve.sh`.
+A user agent, not a system daemon: the dashboard reads `~/.claude` and writes to
+`~/.local/share`, so root is neither needed nor healthy. It is installed into
+`~/Library/LaunchAgents/com.cloudo.cburn.plist`, and the logs land next to the
+database - the same place `tools/restart-serve.sh` writes to.
 
-Запускается не консольный скрипт `cburn`, а `python -m cburn`: путь до
-интерпретатора известен точно, а `cburn` может оказаться не тем — например,
-из другого окружения в PATH.
+What starts is not the `cburn` console script but `python -m cburn`: the interpreter
+path is known exactly, while `cburn` may turn out to be the wrong one - say,
+from another environment on PATH.
 """
 
 from __future__ import annotations
@@ -23,11 +23,11 @@ from . import paths
 
 LABEL = "com.cloudo.cburn"
 
-#: Запуск внешней команды вынесен в тип, чтобы тесты не трогали launchd машины.
+#: Running an external command is a type of its own so that tests never touch the machine's launchd.
 Runner = Callable[..., tuple[int, str]]
 
-#: launchctl из macOS 11+. На более старых системах вместо bootstrap/bootout
-#: были load/unload — если понадобится, добавим запасной путь по факту.
+#: launchctl from macOS 11+. On older systems load/unload stood in place of
+#: bootstrap/bootout - if that is ever needed, a fallback path gets added on demand.
 LAUNCHCTL = "/bin/launchctl"
 
 
@@ -40,10 +40,10 @@ def log_path() -> Path:
 
 
 def build_plist(port: int, executable: Path | None = None) -> bytes:
-    """Собрать plist агента.
+    """Build the agent plist.
 
-    `KeepAlive` только на неудачный выход: иначе launchd будет поднимать
-    дашборд после каждой остановки руками, в том числе при `cburn uninstall`.
+    `KeepAlive` only on a failed exit: otherwise launchd would raise the dashboard
+    after every manual stop, including `cburn uninstall`.
     """
     log = str(log_path())
     document = {
@@ -67,7 +67,7 @@ def build_plist(port: int, executable: Path | None = None) -> bytes:
 
 
 def install(port: int, run: Runner | None = None) -> str:
-    """Поставить агент и запустить его. Повторный вызов обновляет plist."""
+    """Install the agent and start it. A repeated call refreshes the plist."""
     if sys.platform != "darwin":
         raise SystemExit("автозапуск через launchd есть только на macOS")
     runner = run or _run
@@ -77,7 +77,7 @@ def install(port: int, run: Runner | None = None) -> str:
     target.write_bytes(build_plist(port))
 
     domain = f"gui/{_uid()}"
-    # Прежний агент выгружается молча: его может не быть, и это не ошибка.
+    # The previous agent is unloaded silently: it may not exist, and that is not an error.
     runner([LAUNCHCTL, "bootout", f"{domain}/{LABEL}"], check=False)
     code, err = runner([LAUNCHCTL, "bootstrap", domain, str(target)], check=False)
     if code != 0:
@@ -86,7 +86,7 @@ def install(port: int, run: Runner | None = None) -> str:
 
 
 def uninstall(run: Runner | None = None) -> str:
-    """Снять агент и убрать plist. Уже снятый агент не считается ошибкой."""
+    """Remove the agent and delete the plist. An already removed agent is not an error."""
     if sys.platform != "darwin":
         raise SystemExit("автозапуск через launchd есть только на macOS")
     runner = run or _run
@@ -99,7 +99,7 @@ def uninstall(run: Runner | None = None) -> str:
 
 
 def status(run: Runner | None = None) -> str:
-    """Что launchd думает про агент прямо сейчас."""
+    """What launchd thinks about the agent right now."""
     if not plist_path().exists():
         return "агент не поставлен — `cburn install`"
     runner = run or _run

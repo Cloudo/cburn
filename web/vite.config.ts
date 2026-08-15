@@ -1,8 +1,8 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-// Пути относительные: страницу отдаёт FastAPI, а на M5 её же откроет webview
-// Tauri — абсолютный /assets там не сработает.
+// The paths are relative: the page is served by FastAPI, and in M5 the same page opens
+// in the Tauri webview - an absolute /assets would not work there.
 export default defineConfig({
   plugins: [react()],
   base: "./",

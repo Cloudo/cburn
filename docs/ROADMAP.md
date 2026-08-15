@@ -1,648 +1,655 @@
-# План реализации cburn
+# The cburn implementation plan
 
-Декомпозиция [ТЗ](../TZ.md) на задачи. Галочки ставятся по мере выполнения;
-зафиксированные решения по ходу работы переезжают в [CLAUDE.md](../CLAUDE.md).
+A decomposition of the [specification](../TZ.md) into tasks. Ticks are placed as work is
+done; decisions fixed along the way move into [CLAUDE.md](../CLAUDE.md).
 
-Порядок работ — вертикальный срез: сначала тонкий сквозной путь
-«парсер → SQLite → API → дашборд со стрелкой», потом добор глубины по M1 и M2.
-Ранняя проверка, что цифры сходятся и стрелка живая, важнее полноты CLI.
+The order of work is a vertical slice: first a thin end-to-end path
+"parser => SQLite => API => a dashboard with a needle", then depth on M1 and M2.
+Checking early that the numbers add up and the needle is alive matters more than a complete
+CLI.
 
-## Что даёт каждый этап
+## What every stage gives
 
-Человеческим языком, без терминов: что вы получаете от каждой задачи. Сводка
-на 14 августа 2026 — **план выполнен целиком: 36 задач из 36**, все вехи закрыты.
+In plain words, without terms: what you get from every task. The summary as of
+14 August 2026 - **the plan is complete: 36 tasks out of 36**, every milestone is closed.
 
-### Веха A — живая стрелка ✅
+### Milestone A - a live needle ✅
 
-| Задача | Что это даёт |
+| Task | What it gives |
 | ------ | ------------ |
-| A0. План | Видно, что и в каком порядке делается; спорить о приоритетах можно до кода, а не после |
-| A1. Парсер | Приложение понимает, что записал Claude Code. Без этого нет ни одной цифры |
-| A2. Импорт в БД | История складывается в базу и не перечитывается заново при каждом запуске |
-| A3. Точность цифр | Цифрам можно верить: они сходятся с ручным подсчётом до нуля |
-| A4. Watcher | Новые ходы появляются на экране сами, нажимать ничего не нужно |
-| A5. API | Данные доходят до экрана. На этом же стыке потом вырастет десктопное приложение |
-| A6. Фронт | Есть страница со стрелкой: расход видно глазами, а не в таблицах |
-| A7. Живые показания | Стрелка живёт и в паузе: расход честно падает, а не замирает на последнем ходе |
-| A8. Живые сессии | Видно, какая сессия чего ждёт прямо сейчас, и лишнюю можно закрыть с экрана |
+| A0. The plan | It is visible what is done and in which order; priorities can be argued before the code rather than after |
+| A1. The parser | The application understands what Claude Code wrote down. Without it there is not a single number |
+| A2. Import into the database | The history lands in the database and is not re-read on every start |
+| A3. Accuracy of the numbers | The numbers can be trusted: they match a manual count to zero |
+| A4. The watcher | New turns appear on the screen by themselves, nothing has to be pressed |
+| A5. The API | The data reaches the screen. The desktop application later grows out of this same joint |
+| A6. The frontend | There is a page with a needle: the spend is seen by eye rather than in tables |
+| A7. Live readings | The needle lives during a pause too: the spend honestly falls instead of freezing at the last turn |
+| A8. Live sessions | It is visible what every session is waiting for right now, and a superfluous one can be closed from the screen |
 
-### Веха B — полнота и масштаб ✅
+### Milestone B - completeness and scale ✅
 
-| Задача | Что это даёт |
+| Task | What it gives |
 | ------ | ------------ |
-| B1. Стоимость | Видно, во сколько работа обошлась бы по тарифам API. Подписка этим не оплачивается, но это единственная общая шкала: она взвешивает вход, выход и обе записи кэша между собой |
-| B2. Индексация истории | Вся история читается за секунды — ждать нечего даже на первом запуске |
-| B3. Метрики | На что уходят токены: модели, инструменты, холостые ходы, приближение к лимиту |
-| B4. Живость | Закончившиеся сессии не мешают смотреть на текущие: из 28 «простаивающих» живыми были 4 |
-| B5. Форки и сабагенты | Работа, продолженная после `/clear`, видна одной линией, а не обрывками. Расход сабагентов виден отдельно |
-| B6. Незнакомые записи | После обновления Claude Code видно, *что* изменилось в формате, а не просто просадка цифр |
-| B7. CLI | Тот же разбор в терминале, с фильтрами по проекту и периоду — без браузера |
-| B8. Смоук на истории | Обновление Claude Code не сломает приложение молча |
+| B1. Cost | It is visible what the work would have cost at API rates. A subscription is not paid that way, but it is the only common scale: it weighs input, output and both cache writes against each other |
+| B2. History indexing | The whole history is read in seconds - there is nothing to wait for even on the first start |
+| B3. Metrics | Where the tokens go: models, tools, idle turns, the approach to the limit |
+| B4. Liveness | Finished sessions do not get in the way of watching the current ones: out of 28 "idle" ones only 4 were alive |
+| B5. Forks and subagents | Work continued after `/clear` is visible as one line rather than as fragments. Subagent spend is visible separately |
+| B6. Unknown records | After a Claude Code update it is visible *what* changed in the format, rather than just a dip in the numbers |
+| B7. The CLI | The same analysis in the terminal, with project and period filters - without a browser |
+| B8. The history smoke test | A Claude Code update will not break the application silently |
 
-### Веха C — дашборд целиком ✅
+### Milestone C - the whole dashboard ✅
 
-| Задача | Что это даёт |
+| Task | What it gives |
 | ------ | ------------ |
-| C1. Экран «Сессии» | История всех сессий с фильтрами. Сейчас видно только топ-5 и живые |
-| C2. Экран «Сессия» | Видно, *где* сессия раздулась и когда пора делать `/clear` |
-| C3. Экран «Настройки» | Цены, пороги и телеграм правятся в окне, а не в файле конфига |
-| C4. Стоимость советчика | Видно, сколько стоит сам советчик — чтобы он не съел больше, чем сэкономил |
-| C5. Автозапуск | Дашборд включается сам и переживает перезагрузку |
+| C1. The "Sessions" screen | The history of every session with filters. Right now only the top 5 and the live ones are visible |
+| C2. The "Session" screen | It is visible *where* a session bloated and when it is time to run `/clear` |
+| C3. The "Settings" screen | Prices, thresholds and telegram are edited in a window rather than in a config file |
+| C4. The advisor cost | It is visible what the advisor itself costs - so that it does not eat more than it saves |
+| C5. Autostart | The dashboard starts by itself and survives a reboot |
 
-### Веха D — советчик и telegram ✅
+### Milestone D - the advisor and telegram ✅
 
-| Задача | Что это даёт |
+| Task | What it gives |
 | ------ | ------------ |
-| D1. Дайджест | Выжимка за период: где расход, где холостые ходы. Переписка при этом не покидает машину |
-| D2. Вызов модели | Собственно советы: что вынести в скилл, где поправить permissions, какой MCP отключить |
-| D3. Планировщик | Советы приходят сами раз в час, а не когда вспомните посмотреть |
-| D4. Канал в бридж | Технический стык с телеграм-ботом (правка в соседнем проекте) |
-| D5. Уведомления | В телеграм приходят часовой дайджест, тревога при резком расходе и дневная сводка |
-| D6. Экран «Советы» | Советы не теряются, а отклонённые не повторяются по кругу |
-| D7. Приёмка | Проверка на реальной истории: советчик находит то же, что вы нашли руками |
+| D1. The digest | A summary of the period: where the spend is, where the idle turns are. The conversation does not leave the machine in the process |
+| D2. The model call | The advice itself: what to move into a skill, where to fix permissions, which MCP to switch off |
+| D3. The scheduler | The advice arrives by itself once an hour rather than when you remember to look |
+| D4. The bridge channel | The technical joint with the telegram bot (an edit in the neighbouring project) |
+| D5. Notifications | Telegram receives the hourly digest, an alert on a spend spike and the daily summary |
+| D6. The "Advice" screen | Tips are not lost, and dismissed ones do not come round again |
+| D7. Acceptance | A check on the real history: the advisor finds the same things you found by hand |
 
-### Веха E — OpenTelemetry ✅
+### Milestone E - OpenTelemetry ✅
 
-| Задача | Что это даёт |
+| Task | What it gives |
 | ------ | ------------ |
-| E1–E3 | Цифры идут от самого Claude Code, а не восстанавливаются по файлам: видно расход, которого в транскриптах нет вовсе (служебные запросы), сколько раз вы подтверждали разрешения и сколько секунд работал каждый инструмент |
-| E4 | Эти данные попадают туда, где на них смотрят: виджет на дашборде, строки в `cburn stats`, разделы дайджеста советчика и честный статус «ждёт разрешения» вместо догадки по процессам |
+| E1-E3 | The numbers come from Claude Code itself rather than being reconstructed from files: the spend absent from the transcripts (service requests) becomes visible, along with how many times you confirmed permissions and how many seconds every tool ran |
+| E4 | That data reaches the places where it is looked at: the dashboard widget, the lines in `cburn stats`, the advisor digest sections and an honest "waiting for permission" status instead of a guess by processes |
 
-### Веха F — десктоп ✅
+### Milestone F - the desktop ✅
 
-| Задача | Что это даёт |
+| Task | What it gives |
 | ------ | ------------ |
-| F1–F3 | Обычное приложение вместо вкладки в браузере и стрелка расхода в меню-баре, всегда на виду |
+| F1-F3 | An ordinary application instead of a browser tab, and the spend needle in the menu bar, always in sight |
 
-**Веха D — ради чего всё затевалось.** Всё до неё строит приборы; советчик
-единственный сам говорит, что поменять.
+**Milestone D is what all of this was started for.** Everything before it builds instruments;
+the advisor is the only one that says what to change.
 
-## Разведка: факты, меняющие реализацию
+## Reconnaissance: facts that change the implementation
 
-Осмотр `~/.claude/projects` на машине разработки (590 МБ, 347 транскриптов,
-19 проектов, версии Claude Code 2.1.220–228):
+A survey of `~/.claude/projects` on the development machine (590 MB, 347 transcripts,
+19 projects, Claude Code versions 2.1.220-228):
 
-- **Файл ≠ сессия.** В самом большом транскрипте (64 МБ) встречается два разных
-  `sessionId`. Группировать ходы нужно по полю записи, а имя файла использовать
-  только как ключ в `files`.
-- **Запись ≠ ход** (проверено на 172 447 записях). Один ответ ассистента разложен
-  по нескольким JSONL-записям — по одной на блок контента (`thinking`, `text`,
-  каждый `tool_use`), и в каждой лежит *полный и одинаковый* `usage`. По всей
-  истории 70 061 assistant-запись даёт 15 151 ход (×4.6). Ключ хода — `message.id`
-  (равносилен `requestId`); суммирование usage по записям задваивает расход.
-- **`usage` внутри хода неравномерен:** у 2 527 ходов из 15 197 часть записей несёт
-  нули — расход проставляется по завершении ответа. Брать надо поэлементный
-  максимум по записям хода: по первой записи сумма выходит 8.1 млн выходных
-  токенов вместо 12.8 млн, по сумме записей — кратно завышенная.
-- **Ходы между файлами дублируются** — вопреки первоначальному замеру. При resume
-  Claude Code копирует прошлые ходы в новый файл с новым `sessionId`, сохраняя
-  `uuid` и `message.id`: один ход встретился в 20 файлах. Уникальных `uuid` —
-  28 525 на 70 061 запись, уникальных пар (`sessionId`, `message.id`) — 38 199 на
-  15 151 ход. Дедупликация обязательна, ключ — `message.id`, а не `uuid`.
-- **`usage` богаче, чем в ТЗ:** `cache_creation.{ephemeral_5m,ephemeral_1h}_input_tokens`,
-  `iterations[]`, `service_tier`, `speed`, рядом с записью — `effort` и `requestId`.
-  Реальные значения на машине — именно `ephemeral_1h` (пример: 963k cache read,
-  596 write в 1h-кэш).
-- **Тарифы кэша различаются:** запись в 1h-кэш стоит дороже, чем в 5m. Одной колонки
-  `cache_write_per_mtok` в `model_prices` недостаточно — нужна отдельная для 1h.
-- **Типов записей много больше, чем в ТЗ:** `assistant`, `user`, `attachment`,
-  `system`, `mode`, `last-prompt`, `custom-title`, `ai-title`, `queue-operation`,
-  `file-history-snapshot`, `file-history-delta`, `permission-mode`, `frame-link`,
-  `agent-name`. Типа `summary` в актуальных версиях нет; автосуммаризация видна по
-  `isCompactSummary: true` на user-записи.
-- **Синтетические ответы:** `message.model == "<synthetic>"` (120 записей) — сообщения
-  вида «No response requested» и упирания в лимит сессии. `usage` нулевой,
-  `requestId` отсутствует; на расход не влияют, но в ходы попадать не должны.
-- **`user`-записи двух сортов:** настоящий промпт и результат инструмента. Различать
-  по `promptSource` нельзя — поле есть лишь у 1 929 записей из 45 282 (`sdk`, `typed`),
-  у набранных руками промптов его обычно нет. Надёжный признак результата —
-  блок `tool_result` в контенте (41 653 записи). Контент промпта бывает и строкой,
-  и массивом блоков (`text`, `image`, `document`).
-- **Сабагенты:** поле `isSidechain` присутствует; ходы Task-агентов лежат в том же
-  файле и их расход надо уметь и складывать в сессию, и показывать отдельно.
-- **Бридж `cc-tg-bridge`** слушает 127.0.0.1:8788 (порт в `~/.config/cc-tg-bridge/config.json`),
-  маршруты только `GET /health` и `POST /hook*` с `hookToken`. Эндпоинта для
-  произвольных сообщений нет — он добавляется задачей D4.
+- **A file is not a session.** The largest transcript (64 MB) holds two different
+  `sessionId`s. Turns have to be grouped by the record field, while the file name is used
+  only as a key in `files`.
+- **A record is not a turn** (checked over 172,447 records). One assistant answer is spread
+  over several JSONL records - one per content block (`thinking`, `text`,
+  every `tool_use`), and each carries the *full and identical* `usage`. Over the whole
+  history 70,061 assistant records give 15,151 turns (x4.6). The turn key is `message.id`
+  (equivalent to `requestId`); summing usage over records doubles the spend.
+- **`usage` inside a turn is uneven:** for 2,527 turns out of 15,197 some records carry
+  zeros - the spend is filled in when the answer completes. What has to be taken is the
+  element-wise maximum over the turn's records: by the first record the sum comes out as
+  8.1M output tokens instead of 12.8M, and by the sum of records it is inflated manyfold.
+- **Turns are duplicated across files** - contrary to the initial measurement. On resume
+  Claude Code copies past turns into a new file with a new `sessionId`, keeping
+  `uuid` and `message.id`: one turn was met in 20 files. Unique `uuid`s number
+  28,525 out of 70,061 records, unique (`sessionId`, `message.id`) pairs number 38,199 out of
+  15,151 turns. Deduplication is mandatory, and the key is `message.id`, not `uuid`.
+- **`usage` is richer than in the specification:** `cache_creation.{ephemeral_5m,ephemeral_1h}_input_tokens`,
+  `iterations[]`, `service_tier`, `speed`, and next to the record sit `effort` and `requestId`.
+  The real values on the machine are exactly `ephemeral_1h` (an example: 963k cache read,
+  596 written into the 1h cache).
+- **The cache rates differ:** a write into the 1h cache costs more than into the 5m one. One
+  `cache_write_per_mtok` column in `model_prices` is not enough - a separate one is needed
+  for 1h.
+- **There are far more record types than in the specification:** `assistant`, `user`,
+  `attachment`, `system`, `mode`, `last-prompt`, `custom-title`, `ai-title`,
+  `queue-operation`, `file-history-snapshot`, `file-history-delta`, `permission-mode`,
+  `frame-link`, `agent-name`. There is no `summary` type in current versions; auto-compaction
+  shows as `isCompactSummary: true` on a user record.
+- **Synthetic answers:** `message.model == "<synthetic>"` (120 records) - messages
+  like "No response requested" and hitting the session limit. Their `usage` is zero and
+  `requestId` is absent; they do not affect the spend but must not become turns.
+- **`user` records come in two kinds:** a real prompt and a tool result. They cannot be told
+  apart by `promptSource` - the field is present on only 1,929 records out of 45,282 (`sdk`,
+  `typed`), and hand-typed prompts usually lack it. The reliable sign of a result is a
+  `tool_result` block in the content (41,653 records). Prompt content comes both as a string
+  and as an array of blocks (`text`, `image`, `document`).
+- **Subagents:** the `isSidechain` field is present; the turns of Task agents live in the same
+  file, and their spend must be both added into the session and shown separately.
+- **The `cc-tg-bridge` bridge** listens on 127.0.0.1:8788 (the port lives in
+  `~/.config/cc-tg-bridge/config.json`), with only the `GET /health` and `POST /hook*` routes
+  guarded by `hookToken`. There is no endpoint for arbitrary messages - it is added by task D4.
 
-## Веха A — вертикальный срез (живая стрелка)
+## Milestone A - the vertical slice (a live needle)
 
-Цель: открытая в браузере страница показывает суммарный burn rate и ход текущей
-сессии Claude Code с задержкой ≤ 1 с. Глубина метрик минимальная.
+The goal: a page opened in a browser shows the combined burn rate and the turn of the current
+Claude Code session with a latency <= 1 s. The metric depth is minimal.
 
-- [x] **A0. План в репозиторий.** Этот файл и ссылка на него в CLAUDE.md.
-- [x] **A1. Парсер строки транскрипта.** `src/cburn/collector/parser.py`: чистая
-  функция `parse_line(raw: str) -> ParsedRecord | None` без обращений к БД.
-  Разбирает `assistant` (usage, модель, `stop_reason`, блоки `tool_use`), `user`
-  (промпт против `tool_result`, `isCompactSummary`), остальное отдаёт как
-  неизвестный тип. Никаких исключений наружу: битая строка → лог и `None`.
-  Сделано: `RecordKind` (assistant/prompt/tool_result/unknown), `Usage` с
-  раздельными `cache_write_5m`/`cache_write_1h`, нормализация bash-команд.
-  Фикстуры версий 2.1.220–228 нарезаются `tools/make_fixtures.py`
-  (обезличивание: текста переписки, аргументов и путей в них нет).
-  Прогон по всей истории — 172 447 строк, ноль нечитаемых, 4.1 с.
-- [x] **A2. Импорт в БД.** `collector/indexer.py`: `ingest_file(conn, path)` — чтение
-  от сохранённого offset построчно, upsert `projects`/`sessions`, вставка `turns`
-  и `tool_calls`, продвижение offset в `files`. Сброс offset при смене inode или
-  уменьшении size. Готово, когда повторный вызов на том же файле не меняет ни
-  одной строки в `turns`.
-  Сделано: схема переведена на `turns.message_id UNIQUE`, добавлены
+- [x] **A0. The plan into the repository.** This file and a link to it in CLAUDE.md.
+- [x] **A1. The transcript line parser.** `src/cburn/collector/parser.py`: the pure
+  function `parse_line(raw: str) -> ParsedRecord | None` with no database access.
+  It parses `assistant` (usage, the model, `stop_reason`, `tool_use` blocks), `user`
+  (a prompt versus a `tool_result`, `isCompactSummary`), and returns the rest as an
+  unknown type. No exceptions escape: a broken line becomes a log line and `None`.
+  Done: `RecordKind` (assistant/prompt/tool_result/unknown), `Usage` with
+  separate `cache_write_5m`/`cache_write_1h`, bash command normalisation.
+  Fixtures of versions 2.1.220-228 are sliced by `tools/make_fixtures.py`
+  (anonymisation: they hold no conversation text, arguments or paths).
+  A run over the whole history: 172,447 lines, zero unreadable, 4.1 s.
+- [x] **A2. Import into the database.** `collector/indexer.py`: `ingest_file(conn, path)` -
+  reading from the stored offset line by line, upserting `projects`/`sessions`, inserting
+  `turns` and `tool_calls`, moving the offset in `files`. The offset resets on an inode change
+  or a size decrease. It is done when a repeated call on the same file changes not a single
+  row in `turns`.
+  Done: the schema moved to `turns.message_id UNIQUE`, with
   `cache_write_5m`/`cache_write_1h`, `is_sidechain`, `tool_calls.tool_use_id UNIQUE`
-  и `sessions.last_context`. Ход собирается из нескольких записей, usage сводится
-  поэлементным максимумом (в том числе через UPSERT, когда хвост дочитан позже).
-  Прогон по истории: 348 файлов, 172 787 строк, 4.3 с, 15 153 хода, 23 020 копий
-  от resume погашено; повторный проход читает ноль строк.
-- [x] **A3. Точность цифр (критерий приёмки M1).** `cburn session <id>` печатает
-  суммы по одной реальной сессии; сверяется с независимым подсчётом `jq` по тому
-  же файлу. Расхождение — ноль. Тест закрепляет сверку на фикстуре.
-  Сделано: `metrics.py` (запросы по сессии), команды `reindex`, `sessions`,
-  `session <id>` (принимает префикс id). Сверка на снимке живой сессии
-  (2.7 МБ, 209 ходов): ходы, вход, выход, чтение кэша и обе записи кэша
-  совпали до токена. Сверка закреплена тестом на всех фикстурах.
-  Сверять надо по снимку: на живом файле расхождение даёт не ошибка,
-  а дозапись транскрипта между `reindex` и `jq`.
-- [x] **A4. Watcher.** `collector/watcher.py`: `watchdog` на `~/.claude/projects`,
-  дебаунс ~200 мс, очередь файлов, дочитывание только хвоста. Проверка: `echo`
-  в тестовый JSONL внутри временного каталога приводит к появлению хода в БД.
-  Сделано: `TranscriptWatcher` с рабочим потоком (соединение SQLite живёт
-  внутри него), очередью с дебаунсом, начальным обходом и колбэком
-  `on_ingest` под пуш в WebSocket. Замер задержки «запись → ход в БД»:
-  222–253 мс при дебаунсе 200 мс. Живая проверка на реальном каталоге:
-  поймана активность соседней сессии.
-- [x] **A5. Минимальный API.** `api/server.py`: FastAPI на 127.0.0.1:8799,
-  `GET /api/overview` (суммарный burn rate, расход за сегодня, топ сессий),
-  `GET /api/sessions`, `WS /ws` с пушем при новых ходах. Плюс `cburn serve`
-  (uvicorn, запуск watcher в том же процессе).
-  Сделано: ещё `GET /api/sessions/{id}` и `GET /api/health`; метрики обзора
-  в `metrics.py` (burn rate в окнах 1/5/60 мин, расход за сегодня по местной
-  полуночи, живые сессии, топ сессий). Пуш на живой сессии приходит за 0.1 с.
-  Замечание к A6 и B1: burn rate в токенах определяется чтением кэша
-  (2.4 млн ток/мин против 2.5 тыс. выходных) — на спидометре нужна либо
-  разбивка, либо деньги, иначе шкала бессмысленна.
-- [x] **A6. Минимальный фронт.** `web/` — Vite + React + TypeScript, одна страница:
-  спидометр суммарного burn rate, счётчик за сегодня, лента последних ходов.
-  Обмен с бэком только по HTTP/WebSocket. Сборка кладётся в `web/dist`, FastAPI
-  раздаёт её статикой.
-  Сделано: шкала прибора логарифмическая (1 тыс … 10 млн ток/мин — линейная
-  бесполезна при разбросе в три порядка), кольцо под ней разбито на доли
-  составляющих, отдельная линейная шкала выхода модели, переключатель окон
-  1/5/60 мин, панели «за сегодня», «сейчас в работе», «больше всего за сегодня»
-  и лента ходов. Внешних шрифтов и CDN нет — сервис работает офлайн и поедет
-  в webview на M5.
+  and `sessions.last_context` added. A turn is assembled from several records, and usage is
+  merged by an element-wise maximum (including through an UPSERT when the tail is read later).
+  A run over the history: 348 files, 172,787 lines, 4.3 s, 15,153 turns, 23,020 copies
+  from resume swallowed; a repeated pass reads zero lines.
+- [x] **A3. Accuracy of the numbers (the M1 acceptance criterion).** `cburn session <id>`
+  prints the totals for one real session; they are checked against an independent `jq` count
+  over the same file. The difference is zero. A test pins the reconciliation on a fixture.
+  Done: `metrics.py` (the session queries), the commands `reindex`, `sessions`,
+  `session <id>` (it accepts an id prefix). The reconciliation on a snapshot of a live session
+  (2.7 MB, 209 turns): the turns, the input, the output, the cache reads and both cache writes
+  matched to the token. The reconciliation is pinned by a test over every fixture.
+  It has to be done on a snapshot: on a live file the difference comes not from an error
+  but from the transcript being appended between `reindex` and `jq`.
+- [x] **A4. The watcher.** `collector/watcher.py`: `watchdog` over `~/.claude/projects`,
+  a debounce of ~200 ms, a file queue, reading only the tail. The check: an `echo`
+  into a test JSONL inside a temporary directory leads to a turn appearing in the database.
+  Done: `TranscriptWatcher` with a worker thread (the SQLite connection lives
+  inside it), a queue with a debounce, an initial walk and an `on_ingest` callback
+  for the WebSocket push. The measured latency "line written => turn in the database":
+  222-253 ms with a 200 ms debounce. A live check on the real directory:
+  the activity of a neighbouring session was caught.
+- [x] **A5. The minimal API.** `api/server.py`: FastAPI on 127.0.0.1:8799,
+  `GET /api/overview` (the combined burn rate, today's spend, the top sessions),
+  `GET /api/sessions`, `WS /ws` with a push on new turns. Plus `cburn serve`
+  (uvicorn, starting the watcher in the same process).
+  Done: `GET /api/sessions/{id}` and `GET /api/health` as well; the overview metrics
+  live in `metrics.py` (the burn rate over 1/5/60 min windows, today's spend from local
+  midnight, live sessions, the top sessions). A push on a live session arrives in 0.1 s.
+  A note for A6 and B1: the burn rate in tokens is dominated by cache reads
+  (2.4M tokens/min against 2.5k of output) - the speedometer needs either
+  a breakdown or money, otherwise the scale is meaningless.
+- [x] **A6. The minimal frontend.** `web/` - Vite + React + TypeScript, one page:
+  the combined burn rate speedometer, today's counter, a feed of the latest turns.
+  The exchange with the backend goes over HTTP/WebSocket only. The build lands in `web/dist`,
+  and FastAPI serves it as statics.
+  Done: the instrument scale is logarithmic (1k ... 10M tokens/min - a linear one is
+  useless with a spread of three orders of magnitude), the ring under it is split into shares
+  of the parts, there is a separate linear scale for the model output, a switch of the
+  1/5/60 min windows, the "today", "running now" and "the most today" panels
+  and the turn feed. There are no external fonts and no CDN - the service works offline and
+  will move into a webview in M5.
 
-- [x] **A7. Живые показания.** Обзор перестал зависеть только от событий watcher:
-  тикер шлёт его подписчикам раз в 2 с, поэтому окна burn rate скользят и
-  стрелка честно падает в паузах. Добавлены самописец (расход по 5-секундным
-  корзинам за 5 минут, высота столбика — по выходу модели: в суммарных
-  токенах любой ход выглядит одинаково из-за кэша) и признак «идёт запрос»
-  (`sessions.last_record_kind`: промпт или tool_result без ответа).
-  Такт — раз в секунду (сборка обзора стоит 2 мс, упираться не во что).
-  Окон стало четыре: добавлено 10-секундное, которое показывает, что
-  происходит прямо сейчас; по умолчанию всё же минута — между ходами
-  короткое окно честно показывает ноль.
-  Стрелка едет плавно: поворот через CSS `transform`, а не пересчёт
-  координат линии — переход на атрибутах `x1/y1/x2/y2` браузер не
-  анимирует, и стрелка прыгала. Цифра под шкалой догоняет её по той же
-  кривой.
-  Предел точности измерен: Claude Code дописывает транскрипт порциями раз
-  в 2–6 с, а `usage` появляется только вместе с завершённым ходом — расход
-  внутри незавершённого хода из транскрипта не виден в принципе. Для этого
-  нужен OTLP-приёмник (M4).
+- [x] **A7. Live readings.** The overview stopped depending on watcher events alone:
+  a ticker sends it to subscribers every 2 s, so the burn rate windows slide and
+  the needle honestly falls during pauses. A chart recorder was added (the spend by 5-second
+  buckets over 5 minutes, the bar height following the model output: in total
+  tokens every turn looks the same because of the cache) and a "request running" sign
+  (`sessions.last_record_kind`: a prompt or a tool_result without an answer).
+  The tick is once a second (building the overview costs 2 ms, there is nothing to hit).
+  There are four windows now: a 10-second one was added, showing what
+  happens right now; the default is still a minute - between turns a
+  short window honestly shows zero.
+  The needle moves smoothly: the rotation goes through a CSS `transform` rather than
+  recomputed line coordinates - a browser does not animate a transition on the
+  `x1/y1/x2/y2` attributes, and the needle jumped. The figure under the scale follows it along
+  the same curve.
+  The accuracy limit was measured: Claude Code appends the transcript in bursts every
+  2-6 s, and `usage` appears only together with a finished turn - the spend
+  inside an unfinished turn is invisible in the transcript in principle. That needs
+  the OTLP receiver (M4).
 
-- [x] **A8. Работа с живыми сессиями.** Название сессии из записей `ai-title` и
-  `custom-title` (своё важнее сгенерированного), возраст и время последней
-  активности в карточке, список ограничен пятью сессиями и отсортирован по
-  активности. Закрытие сессии: подтверждение в поповере, дальше SIGTERM
-  процессу и пометка `sessions.hidden`; отдельная кнопка «только убрать»
-  не трогает процесс. Процесс ищется по рабочему каталогу — единственная
-  связка с `sessionId`; если каталогу отвечает не один процесс, дашборд
-  ничего не завершает.
-  Промпты слэш-команд больше не выглядят как стена служебного текста:
-  подписью становится сама команда (`/clear`).
+- [x] **A8. Working with live sessions.** The session title from `ai-title` and
+  `custom-title` records (a self-set one beats a generated one), the age and the last activity
+  time on the card, the list limited to five sessions and sorted by
+  activity. Closing a session: a confirmation in a popover, then a SIGTERM to the
+  process and a `sessions.hidden` mark; a separate "just remove" button
+  does not touch the process. The process is found by the working directory - the only
+  link to the `sessionId`; if more than one process answers for a directory, the dashboard
+  terminates nothing.
+  Slash command prompts no longer look like a wall of service text:
+  the caption becomes the command itself (`/clear`).
 
-**Критерий вехи: выполнен.** `cburn serve`, открытый `http://localhost:8799`,
-работающая рядом сессия Claude Code — стрелка шевелится в пределах секунды после
-хода: задержка «строка записана → ход в БД» 222–253 мс, пуш в WebSocket ещё
-0.1 с. Проверено на живых сессиях, цифры сверены с `jq` до токена.
+**The milestone criterion is met.** `cburn serve`, `http://localhost:8799` open,
+a Claude Code session running nearby - the needle moves within a second of a
+turn: the "line written => turn in the database" latency is 222-253 ms, and the WebSocket push
+takes another 0.1 s. Checked on live sessions, the numbers matched `jq` to the token.
 
-Попутно выяснилось: доля чтения кэша в расходе — 99%, поэтому суммарный burn
-rate в токенах почти не реагирует на работу модели. Разбивка на кольце и
-отдельная шкала выхода это показывают, но осмысленной единицей станут деньги
-(задача B1).
+Discovered along the way: the share of cache reads in the spend is 99%, so the combined burn
+rate in tokens barely reacts to the model working. The breakdown on the ring and the
+separate output scale show that, but money will be the meaningful unit
+(task B1).
 
-## Веха B — добор M1 (полнота и масштаб)
+## Milestone B - completing M1 (completeness and scale)
 
-- [x] **B1. Стоимость.** Таблица `model_prices` расширяется колонкой
-  `cache_write_1h_per_mtok` (правка `db/schema.sql`, БД пересоздаётся — миграций
-  пока нет). Расчёт `cost_usd` на ход по модели и четырём составляющим; цены
-  приходят из секции `[prices]` конфига, дефолтов в коде нет. Модуль
-  `src/cburn/pricing.py`.
-  Сделано: `pricing.py` переносит `[prices]` в `model_prices` и считает стоимость
-  одним SQL-запросом — при импорте для новых ходов, целиком при старте сервера
-  и по команде `cburn prices`. Модель без цены стоит ноль и попадает в список
-  «без цены», модель с датой в имени тарифицируется по имени без даты.
-  Тарифов в коде нет: `cburn prices --init` кладёт заготовку
-  (`prices.sample.toml`, снимок цен на 2026-08-13) в пользовательский конфиг,
-  дальше цены правит человек.
-- [x] **B2. Первичная индексация всей истории.** Фоновая задача с прогрессом
-  (`cburn reindex`, статус в API): обход 590 МБ без падений, батчевые вставки,
-  `PRAGMA synchronous=NORMAL` на время импорта. Замер времени фиксируется
-  в README; если дольше нескольких минут — `orjson` и пул воркеров, без
-  переписывания.
-  Сделано замером: 639 МБ, 459 файлов, 185 799 строк, 17 186 ходов — 5,4 с
-  с нуля, повторный проход — десятые доли секунды. При таких числах фоновая
-  задача, статус в API, батчи и пул воркеров были бы оптимизацией того, чего
-  не видно: `ingest_tree` отдаёт прогресс колбэком, `cburn reindex` рисует
-  строку обхода и печатает время. `PRAGMA journal_mode=WAL` уже в схеме,
-  а `synchronous` под WAL по умолчанию и есть NORMAL.
-- [x] **B3. Метрики ТЗ §4.** SQL-слой `src/cburn/metrics.py`: burn rate в окнах
-  1/5/60 мин, `context_estimate` последнего хода, доля моделей, профиль
-  инструментов (внутри Bash — по нормализованной команде: первое слово +
-  подкоманда), холостые ходы (ответ < 10 токенов при контексте > 50k), оценка
-  окна лимитов с пометкой «приближение».
-  Сделано: `model_share`, `tool_profile`, `idle_turns`, `limit_window` и панель
-  «на что уходят ходы» на дашборде.
-  Оценка окна лимитов по транскриптам оказалась не нужна: нашёлся источник
-  настоящих цифр — `GET /api/oauth/usage`, тот самый, откуда `/usage` в Claude
-  Code берёт свои проценты. `limits.py` спрашивает его напрямую с токеном из
-  связки ключей, кэш Claude Code остаётся запасным путём. Приближение
-  (`limit_window`) осталось в metrics как запасной расчёт, но на дашборде
-  показываются проценты Anthropic. Эндпоинт чувствителен к частоте: 429 с
-  `Retry-After`, поэтому запрос не чаще раза в 5 минут с увеличением паузы.
-  Нормализация bash-команд переделана по реальным данным: `cd` был самой частой
-  «командой» (2 291 вызов), а присваивание переменной превращалось в имя каталога
-  из своего значения. Теперь `cd`/`pushd` пропускаются вместе с аргументом-путём,
-  `sudo`/`env`/`time` разворачиваются, а подкоманда берётся только у команд из
-  белого списка — иначе `cat README` оседало в БД как «cat README», то есть
-  именем файла вопреки требованию приватности.
-- [x] **B4. Живость и активный запрос.** Сессия живая, если файл рос за 120 с;
-  активный запрос — если последняя запись не завершённый ход ассистента. Флаг
-  `is_live` обновляется фоновой задачей.
-  Сделано иначе, чем задумывалось: рост файла отвечает на вопрос «пишут ли
-  сюда», но не на вопрос «жива ли сессия» — транскрипт не знает, что процесс
-  закрылся, и завершённая сессия висела в «сейчас в работе» весь час
-  (на реальном прогоне из 28 «простаивающих» живыми были 4). Поэтому `is_live`
-  ставится по `claude agents --json`: фоновая задача в API опрашивает его раз
-  в 15 с (опрос стоит ~1,3 с, уходит в поток) и раскладывает флаг по сессиям.
-  Появился статус `done` — «закончилась», отдельной вкладкой на дашборде.
-  Три состояния вместо двух: NULL — не спрашивали, и это не повод объявить
-  сессию мёртвой; молчащий `claude` тоже оставляет флаги как были.
-  Отсутствие процесса засчитывается только после 120 с тишины, чтобы живая
-  сессия не мигала между опросами.
-  Тем же проходом решается вторая задача - «ждёт разрешения» против «гоняет
-  долгий инструмент». В транскрипте они неотличимы (запрос инструмента без
-  ответа), поэтому смотрим на процессы: у сессии, выполняющей команду, есть
-  потомок, запущенный после запроса, а на вопросе «разрешить?» процесс
-  простаивает. Постоянные потомки (MCP-серверы) и фоновые команды стартовали
-  раньше запроса и не в счёт - отсюда `busy_since`, момент запуска самого
-  молодого потомка, а не флаг «есть потомки». Опрос стал чаще (5 с вместо 15):
-  занятость меняется на каждой команде, а дорогой `claude agents --json`
-  кэшируется, наружу каждый раз ходит только `ps`.
-- [x] **B5. Форки и сабагенты.** Восстановление цепочек resume по
-  `parentUuid`/`leafUuid` и по нескольким `sessionId` внутри файла; заполнение
-  `parent_session_id`. Расход сабагентов (`isSidechain`) считается в сессию
-  и помечается отдельно.
-  Связь ищется не по `parentUuid`, а по скопированным ходам: resume копирует
-  историю в новый `sessionId`, сохраняя `message.id`, и дедупликация оставляет
-  такой ход за первым владельцем — значит ходы файла, записанные на чужую
-  сессию, и есть скопированная история. Направление задаёт время начала, а не
-  порядок обхода файлов: иначе связь зависела бы от того, чей файл попался
-  первым. Нескольких `sessionId` внутри одного файла в текущих данных нет
-  (проверено на 460 файлах) — версия формата поменялась с момента разведки.
-  На реальной истории нашлось 77 связей, самая длинная линия — 19 сессий,
-  915 ходов, $244. `cburn session` печатает «продолжает» и итог линии,
-  `/api/sessions/{id}` отдаёт `chain`, `cburn reindex --full` пересобирает
-  связи на уже прочитанной истории.
-- [x] **B6. Неизвестные записи.** Складывание в `raw_events` с ограничением: полный
-  payload только для первых N экземпляров каждой пары (тип, версия), дальше —
-  счётчик. Иначе таблица растёт быстрее полезных данных (одних `attachment`
-  в истории десятки тысяч).
-  Сделано: N = 5, счётчики в `raw_event_counts` (тип, версия, сколько, когда
-  впервые и в последний раз). На реальной истории 56 685 незнакомых записей
-  в 26 парах — сохранилось 116 примеров вместо 57 тысяч, база не выросла.
-  Опасение подтвердилось с запасом: `attachment` версии 2.1.222 — 33 779 штук.
-  Смотреть — `cburn events` (что встречается) и `cburn events --show <тип>`
-  (как выглядит). `cburn reindex --full` чистит счётчики, иначе они задваиваются.
-  Колонка `version` добавлена в существующие базы через `ALTER TABLE`:
-  появился минимальный список `ADDED_COLUMNS` в `db/__init__.py`.
-- [x] **B7. CLI целиком.** `cburn stats`, `sessions`, `session <id>`, `reindex`
-  с фильтрами по проекту и периоду.
-  Сделано: `cburn stats` печатает ходы, четыре составляющих расхода, стоимость,
-  доли моделей, профиль инструментов и холостые ходы. Общие фильтры `--project`
-  (подстрока slug: хватает `cburn` вместо полного пути) и `--period`
-  (`today`, `24h`, `7d`, `30d`, `all` или дата). У `sessions` период по
-  умолчанию `all` — список и так ограничен `-n`; у `stats` — `7d`.
-  `reindex --project` сужает обход до одного каталога. Имена моделей и MCP-
-  инструментов в выводе сокращаются, как на дашборде.
-- [x] **B8. Смоук-тест на всей истории.** Тест, который парсит реальный
-  `~/.claude/projects` целиком и падает только на исключении парсера;
-  отмечается маркером и не гоняется по умолчанию. Набор обезличенных фикстур
-  версий 2.1.220–228 в `tests/fixtures/transcripts/`.
-  Сделано: `tests/test_real_history.py` под маркером `real_history`,
-  выключен через `addopts` и запускается руками
-  (`pytest -m real_history -q -s`). Два теста: разбор каждой строки без
-  исключений и полный обход в чистую БД с проверкой ссылочной целостности.
-  Оба печатают перепись — после обновления Claude Code видно, что изменилось:
-  189 170 строк, 74 733 записи ходов → 17 787 ходов, 57 799 незнакомых,
-  253 сессии, 77 связей resume, 9,8 с. Фикстуры догенерированы до 2.1.231:
-  в истории появились версии, которых не было на момент разведки.
+- [x] **B1. Cost.** The `model_prices` table gains a
+  `cache_write_1h_per_mtok` column (an edit to `db/schema.sql`, the database is recreated -
+  there are no migrations yet). The `cost_usd` calculation per turn by the model and the four
+  parts; the prices come from the `[prices]` config section, with no defaults in the code. The
+  `src/cburn/pricing.py` module.
+  Done: `pricing.py` moves `[prices]` into `model_prices` and computes the cost
+  with a single SQL query - at import time for new turns, whole at server start
+  and on the `cburn prices` command. A model without a price costs zero and lands in the
+  "no price" list, and a model with a date in its name is billed by the name without the date.
+  There are no rates in the code: `cburn prices --init` puts a template
+  (`prices.sample.toml`, a price snapshot as of 2026-08-13) into the user config,
+  and a human edits the prices afterwards.
+- [x] **B2. The initial indexing of the whole history.** A background job with progress
+  (`cburn reindex`, the status in the API): a walk over 590 MB without failures, batched
+  inserts, `PRAGMA synchronous=NORMAL` for the duration of the import. The timing is recorded
+  in the README; if it takes longer than a few minutes, `orjson` and a worker pool follow,
+  without a rewrite.
+  Settled by measurement: 639 MB, 459 files, 185,799 lines, 17,186 turns - 5.4 s
+  from scratch, and a repeated pass takes tenths of a second. With numbers like these a
+  background job, a status in the API, batches and a worker pool would optimise what is not
+  visible: `ingest_tree` reports progress through a callback, and `cburn reindex` draws a
+  walk line and prints the time. `PRAGMA journal_mode=WAL` is already in the schema,
+  and under WAL `synchronous` is NORMAL by default anyway.
+- [x] **B3. The TZ §4 metrics.** The SQL layer `src/cburn/metrics.py`: the burn rate over
+  1/5/60 min windows, the `context_estimate` of the last turn, the model share, the tool
+  profile (inside Bash by the normalised command: the first word +
+  the subcommand), idle turns (an answer < 10 tokens on a context > 50k), an estimate of the
+  limit window marked as "an approximation".
+  Done: `model_share`, `tool_profile`, `idle_turns`, `limit_window` and the
+  "where the turns go" panel on the dashboard.
+  The estimate of the limit window from transcripts turned out to be unnecessary: a source of
+  real numbers was found - `GET /api/oauth/usage`, the very one `/usage` in Claude
+  Code takes its percentages from. `limits.py` asks it directly with a token from
+  the keychain, and the Claude Code cache stays as the fallback. The approximation
+  (`limit_window`) remained in metrics as a fallback computation, but the dashboard shows the
+  Anthropic percentages. The endpoint is sensitive to frequency: a 429 with
+  `Retry-After`, so a request goes no more often than once every 5 minutes with an increasing
+  pause.
+  Bash command normalisation was reworked from the real data: `cd` was the most frequent
+  "command" (2,291 calls), and a variable assignment turned into a directory name
+  taken from its own value. Now `cd`/`pushd` are skipped together with their path argument,
+  `sudo`/`env`/`time` are unwrapped, and a subcommand is taken only for commands from the
+  allowlist - otherwise `cat README` settled in the database as "cat README", that is, as a
+  file name against the privacy requirement.
+- [x] **B4. Liveness and an active request.** A session is live if the file grew within 120 s;
+  a request is active if the last record is not a finished assistant turn. The
+  `is_live` flag is refreshed by a background job.
+  Done differently from the plan: file growth answers the question "is anything being written
+  here", but not "is the session alive" - the transcript does not know the process
+  closed, and a finished session hung in "running now" for a whole hour
+  (in a real run, out of 28 "idle" ones only 4 were alive). So `is_live`
+  is set from `claude agents --json`: a background job in the API polls it every
+  15 s (the poll costs ~1.3 s and goes into a thread) and spreads the flag over the sessions.
+  A `done` status appeared - "finished", as a tab of its own on the dashboard.
+  Three states instead of two: NULL means "not asked", and that is no reason to declare
+  a session dead; a silent `claude` also leaves the flags as they were.
+  A missing process counts only after 120 s of silence, so that a live
+  session does not blink between polls.
+  The same pass solves the second task - "waiting for permission" versus "running a
+  long tool". They are indistinguishable in the transcript (a tool request without an
+  answer), so we look at processes: a session executing a command has a
+  child started after the request, while on an "allow?" question the process
+  idles. Permanent children (MCP servers) and background commands started
+  before the request and do not count - hence `busy_since`, the start moment of the
+  youngest child, rather than a "there are children" flag. The poll became more frequent
+  (5 s instead of 15): busyness changes with every command, while the expensive
+  `claude agents --json` is cached and only `ps` goes out every time.
+- [x] **B5. Forks and subagents.** Reconstructing resume chains from
+  `parentUuid`/`leafUuid` and from several `sessionId`s inside a file; filling in
+  `parent_session_id`. Subagent spend (`isSidechain`) is counted into the session
+  and marked separately.
+  The link is found not by `parentUuid` but by the copied turns: resume copies
+  the history into a new `sessionId`, keeping `message.id`, and deduplication leaves
+  such a turn with its first owner - which means the turns of a file recorded against someone
+  else's session are exactly the copied history. The direction is set by the start time, not
+  by the file walk order: otherwise the link would depend on whose file came
+  first. Several `sessionId`s inside one file do not occur in the current data
+  (checked over 460 files) - the format version changed since the reconnaissance.
+  In the real history 77 links were found, and the longest line is 19 sessions,
+  915 turns, $244. `cburn session` prints "continues" and the line total,
+  `/api/sessions/{id}` returns `chain`, and `cburn reindex --full` rebuilds the
+  links over already read history.
+- [x] **B6. Unknown records.** Stashing into `raw_events` with a limit: the full
+  payload only for the first N samples of every (type, version) pair, and a counter
+  beyond that. Otherwise the table grows faster than the useful data (`attachment` alone
+  runs into tens of thousands in history).
+  Done: N = 5, the counters live in `raw_event_counts` (the type, the version, how many, when
+  first and last seen). In the real history there were 56,685 unknown records
+  across 26 pairs - 116 samples were kept instead of 57 thousand, and the database did not
+  grow. The worry was confirmed with a margin: `attachment` of version 2.1.222 numbers 33,779.
+  To look at them - `cburn events` (what occurs) and `cburn events --show <type>`
+  (what it looks like). `cburn reindex --full` clears the counters, otherwise they double.
+  The `version` column was added to existing databases through an `ALTER TABLE`:
+  a minimal `ADDED_COLUMNS` list appeared in `db/__init__.py`.
+- [x] **B7. The whole CLI.** `cburn stats`, `sessions`, `session <id>`, `reindex`
+  with project and period filters.
+  Done: `cburn stats` prints the turns, the four parts of the spend, the cost,
+  the model shares, the tool profile and the idle turns. The shared filters are `--project`
+  (a slug substring: `cburn` is enough instead of the full path) and `--period`
+  (`today`, `24h`, `7d`, `30d`, `all` or a date). For `sessions` the default period is
+  `all` - the list is bounded by `-n` anyway; for `stats` it is `7d`.
+  `reindex --project` narrows the walk down to one directory. Model and MCP tool names in the
+  output are shortened, as on the dashboard.
+- [x] **B8. A smoke test over the whole history.** A test that parses the real
+  `~/.claude/projects` whole and fails only on a parser exception;
+  it is marked and does not run by default. A set of anonymised fixtures of
+  versions 2.1.220-228 lives in `tests/fixtures/transcripts/`.
+  Done: `tests/test_real_history.py` under the `real_history` marker,
+  switched off through `addopts` and run by hand
+  (`pytest -m real_history -q -s`). Two tests: parsing every line without
+  exceptions and a full walk into a clean database with a referential integrity check.
+  Both print a census - after a Claude Code update it is visible what changed:
+  189,170 lines, 74,733 turn records => 17,787 turns, 57,799 unknown,
+  253 sessions, 77 resume links, 9.8 s. The fixtures were extended up to 2.1.231:
+  versions that did not exist at reconnaissance time appeared in the history.
 
-## Веха C — добор M2 (дашборд целиком)
+## Milestone C - completing M2 (the whole dashboard)
 
-- [x] **C1. Экран «Сессии»** — таблица с фильтром по проекту и статусу, спарклайн
-  расхода, схлопывание цепочек форков в строку с раскрытием.
-  Сделано: экран выбирается хэшем (`#/sessions`) — роутер ради двух страниц не
-  нужен, но адрес переживает перезагрузку. `/api/sessions` принимает `project`,
-  `status`, `period`, `limit` и отдаёт вместе со списком проекты для выпадашки.
-  Статус считается тем же правилом, что и на «Обзоре», но фильтруется в Python:
-  он выводится из нескольких полей, и переносить это в SQL значит задвоить
-  правило. Спарклайн — 24 столбика на равные доли жизни сессии, один запрос на
-  весь список. Список тянется отдельным запросом раз в 5 с, а не по WebSocket:
-  обзор летит каждую секунду всем подписчикам, экрану это ни к чему.
-- [x] **C2. Экран «Сессия»** — график `context_estimate` по ходам с видимыми
-  моментами автосуммаризации и форка, лента ходов с инструментами, разбивка
-  по моделям, отметки холостых ходов.
-  Сделано: `#/session/<id>`. Ось X — номер хода, а не время: паузы между ходами
-  бывают часами, и по времени график вырождается в полку. Зоны 80k/150k из ТЗ §4
-  закрашены прямо на графике. Автосуммаризации собираются при импорте в новую
-  таблицу `session_events` (запись с `isCompactSummary`), точки ветвления берутся
-  из `parent_session_id` — форк это не запись в транскрипте, а связь между
-  сессиями. Холостой ход считается в запросе тем же порогом, что и в сводке,
-  а не хранится: правка порога не должна требовать переиндексации.
-  Чтобы вехи появились на уже прочитанной истории, нужен `cburn reindex --full`.
-- [x] **C3. Экран «Настройки»** — форма над конфигом §8, запись через `config.save`,
-  редактирование цен моделей.
-  Сделано: `#/settings`, `GET /api/config` и `PUT /api/config`. Проверка значений
-  живёт на бэкенде (`config.validate`) и оттуда же приходит текстом: повторять
-  правила на фронте значит завести вторую их версию. Цены применяются сразу —
-  пересчёт всей истории занимает секунды, ждать `reindex` незачем.
-  По ходу вскрылось: `config.load/save` брали путь из умолчания аргумента, то
-  есть на момент импорта, и подменить его было нельзя — тест записал настройки
-  в настоящий пользовательский конфиг. Теперь путь берётся в момент вызова,
-  как в `db.connect`.
-- [x] **C4. Прогресс индексации и self-cost советчика** в «Обзоре».
-  Стоимость советчика показана: сумма тактов за сегодня, их число и доля от
-  дневного расхода — прибор, который стоит дороже того, что экономит, должен
-  быть виден. Пока разборов не было, строки нет вовсе.
-  Прогресс индексации при этом не делается, и это решение, а не пропуск: замер
-  на B2 дал 5,4 секунды на 639 МБ истории, то есть показывать нечего — порог
-  «дольше нескольких минут», ради которого задумывался прогресс, не достигнут
-  и близко (см. README, «Сколько занимает первая индексация»).
-- [x] **C5. Автозапуск** — launchd-агент `com.cloudo.cburn.plist`, команды
-  `cburn install` / `cburn uninstall`, логи в `~/.local/share/cburn/`.
-  Сделано, плюс `cburn status`. Агент пользователя, а не демон системы: root
-  дашборду не нужен и вреден. Запускается `python -m cburn`, а не консольный
-  скрипт `cburn`: путь до интерпретатора известен точно, а `cburn` в PATH может
-  оказаться из другого окружения. `KeepAlive` только на неудачный выход — иначе
-  launchd поднимал бы дашборд после каждой остановки руками. Тесты настоящий
-  `launchctl` не зовут: раннер подменяется, проверяются команды и содержимое
-  plist.
+- [x] **C1. The "Sessions" screen** - a table with a project and status filter, a spend
+  sparkline, fork chains collapsed into a row with an expander.
+  Done: the screen is chosen by the hash (`#/sessions`) - a router for two pages is
+  unnecessary, but the address survives a reload. `/api/sessions` accepts `project`,
+  `status`, `period`, `limit` and returns the projects for the dropdown along with the list.
+  The status follows the same rule as on "Overview", but the filtering happens in Python:
+  it is derived from several fields, and moving that into SQL would duplicate the
+  rule. The sparkline is 24 bars over equal slices of the session's life, in one query for
+  the whole list. The list is pulled by a separate request every 5 s rather than over the
+  WebSocket: the overview flies to every subscriber once a second, and the screen has no need
+  for that.
+- [x] **C2. The "Session" screen** - a chart of `context_estimate` over turns with visible
+  moments of auto-compaction and forking, a feed of turns with tools, a breakdown
+  by model, marks on idle turns.
+  Done: `#/session/<id>`. The X axis is the turn number, not the time: pauses between turns
+  run into hours, and by time the chart degenerates into a shelf. The 80k/150k zones from
+  TZ §4 are painted right on the chart. Auto-compactions are collected at import time into a
+  new `session_events` table (a record with `isCompactSummary`), and the branch points come
+  from `parent_session_id` - a fork is not a record in the transcript but a link between
+  sessions. An idle turn is computed in the query by the same threshold as in the summary
+  rather than stored: changing the threshold must not require a reindex.
+  For the milestones to appear over already read history, `cburn reindex --full` is needed.
+- [x] **C3. The "Settings" screen** - a form over the §8 config, writing through `config.save`,
+  editing the model prices.
+  Done: `#/settings`, `GET /api/config` and `PUT /api/config`. The value validation
+  lives on the backend (`config.validate`) and arrives from there as text: repeating the
+  rules on the frontend would mean a second copy of them. Prices apply at once -
+  recomputing the whole history takes seconds, and there is no point in waiting for a
+  `reindex`.
+  Uncovered along the way: `config.load/save` took the path from an argument default, that is,
+  as of import time, and it could not be swapped - a test wrote the settings
+  into the real user config. Now the path is taken at call time,
+  as in `db.connect`.
+- [x] **C4. The indexing progress and the advisor self-cost** in "Overview".
+  The advisor cost is shown: the sum of today's ticks, their number and their share of the
+  daily spend - an instrument that costs more than it saves must
+  be visible. While there were no analyses, the row is absent entirely.
+  The indexing progress is not done, and that is a decision rather than an omission: the
+  measurement in B2 gave 5.4 seconds over 639 MB of history, that is, there is nothing to show -
+  the "longer than a few minutes" threshold the progress was meant for is not even close
+  (see the README, "How long the first indexing takes").
+- [x] **C5. Autostart** - the launchd agent `com.cloudo.cburn.plist`, the commands
+  `cburn install` / `cburn uninstall`, the logs in `~/.local/share/cburn/`.
+  Done, plus `cburn status`. A user agent, not a system daemon: the dashboard needs no root
+  and is harmed by it. What starts is `python -m cburn` rather than the console
+  script `cburn`: the interpreter path is known exactly, while a `cburn` on PATH may
+  come from another environment. `KeepAlive` only on a failed exit - otherwise
+  launchd would raise the dashboard after every manual stop. The tests never call the real
+  `launchctl`: the runner is swapped, and the commands and the plist contents are checked.
 
-## Веха D — M3, советчик и telegram
+## Milestone D - M3, the advisor and telegram
 
-- [x] **D1. Дайджест без LLM** (`analyzer/digest.py`): агрегаты периода, сессии выше
-  порога контекста, цепочки форков, топ-20 нормализованных bash-команд,
-  схлопывание повторяющихся heredoc по шинглам, холостые ходы, доля Opus на
-  механических операциях, размер CLAUDE.md и `@`-импортов, список MCP-серверов
-  и частота их реального использования, частота permission-подтверждений.
-  Цель — до 20k токенов, текста переписки нет. Проверка: JSON собран на истории
-  прототипного проекта и уложился в лимит.
-  Собран, `cburn digest`. На реальной истории за неделю — 1 665 токенов из
-  20 000, влезает с двенадцатикратным запасом. Два пункта сделаны иначе:
-  *шинглы heredoc* невозможны без хранения текста команд, а его нет по ТЗ §7 —
-  вместо этого heredoc помечается прямо при нормализации (`python3 <<`), так
-  что повторный прогон одного скрипта виден счётчиком, а текст по-прежнему не
-  сохраняется; *частота permission-подтверждений* в транскрипт не попадает
-  вовсе — Claude Code не пишет ни запрос разрешения, ни ответ на него, и
-  честного источника для этой цифры нет до OTel (веха E). `@`-импорты CLAUDE.md
-  пока не разворачиваются: считается только размер самого файла.
-- [x] **D2. Вызов `claude -p`** (`analyzer/advisor.py`): `--model` (haiku по
-  умолчанию), `--output-format json`, `--max-turns 1`, фиксированный системный
-  промпт, парсинг массива советов, отбрасывание советов без evidence, учёт
-  собственной стоимости в `advice.cost_usd`. Имя модели сверяется с актуальной
-  документацией на момент реализации.
-  Контракт сверен с установленной версией (2.1.231) и разошёлся с планом:
-  `--max-turns` больше нет — ходы ограничивают пустой `--tools ""` и
-  `--max-budget-usd`; зато появился `--json-schema`, и разобранный ответ
-  приходит полем `structured_output`, так что парсить JSON из текста не нужно.
-  Подробности — в CLAUDE.md. Советы без `evidence` выбрасываются, отклонённые
-  уезжают в промпт следующего такта отпечатком (`advice_items.key`).
-  На реальной истории такт стоил **$0.08**, а не «≤ $0.02» из ТЗ §10: почти всё
-  это запись системного промпта Claude Code в кэш (11k токенов), и подрезать её
-  до конца нечем. Порог приёмки D7 надо пересматривать.
-- [x] **D3. Планировщик** — такт раз в `interval_minutes`, пропуск такта без
-  активности, недельный глубокий разбор на sonnet.
-  Живёт в `cburn serve` рядом с watcher: решение «звать модель или нет» вынесено
-  в чистую `plan_tick`, её видно в тестах. Интервал считается от **любого** такта,
-  а не только от часового: недельный разбор только что смотрел те же данные,
-  повторять их за $0.08 незачем. После старта сервера первые пять минут тактов
-  нет — перезапуск не должен сам по себе стоить денег. Расписание считается от
-  прошлого такта, а не по календарю, поэтому перезапуски его не сдвигают.
-  Тесты API теперь падают при попытке позвать настоящий `claude -p`.
-- [x] **D4. Эндпоинт `/notify` в cc-tg-bridge** — отдельная задача в соседнем
-  репозитории: `POST /notify` с `hookToken`, тело `{text, severity, silent}`,
-  отправка в тему MAIN; правки в `src/http/server.ts` и `src/http/router.ts`,
-  запись в README бриджа.
-  Сделано в ветке `feat/notify-endpoint` соседнего репозитория: `POST /notify`
-  с тем же `hookToken`, тело `{text, severity, silent}`, сообщение уходит в
-  главную тему группы — сессии у него нет, ход никто не держит, ответа никто
-  не ждёт. `info` по умолчанию беззвучные. Четыре теста в наборе бриджа (приём,
-  401, 400 без текста, мусор вместо JSON), README дополнен.
-  Разведано по телеметрии (веха E) перед тем, как браться: бридж держит хуки
-  Claude Code по 16-35 секунд. У `Stop` и `PermissionRequest` это заложено —
-  `createPending` ждёт ответа из Telegram до `waitTimeoutSec` (540 с), в этом и
-  смысл. А вот `UserPromptSubmit` ждёт зря: там `ensureSession` создаёт тему и
-  правит живое сообщение, то есть Claude Code стоит, пока бридж ходит в Bot
-  API. Этот путь стоит сделать фоновым — хук может отвечать `{}` сразу.
-  Для сравнения: `PreToolUse` и `PostToolUse` укладываются в 6-7 мс.
-- [x] **D5. Notifier** (`notifier/`): три типа сообщений (часовой дайджест только
-  при severity ≥ warn, дневная сводка в 21:00, мгновенные алерты), cooldown
-  30 мин на сессию, глобальная пауза на 2 часа кроме crit. Каналы: bridge
-  (по умолчанию), bot, off.
-  Сделано: правила вынесены чистыми функциями (`notifier/rules.py`) и
-  проверяются без сети, канал (`notifier/channel.py`) знает бридж, прямой Bot
-  API и `off`, а память о том, что и когда ушло, лежит в базе — cooldown
-  переживает перезапуск, неудачная отправка отмечается как неудачная.
-  Тревога не заводит своей арифметики: берёт цифры и пороги из того же
-  обзора, что показывает экран. Такт уведомлений живёт в цикле советчика —
-  он и так тикает раз в минуту. Пауза ставится пунктом трея и эндпоинтом
-  `/api/notify/pause`, `crit` сквозь неё проходит.
-  Токен бриджа читается из его собственного конфига: дублировать секрет в
-  двух местах нельзя.
-  Разведано заранее: со стороны бриджа всё готово к `/notify` — сервер уже
-  разбирает POST с Bearer-токеном (`authorized()` в `src/http/server.ts`),
-  новый путь добавляется веткой рядом с `/hook` и `/health`. Со стороны
-  дашборда данных тоже хватает: пороги (`thresholds.burn_rate_warn_per_min`,
-  `context_crit`) и каналы уже лежат в конфиге, severity советов — в
-  `advice.max_severity`, а поводы для мгновенных алертов считает `overview`.
-  Такт уведомлений логично повесить на тот же цикл, что и советчика
-  (`analyzer/scheduler.loop`): он уже умеет считать расписание от прошлого
-  такта и переживать перезапуски, а `plan_tick` вынесена чистой функцией и
-  проверяется тестами без обращения к сети.
-- [x] **D6. Экран «Советы»** — история со статусами; отклонённые уходят в следующий
-  дайджест пометкой «уже отклонено, не повторять».
-  `#/advice`: разборы со стоимостью такта, советы со степенью важности, опорой
-  на цифры и кнопками «принять / отклонить / вернуть». Отклонённый не прячется —
-  видно, что решение принято, — а его отпечаток уезжает в промпт следующего
-  такта. Кнопка «разобрать сейчас» стоит денег, поэтому спрашивает подтверждение
-  и показывает цену. Отклик по-русски и по-английски: словарь общий с остальными
-  экранами.
-- [x] **D7. Приёмка M3** — на реплее истории прототипного проекта советчик находит
-  мега-сессию, холостые ходы и heredoc-паттерн; такт на haiku стоит ≤ $0.02.
-  Прогнано на navuik/core за 30 дней. Найдено всё три:
-  мега-сессия `b2ae5a8a` (7 568 ходов, $1 466, контекст за порогом) — помечена
-  как `crit` вместе со своей цепочкой на $1 614, то есть 64% расхода машины;
-  холостые ходы (506, 4%) со связью с переполненным контекстом; heredoc —
-  `python3 <<` 908 вызовов в составе 4 367 текстовых bash-команд, с предложением
-  вынести их в скилл. Свободная часть приёмки закреплена тестом под маркером
-  `real_history` — он проверяет, что дайджест видит эти три вещи; сам вызов
-  модели остаётся ручным, он стоит денег.
-  **Порог не выдержан: такт стоил $0.07 вместо $0.02.** Дайджест тут ни при чём
-  (1 608 токенов) — платится за запись системного промпта Claude Code в кэш
-  (11k токенов на каждом холодном вызове). Уменьшить нечем: `--strict-mcp-config`
-  и `--exclude-dynamic-system-prompt-sections` уже стоят. При часовом такте это
-  ~$2 в сутки против $500+ расхода, соотношение приемлемое, но критерий из ТЗ §10
-  нужно править по факту, а не подгонять реализацию.
-  Замечено на будущее: haiku иногда добавляет к опоре выдуманные подробности —
-  в одном совете привёл неверные тарифы кэша. Опора на цифры дайджеста верная,
-  а вот рассуждения вокруг требуют проверки; это аргумент за `weekly_deep_model`
-  посильнее и за то, чтобы не показывать советы как истину.
+- [x] **D1. The digest without an LLM** (`analyzer/digest.py`): the period aggregates, sessions
+  above the context threshold, fork chains, the top 20 normalised bash commands,
+  collapsing repeated heredocs by shingles, idle turns, the share of Opus on
+  mechanical operations, the size of CLAUDE.md and the `@`-imports, the list of MCP servers
+  and how often they are actually used, the frequency of permission confirmations.
+  The target is up to 20k tokens, with no conversation text. The check: the JSON was built over
+  the prototype project's history and fitted into the limit.
+  Built, `cburn digest`. Over a week of the real history it was 1,665 tokens out of
+  20,000, fitting with a twelvefold margin. Two points were done differently:
+  *heredoc shingles* are impossible without storing the command text, and there is none per
+  TZ §7 - instead a heredoc is marked right at normalisation time (`python3 <<`), so
+  that a repeated run of one script shows in a counter while the text is still not
+  stored; *the frequency of permission confirmations* never reaches the transcript
+  at all - Claude Code writes neither the permission request nor the answer to it, and
+  there is no honest source for that figure before OTel (milestone E). The `@`-imports of
+  CLAUDE.md are not expanded yet: only the size of the file itself is counted.
+- [x] **D2. The `claude -p` call** (`analyzer/advisor.py`): `--model` (haiku by
+  default), `--output-format json`, `--max-turns 1`, a fixed system
+  prompt, parsing the array of tips, dropping tips without evidence, accounting for
+  its own cost in `advice.cost_usd`. The model name is checked against the current
+  documentation at implementation time.
+  The contract was checked against the installed version (2.1.231) and diverged from the plan:
+  `--max-turns` is gone - turns are bounded by an empty `--tools ""` and
+  `--max-budget-usd`; on the other hand `--json-schema` appeared, and the parsed answer
+  arrives in the `structured_output` field, so there is no need to parse JSON out of the text.
+  The details are in CLAUDE.md. Tips without `evidence` are thrown away, and dismissed ones
+  travel into the next tick's prompt as a fingerprint (`advice_items.key`).
+  On the real history a tick cost **$0.08** rather than the "<= $0.02" from TZ §10: almost all
+  of that is writing the Claude Code system prompt into the cache (11k tokens), and there is
+  nothing left to trim it with. The D7 acceptance threshold has to be revised.
+- [x] **D3. The scheduler** - a tick every `interval_minutes`, skipping a tick without
+  activity, a weekly deep analysis on sonnet.
+  It lives in `cburn serve` next to the watcher: the "call the model or not" decision lives
+  in the pure `plan_tick`, which is visible in tests. The interval counts from **any** tick
+  rather than only from an hourly one: the weekly analysis has just looked at the same data,
+  and repeating it for $0.08 is pointless. For the first five minutes after a server start
+  there are no ticks - a restart must not cost money by itself. The schedule counts from the
+  previous tick rather than by the calendar, so restarts do not shift it.
+  The API tests now fail on an attempt to call the real `claude -p`.
+- [x] **D4. The `/notify` endpoint in cc-tg-bridge** - a separate task in the neighbouring
+  repository: `POST /notify` with `hookToken`, the body `{text, severity, silent}`,
+  sending into the MAIN topic; edits in `src/http/server.ts` and `src/http/router.ts`,
+  and a note in the bridge README.
+  Done in the `feat/notify-endpoint` branch of the neighbouring repository: `POST /notify`
+  with the same `hookToken`, the body `{text, severity, silent}`, and the message goes into
+  the group's main topic - it has no session, nobody holds a turn, nobody waits for an
+  answer. `info` is silent by default. Four tests in the bridge suite (reception,
+  401, 400 without text, garbage instead of JSON), and the README was extended.
+  Scouted through telemetry (milestone E) before starting: the bridge holds Claude Code hooks
+  for 16-35 seconds. For `Stop` and `PermissionRequest` that is by design -
+  `createPending` waits for an answer from Telegram up to `waitTimeoutSec` (540 s), and that
+  is the point. But `UserPromptSubmit` waits for nothing: there `ensureSession` creates a
+  topic and edits a live message, that is, Claude Code stands still while the bridge goes to
+  the Bot API. That path is worth making background - the hook can answer `{}` right away.
+  For comparison: `PreToolUse` and `PostToolUse` fit into 6-7 ms.
+- [x] **D5. The notifier** (`notifier/`): three message kinds (the hourly digest only
+  at severity >= warn, the daily summary at 21:00, instant alerts), a cooldown of
+  30 min per session, a global pause for 2 hours except crit. The channels: bridge
+  (the default), bot, off.
+  Done: the rules live as pure functions (`notifier/rules.py`) and are
+  checked without a network, the channel (`notifier/channel.py`) knows the bridge, the direct
+  Bot API and `off`, and the memory of what went out and when lives in the database - the
+  cooldown survives a restart, and a failed send is marked as failed.
+  The alert runs no arithmetic of its own: it takes the numbers and thresholds from the same
+  overview the screen shows. The notification tick lives inside the advisor loop -
+  it ticks once a minute anyway. The pause is set by a tray item and by the
+  `/api/notify/pause` endpoint, and `crit` passes through it.
+  The bridge token is read from its own config: duplicating a secret in
+  two places is not allowed.
+  Scouted in advance: on the bridge side everything is ready for `/notify` - the server
+  already parses a POST with a Bearer token (`authorized()` in `src/http/server.ts`),
+  and the new path is added as a branch next to `/hook` and `/health`. On the dashboard
+  side the data is enough too: the thresholds (`thresholds.burn_rate_warn_per_min`,
+  `context_crit`) and the channels already live in the config, the tip severity is in
+  `advice.max_severity`, and the reasons for instant alerts are computed by `overview`.
+  It is logical to hang the notification tick on the same loop as the advisor's
+  (`analyzer/scheduler.loop`): it already knows how to count the schedule from the previous
+  tick and to survive restarts, while `plan_tick` is a pure function and is
+  checked by tests without touching the network.
+- [x] **D6. The "Advice" screen** - the history with statuses; dismissed tips travel into the
+  next digest marked "already dismissed, do not repeat".
+  `#/advice`: analyses with their tick cost, tips with a severity, support in
+  numbers and the "accept / dismiss / restore" buttons. A dismissed one is not hidden -
+  it is visible that a decision was made - while its fingerprint travels into the next tick's
+  prompt. The "analyse now" button costs money, so it asks for a confirmation
+  and shows the price. The interface is in Russian and English: the dictionary is shared with
+  the other screens.
+- [x] **D7. The M3 acceptance** - on a replay of the prototype project's history the advisor
+  finds the mega-session, the idle turns and the heredoc pattern; a tick on haiku costs
+  <= $0.02.
+  Run over navuik/core for 30 days. All three were found:
+  the mega-session `b2ae5a8a` (7,568 turns, $1,466, a context past the threshold) - marked
+  as `crit` together with its chain worth $1,614, that is, 64% of the machine's spend;
+  idle turns (506, 4%) linked to an overfilled context; the heredoc -
+  `python3 <<` with 908 calls among 4,367 text bash commands, with a suggestion
+  to move them into a skill. The free-form part of the acceptance is pinned by a test under
+  the `real_history` marker - it checks that the digest sees those three things; the model
+  call itself stays manual, because it costs money.
+  **The threshold was not met: a tick cost $0.07 instead of $0.02.** The digest has nothing to
+  do with it (1,608 tokens) - what is paid for is writing the Claude Code system prompt into
+  the cache (11k tokens on every cold call). There is nothing to reduce:
+  `--strict-mcp-config` and `--exclude-dynamic-system-prompt-sections` are already there. With
+  an hourly tick that is ~$2 a day against $500+ of spend, an acceptable ratio, but the
+  criterion from TZ §10 has to be corrected by fact rather than the implementation bent to fit.
+  Noted for the future: haiku sometimes adds invented details to the support -
+  in one tip it quoted wrong cache rates. The support in digest numbers is correct,
+  while the reasoning around it needs checking; that is an argument for a stronger
+  `weekly_deep_model` and for not showing the tips as truth.
 
-## Веха E — M4, OpenTelemetry
+## Milestone E - M4, OpenTelemetry
 
-- [x] **E1.** Сверка актуальной спецификации метрик по
-  https://code.claude.com/docs/en/monitoring-usage перед кодом.
-  Сверено 14 августа 2026; выясненное — в разделе CLAUDE.md про телеметрию.
-  Главное расхождение с ТЗ: порт 4317 — это gRPC, а он тянет `grpcio` и
-  protobuf-стабы. Кодировка `http/json` разбирается штатным json, поэтому
-  приёмник обходится без новых зависимостей.
-- [x] **E2.** OTLP-приёмник, запись во вторичные таблицы (не поверх данных парсера).
-  Живёт прямо в `cburn serve` на `POST /otlp/v1/{metrics,logs,traces}`, то есть
-  на том же localhost:8799 — второй сокет не нужен. Разбор в
-  `collector/otlp.py`, данные в `otel_metrics`, `otel_events`, счётчики приёма
-  в `otel_ingest`; включение печатает `cburn otel` (`--env`, `--settings`) —
-  прописать переменные за человека нельзя, `~/.claude` открыт только на чтение.
-  Разбор терпимый, как у парсера JSONL: непонятый кусок посылки считается
-  потерей и не обрывает пачку. Повтор посылки гасится отпечатком точки, иначе
-  ретрай экспортёра удваивал бы цифры. Личные атрибуты (почта, id аккаунта,
-  организация) в БД не кладутся: считаем расход, а не человека. Трассы
-  подтверждаются, но не разбираются — 404 загнал бы экспортёр в повторы.
-- [x] **E3.** Сверка метрик OTel и JSONL на общей сессии — расхождение ≤ 2%.
-  Прогнано на двух живых сессиях (`tools/e3_compare.py`): по основной работе
-  (`query_source = main`) расхождение **0,00%** на входе, выходе, обеих записях
-  кэша и стоимости. Порог выдержан с запасом, но сравнивать надо именно `main`:
-  служебные запросы Claude Code (генерация заголовка сессии, ~535 токенов и
-  $0.0006 за сессию) в транскрипт не попадают вовсе, и по общей сумме
-  расхождение доходит до 98% на входных токенах. Вывод важнее самой сверки:
-  **дашборд по транскриптам занижает расход**, и увидеть это можно только через
-  OTel. Оттуда же берутся permission-решения (`tool_decision`), которых не
-  хватило дайджесту D1. Тест на живом Claude Code не закрепляется: он стоит
-  денег, инструмент сверки лежит в `tools/`, а разбор посылок покрыт
+- [x] **E1.** Checking the current metric specification against
+  https://code.claude.com/docs/en/monitoring-usage before the code.
+  Checked on 14 August 2026; what was found is in the CLAUDE.md section about telemetry.
+  The main divergence from the specification: port 4317 is gRPC, and it drags in `grpcio` and
+  protobuf stubs. The `http/json` encoding is parsed by the standard json module, so the
+  receiver gets by without new dependencies.
+- [x] **E2.** The OTLP receiver, writing into secondary tables (not on top of the parser data).
+  It lives right inside `cburn serve` on `POST /otlp/v1/{metrics,logs,traces}`, that is,
+  on the same localhost:8799 - a second socket is not needed. The parsing lives in
+  `collector/otlp.py`, the data in `otel_metrics`, `otel_events`, and the reception counters
+  in `otel_ingest`; switching it on is printed by `cburn otel` (`--env`, `--settings`) -
+  writing the variables for a human is impossible, `~/.claude` is read-only.
+  The parsing is tolerant, like the JSONL parser's: an ununderstood piece of a payload counts
+  as a loss and does not break the batch. A repeated payload is swallowed by the point
+  fingerprint, otherwise an exporter retry would double the numbers. Personal attributes (the
+  email, the account id, the organisation) are not stored in the database: we count spend, not
+  people. Traces are acknowledged but not parsed - a 404 would drive the exporter into retries.
+- [x] **E3.** Reconciling the OTel and JSONL metrics on a shared session - a difference <= 2%.
+  Run over two live sessions (`tools/e3_compare.py`): on the main work
+  (`query_source = main`) the difference is **0.00%** on the input, the output, both cache
+  writes and the cost. The threshold is met with a margin, but what has to be compared is
+  exactly `main`: Claude Code service requests (session title generation, ~535 tokens and
+  $0.0006 per session) never reach the transcript at all, and on the total sum the
+  difference reaches 98% on input tokens. The conclusion matters more than the reconciliation:
+  **the transcript-based dashboard understates the spend**, and seeing that is possible only
+  through OTel. The permission decisions (`tool_decision`) the D1 digest lacked come from
+  there too. A test against live Claude Code is not pinned: it costs
+  money, the reconciliation tool lives in `tools/`, and the payload parsing is covered by
   `tests/test_otlp.py`.
-  Лимиты подписки уточнять уже не нужно: они приходят точными из
-  `/api/oauth/usage` (задача B3).
-- [x] **E4. Применение телеметрии** — сверх плана вехи: собранные данные должны
-  что-то давать, иначе приёмник просто копит таблицы.
-  На дашборде появился виджет «мимо транскриптов» (служебный расход и
-  подтверждения разрешений по инструментам), в дайджест советчика — секции
-  `off_transcript` и `permissions`, а статус «ждёт разрешения» теперь решается
-  событием `tool_decision`, а не деревом процессов: инструменты без своего
-  процесса (MCP-вызовы, `WebFetch`) больше не выглядят висящим вопросом.
-  Везде это уточнение поверх транскриптов: без телеметрии всё считается
-  по-прежнему, а секции дайджеста помечены `available: false` — отсутствие
-  данных не должно читаться советчиком как ноль подтверждений.
-  Дальше по тем же событиям добавились ещё две вещи, которых в транскриптах
-  нет: время, проведённое в каждом инструменте (на экране «Сессия» —
-  `duration_ms` из `tool_result`; разность отметок времени в JSONL врёт, в неё
-  попадает ожидание разрешения), и сорвавшиеся запросы к API (`api_error`,
-  `api_refusal`) — в истории виден только тот ответ, который в итоге пришёл,
-  так что повторы после 429 и 529 были невидимы вовсе. Приём телеметрии
-  выключается из «Настроек», а не только правкой конфига руками.
-  Сводка `cburn stats` тоже перестала занижать расход молча: служебные запросы
-  и подтверждения разрешений печатаются отдельными строками, но только когда
-  телеметрия что-то принесла. Заодно у телеметрии появился срок хранения
-  (`otel.keep_days`, 30 суток): 37 событий на минутную сессию по ~400 байт —
-  без чистки таблицы обгоняют полезные данные.
-  Замер на 100 000 событий (`tools/otel_bench.py`) показал, что срез телеметрии
-  за день стоит 68 мс против 4 мс у всего остального обзора, а обзор уходит
-  подписчикам каждую секунду — поэтому срез живёт в кэше пять секунд, по
-  частоте посылок экспортёра.
-  Отдельно закрыта дыра в приватности: переменные `OTEL_LOG_USER_PROMPTS`
-  и родственные заменяют `<REDACTED>` настоящими текстами промптов, ответов
-  и аргументов инструментов, и приёмник молча сложил бы их в базу. Теперь
-  содержимое отбрасывается при разборе, остаются длины и счётчики — из них,
-  кстати, берутся слэш-команды, которых парсер в транскрипте не видит.
-  Советчик заодно получил цену подключения MCP-серверов: сервер стартует
-  заново в каждой сессии, даже если его ни разу не позвали, — на этой машине
-  два плагина добавляют почти четыре секунды к каждому запуску, и видно это
-  только в телеметрии.
-  Из метрик добавились активное время работы (паузы исключены) и строки кода:
-  рядом с расходом это отвечает на вопрос, что за эти деньги вышло, и уходит
-  советчику тем же разделом. Разбивка подтверждений ограничена дюжиной
-  инструментов — MCP-инструментов бывают десятки, и хвост ел бы бюджет
-  дайджеста.
-  Самое дорогое нашлось в самом конце, в событиях, до которых руки дошли
-  последними: **хуки**. На проверочной сессии длиной 66 секунд они отняли 50 —
-  `Stop` 34,5 с и `UserPromptSubmit` 15,9 с, оба HTTP к телеграм-бриджу, при
-  том что `PreToolUse` и `PostToolUse` укладываются в 6-7 мс. В транскрипте на
-  месте хука просто пауза, отличить её от раздумий модели нельзя в принципе.
-  Рядом с временем перечисляются объявленные хуки: на этой машине их 13, все
-  до одного HTTP, включая `PermissionRequest`, `SubagentStart` и
+  The subscription limits need no refining any more: they arrive exact from
+  `/api/oauth/usage` (task B3).
+- [x] **E4. Putting the telemetry to use** - beyond the milestone plan: the collected data has
+  to give something, otherwise the receiver just piles up tables.
+  The dashboard gained a "past the transcripts" widget (the service spend and the
+  permission confirmations by tool), the advisor digest gained the
+  `off_transcript` and `permissions` sections, and the "waiting for permission" status is now
+  decided by a `tool_decision` event rather than by the process tree: tools without a process
+  of their own (MCP calls, `WebFetch`) no longer look like a hanging question.
+  Everywhere it is a refinement on top of the transcripts: without telemetry everything is
+  counted as before, and the digest sections are marked `available: false` - missing
+  data must not be read by the advisor as zero confirmations.
+  Two more things absent from the transcripts were added from the same events:
+  the time spent inside every tool (on the "Session" screen -
+  `duration_ms` from `tool_result`; the difference of timestamps in the JSONL lies, it
+  includes waiting for a permission), and failed API requests (`api_error`,
+  `api_refusal`) - the history shows only the answer that eventually arrived,
+  so retries after a 429 and a 529 were invisible entirely. Telemetry reception
+  is switched off from "Settings" rather than only by editing the config by hand.
+  The `cburn stats` summary also stopped understating the spend silently: service requests
+  and permission confirmations are printed as separate lines, but only when
+  telemetry brought something. At the same time telemetry gained a retention
+  (`otel.keep_days`, 30 days): 37 events for a one-minute session at ~400 bytes each -
+  without a cleanup the tables outgrow the useful data.
+  A measurement over 100,000 events (`tools/otel_bench.py`) showed that a day's telemetry
+  slice costs 68 ms against 4 ms for all the rest of the overview, while the overview goes
+  to subscribers every second - so the slice lives in a cache for five seconds, matching
+  the exporter payload frequency.
+  A privacy hole was closed separately: the `OTEL_LOG_USER_PROMPTS` variables
+  and their relatives replace `<REDACTED>` with the real texts of prompts, answers
+  and tool arguments, and the receiver would have quietly stashed them into the database. Now
+  the content is dropped during parsing, and lengths and counters remain - and, by the way,
+  the slash commands the parser does not see in the transcript come from them.
+  The advisor also got the price of connecting MCP servers: a server starts
+  anew in every session even if it was never called - on this machine
+  two plugins add almost four seconds to every start, and that is visible
+  only in telemetry.
+  From the metrics came the active working time (pauses excluded) and the lines of code:
+  next to the spend that answers the question of what came out of the money, and it goes
+  to the advisor as the same section. The confirmation breakdown is limited to a dozen
+  tools - a machine can carry dozens of MCP tools, and the tail would eat the digest
+  budget.
+  The most expensive finding came at the very end, in the events that were reached
+  last: **hooks**. In a 66-second check session they took 50 -
+  `Stop` 34.5 s and `UserPromptSubmit` 15.9 s, both HTTP to the telegram bridge, while
+  `PreToolUse` and `PostToolUse` fit into 6-7 ms. In the transcript a hook is
+  just a pause, and telling it from the model thinking is impossible in principle.
+  Next to the time the declared hooks are listed: on this machine there are 13, every single
+  one HTTP, including `PermissionRequest`, `SubagentStart` and
   `MessageDisplay`.
-  Последним слоем — то, что нашлось вычиткой уже готового кода: занятая база
-  теперь отвечает 503 вместо молчаливого подтверждения (иначе посылка
-  терялась бы), непонятая посылка попадает в счётчик потерь и подсказывает про
-  `http/protobuf` вместо `http/json` (иначе `cburn otel` говорил «посылок не
-  было» при работающей телеметрии), дайджест по проекту перестал смешивать
-  своё активное время с общемашинным, а виджет не роняет дашборд, если фронт
-  собран новее запущенного сервера — границы ошибок во фронте нет.
+  The last layer is what a read-through of the finished code turned up: a busy database
+  now answers 503 instead of a silent acknowledgement (otherwise the payload
+  would be lost), an ununderstood payload lands in the loss counter and hints at
+  `http/protobuf` instead of `http/json` (otherwise `cburn otel` said "there were no
+  payloads" while telemetry worked), a per-project digest stopped mixing
+  its active time with the machine-wide one, and the widget does not bring the dashboard down
+  when the frontend is built newer than the running server - there is no error boundary in
+  the frontend.
 
-## Веха F — M5, десктоп
+## Milestone F - M5, the desktop
 
-- [x] **F1.** Tauri-обёртка готового фронта без правок самого фронта.
-  Окно грузит `http://127.0.0.1:8799` — тот же адрес, что открывается в
-  браузере. Страница берётся с сервера, а не из локальных файлов: фронт ходит
-  к API относительными путями, и из `tauri://` они ушли бы в никуда. Фронт при
-  этом не изменился ни строкой — инвариант «только HTTP и WebSocket на
-  localhost», который держали с веха A, окупился ровно здесь.
-- [x] **F2.** Трей меню-бара: burn rate с переключением тыс.ток/мин ↔ $/ч, красная
-  точка на алерте, три горячие сессии, последний совет, пункты «Открыть
-  дашборд» и «Пауза на 2 часа».
-  Трей ничего не считает сам — раз в пять секунд берёт `/api/overview`, порог
-  тревоги читает из `/api/config`, чтобы слушаться того же числа, что правится
-  в «Настройках». Опрос живёт своим потоком: меню-бар обновляется и когда окна
-  нет. «Пауза на 2 часа» гасит красную точку именно в трее — уведомления в
-  telegram отложены вместе с D5 и живут отдельно.
-- [x] **F3.** Сборка одного `.app`, автозапуск вместо launchd.
-  Приложение при старте проверяет `/api/health` и поднимает сервер само, если
-  тот молчит: команда ищется по `CBURN_SERVE`, затем в привычных местах
-  установки. Проверено на живом запуске — сервер оказался дочерним процессом
-  `.app`. Автозапуск переключается пунктом меню (LaunchAgent через плагин
-  autostart), так что `cburn install` для десктопного сценария больше не
-  нужен. Python-часть по-прежнему ставится отдельно: упаковывать интерпретатор
-  внутрь `.app` ради локального инструмента незачем, и это осознанное
-  ограничение, а не недоделка. Цель `dmg` убрана — `bundle_dmg.sh` падает на
-  этой машине, а для «одного устанавливаемого `.app`» образ не требуется.
+- [x] **F1.** The Tauri wrapper around the finished frontend without edits to the frontend
+  itself.
+  The window loads `http://127.0.0.1:8799` - the same address that opens in a
+  browser. The page is taken from the server rather than from local files: the frontend calls
+  the API with relative paths, and from `tauri://` they would go nowhere. The frontend
+  did not change by a single line - the "HTTP and WebSocket on localhost only" invariant
+  held since milestone A paid off exactly here.
+- [x] **F2.** The menu-bar tray: the burn rate switchable between thousand tokens/min and $/h,
+  a red dot on an alert, three hot sessions, the last tip, the "Open the
+  dashboard" and "Pause for 2 hours" items.
+  The tray counts nothing itself - every five seconds it takes `/api/overview`, and it reads
+  the alert threshold from `/api/config`, so that it obeys the same number that is edited
+  in "Settings". The polling lives in its own thread: the menu bar refreshes even when there
+  is no window. "Pause for 2 hours" silences the red dot in the tray - the telegram
+  notifications were postponed together with D5 and live apart.
+- [x] **F3.** Building a single `.app`, autostart instead of launchd.
+  At start the application checks `/api/health` and raises the server itself if
+  it stays quiet: the command is looked for by `CBURN_SERVE`, then in the usual install
+  locations. Checked on a live run - the server turned out to be a child process of
+  the `.app`. Autostart is toggled by a menu item (a LaunchAgent through the
+  autostart plugin), so `cburn install` is no longer needed for the desktop scenario.
+  The Python part is still installed separately: packing an interpreter
+  inside the `.app` for a local tool is pointless, and that is a deliberate
+  limitation rather than an omission. The `dmg` target was removed - `bundle_dmg.sh` fails on
+  this machine, and an image is not required for "one installable `.app`".
 
-## Верификация
+## Verification
 
 - `.venv/bin/python -m pytest -q`, `.venv/bin/ruff check . && .venv/bin/ruff format --check .`,
-  `.venv/bin/mypy` — зелёные перед каждым коммитом.
-- Веха A: `cburn serve` + живая сессия Claude Code рядом, стрелка обновляется ≤ 1 с.
-- Веха B: `cburn session <id>` против ручного `jq`-подсчёта по тому же файлу —
-  расхождение ноль; `cburn reindex` проходит по всем 590 МБ без исключений.
-- Веха D: прогон советчика на истории прототипного проекта, проверка стоимости
-  такта и наличия трёх ожидаемых советов; `/notify` проверяется curl'ом до
-  включения в cburn.
-- Проверка read-only: после полного прогона `find ~/.claude -newermt <старт прогона>`
-  не показывает изменений, сделанных приложением.
+  `.venv/bin/mypy` - green before every commit.
+- Milestone A: `cburn serve` + a live Claude Code session nearby, the needle refreshes in <= 1 s.
+- Milestone B: `cburn session <id>` against a manual `jq` count over the same file -
+  the difference is zero; `cburn reindex` walks all 590 MB without exceptions.
+- Milestone D: a run of the advisor over the prototype project's history, a check of the tick
+  cost and of the presence of the three expected tips; `/notify` is checked with curl before
+  being wired into cburn.
+- The read-only check: after a full run `find ~/.claude -newermt <run start>`
+  shows no changes made by the application.
 
-## Риски
+## Risks
 
-- Формат транскриптов недокументирован и уже разошёлся с ТЗ (`iterations`,
-  `ephemeral_1h`, десяток типов записей). Держим терпимый парсер, фикстуры версий
-  и смоук-тест на всей истории.
-- БД пересоздаётся при правках схемы, пока нет миграций. До вехи C это дёшево
-  (`cburn reindex`), после — нужен минимальный механизм версий схемы.
-- Задача D4 трогает соседний рабочий репозиторий, через который идут все
-  разрешения Claude Code. Правка делается отдельной веткой и проверяется на
-  `/health` до перезапуска демона.
+- The transcript format is undocumented and has already diverged from the specification
+  (`iterations`, `ephemeral_1h`, a dozen record types). We keep a tolerant parser, version
+  fixtures and a smoke test over the whole history.
+- The database is recreated on schema edits while there are no migrations. Until milestone C
+  that is cheap (`cburn reindex`), after it a minimal schema version mechanism is needed.
+- Task D4 touches a neighbouring working repository through which all Claude Code
+  permissions go. The edit is made in a separate branch and checked against
+  `/health` before the daemon is restarted.

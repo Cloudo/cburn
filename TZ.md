@@ -1,59 +1,58 @@
-# ТЗ: «Спидометр Claude» (рабочее имя: cburn)
+# Specification: "The Claude speedometer" (working name: cburn)
 
-Локальное приложение, которое наблюдает за всеми сессиями Claude Code на машине,
-показывает расход токенов в реальном времени («спидометр» по каждой сессии и общий)
-и раз в час анализирует активность, предлагая конкретные оптимизации: что вынести
-в скилл, где поправить permissions, какой MCP подключить или отключить, где сессия
-разрослась и пора делать `/clear`.
+A local application that watches every Claude Code session on the machine,
+shows token spend in real time (a "speedometer" per session and a combined one)
+and once an hour analyses the activity, suggesting concrete optimisations: what to move
+into a skill, where to fix permissions, which MCP to connect or switch off, where a session
+has overgrown and it is time to run `/clear`.
 
-Прототип задачи — ручной отчёт по navuik/core: 62 сессии, средний контекст 330k
-токенов на ход, 87% расхода в двух незакрытых линиях работы, холостые ходы бриджа.
-Всё это должно находиться автоматически, а не раз в две недели руками.
+The prototype of the task is a manual report on navuik/core: 62 sessions, an average context
+of 330k tokens per turn, 87% of the spend inside two unclosed work lines, idle bridge turns.
+All of that must be found automatically rather than by hand once a fortnight.
 
 ---
 
-## 1. Решения, принятые на этапе обсуждения
+## 1. Decisions taken during the discussion
 
-| Вопрос   | Решение                                                                                                                                     |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Охват    | Все проекты машины, фильтр по проекту в интерфейсе                                                                                          |
-| Форма    | Сначала чистое веб-приложение на localhost + отчёты в telegram-бридж; обёртка в десктоп (Tauri) и иконка в меню-баре macOS — финальный этап |
-| Советчик | `claude -p` на Haiku (по умолчанию) или Sonnet, поверх заранее агрегированного дайджеста                                                    |
+| Question | Decision                                                                                                                                  |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Scope    | Every project on the machine, with a project filter in the interface                                                                       |
+| Form     | First a plain web application on localhost + reports into the telegram bridge; the desktop wrapper (Tauri) and the macOS menu-bar icon are the final stage |
+| Advisor  | `claude -p` on Haiku (by default) or Sonnet, over a digest aggregated beforehand                                                           |
 
-## 2. Источники данных
+## 2. Data sources
 
-**Основной — транскрипты Claude Code.** Claude Code пишет полный лог каждой сессии
-в JSONL: `~/.claude/projects/<slug-пути-проекта>/<session-id>.jsonl`. Каждый ход
-ассистента содержит блок `message.usage` с полями `input_tokens`, `output_tokens`,
-`cache_creation_input_tokens`, `cache_read_input_tokens` и имя модели; строки несут
-`sessionId`, `uuid`/`parentUuid` (по ним восстанавливаются resume-форки), `timestamp`,
-`cwd`, тип записи (user / assistant / tool_use / tool_result / summary). Этого
-достаточно для всех метрик дашборда, включая ретроспективу за всю историю.
+**The main one: Claude Code transcripts.** Claude Code writes a full log of every session
+into JSONL: `~/.claude/projects/<project-path-slug>/<session-id>.jsonl`. Every assistant
+turn holds a `message.usage` block with the fields `input_tokens`, `output_tokens`,
+`cache_creation_input_tokens`, `cache_read_input_tokens` and the model name; the lines carry
+`sessionId`, `uuid`/`parentUuid` (resume forks are reconstructed from them), `timestamp`,
+`cwd` and the record type (user / assistant / tool_use / tool_result / summary). That is
+enough for every dashboard metric, retrospectives over the whole history included.
 
-Важно: формат транскриптов официально не задокументирован и меняется между версиями
-Claude Code. Парсер обязан быть терпимым: незнакомые поля игнорировать, незнакомые
-типы записей складывать в `raw_events` и не падать. Каталог `~/.claude` открывается
-строго read-only.
+Important: the transcript format is not officially documented and changes between Claude Code
+versions. The parser must be tolerant: ignore unknown fields, stash unknown record types into
+`raw_events` and never fail. The `~/.claude` directory is opened strictly read-only.
 
-**Дополнительный (фаза M4) — OpenTelemetry.** Claude Code умеет официальный экспорт
-метрик и событий: `CLAUDE_CODE_ENABLE_TELEMETRY=1` + OTLP-эндпоинт
-(`OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317`). Приложение поднимает свой
-OTLP-приёмник и получает готовые метрики стоимости, токенов, решений по инструментам
-без парсинга файлов. Канал в бете у Anthropic, поэтому он дополняет транскрипты,
-а не заменяет их. Актуальную спецификацию метрик сверять с
-https://code.claude.com/docs/en/monitoring-usage перед реализацией M4.
+**The additional one (phase M4): OpenTelemetry.** Claude Code supports an official export
+of metrics and events: `CLAUDE_CODE_ENABLE_TELEMETRY=1` + an OTLP endpoint
+(`OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317`). The application raises its own
+OTLP receiver and gets ready metrics of cost, tokens and tool decisions without parsing
+files. The channel is in beta at Anthropic, so it complements the transcripts rather than
+replacing them. Check the current metric specification against
+https://code.claude.com/docs/en/monitoring-usage before implementing M4.
 
-Хуки Claude Code для сбора данных **не используются** — они уже заняты
-telegram-бриджем, и городить второй слой не нужно: file watcher по JSONL даёт
-задержку меньше секунды.
+Claude Code hooks are **not used** for collecting data - they are already taken by the
+telegram bridge, and a second layer is unnecessary: a file watcher over JSONL gives a
+latency below a second.
 
-## 3. Архитектура
+## 3. Architecture
 
-Python-сервис (FastAPI) с четырьмя подсистемами и общей базой SQLite; интерфейс —
-обычная веб-страница в браузере. Никакой десктоп-обёртки до последнего этапа.
+A Python service (FastAPI) with four subsystems and a shared SQLite database; the interface
+is an ordinary web page in a browser. No desktop wrapper until the final stage.
 
 ```
-~/.claude/projects/**/*.jsonl ──▶ Collector (watchdog + инкрементальный парсер)
+~/.claude/projects/**/*.jsonl ──▶ Collector (watchdog + incremental parser)
                                         │
 localhost:4317 (OTLP, M4) ─────────────▶│
                                         ▼
@@ -61,165 +60,160 @@ localhost:4317 (OTLP, M4) ─────────────▶│
                                         │
               ┌─────────────────────────┼──────────────────────┐
               ▼                         ▼                      ▼
-        API-сервер (FastAPI)       Analyzer (cron)        Notifier (telegram)
+        API server (FastAPI)       Analyzer (cron)        Notifier (telegram)
         HTTP + WebSocket           claude -p haiku
         127.0.0.1:8799                  │
-              │                         └── советы → SQLite → Notifier
+              │                         └── advice => SQLite => Notifier
               ▼
-   Фронт (React + Vite), открывается в браузере: http://localhost:8799
-   Запуск: `cburn serve` (один процесс, uvicorn) или launchd-агент
-   Финальный этап: тот же фронт заворачивается в Tauri + трей меню-бара
+   Frontend (React + Vite), opened in a browser: http://localhost:8799
+   Start: `cburn serve` (one process, uvicorn) or a launchd agent
+   Final stage: the same frontend is wrapped into Tauri + a menu-bar tray
 ```
 
-Почему Python, а не сразу Rust/Tauri: старт быстрее на порядок (весь инструментарий
-уже в ежедневном обиходе проекта), итерации по UI идут в браузере с hot reload,
-а Tauri потом оборачивает готовый веб-фронт практически без изменений — нужно лишь
-изначально соблюдать два ограничения: весь обмен фронта с бэком только через
-HTTP/WebSocket на localhost (никаких прямых обращений к ФС из фронта) и никаких
-браузерных API, которых нет в системном webview. Потоковый парсинг больших
-транскриптов (67 МБ в прототипном проекте) Python тянет: чтение построчно
-с оффсетами, тяжёлые агрегаты — в SQL. Если первичная индексация всей истории
-окажется медленной, ускоряется точечно (`orjson`, воркеры), а не переписыванием.
+Why Python rather than Rust/Tauri right away: the start is an order of magnitude faster (the
+whole toolchain is already in the project's daily use), UI iterations happen in a browser with
+hot reload, and Tauri later wraps the finished web frontend with virtually no changes - it is
+only necessary to respect two constraints from the outset: all frontend-to-backend exchange
+goes over HTTP/WebSocket on localhost (no direct filesystem access from the frontend) and no
+browser APIs that the system webview lacks. Python handles streaming parsing of large
+transcripts (67 MB in the prototype project): line-by-line reading with offsets, heavy
+aggregates in SQL. If the initial indexing of the whole history turns out slow, it is sped up
+pointwise (`orjson`, workers) rather than by a rewrite.
 
 ### Collector
 
-Следит за `~/.claude/projects/` через file watcher (`watchdog`, на macOS — FSEvents).
-Для каждого файла хранит offset последней прочитанной позиции — дочитывает только
-хвост. Обнаруживает усечение и пересоздание файлов (сброс offset по inode + size).
-Первичная индексация всей истории идёт фоновой задачей с прогрессом в UI; живые
-данные при этом уже текут. Сессия считается «живой», если файл рос за последние
-120 секунд, «активным запросом» — если последняя запись не является завершённым
-ходом ассистента.
+Watches `~/.claude/projects/` through a file watcher (`watchdog`, FSEvents on macOS).
+For every file it keeps the offset of the last read position - it reads only the tail. It
+detects truncation and recreation of files (the offset resets by inode + size). The initial
+indexing of the whole history runs as a background job with progress in the UI; live data
+already flows meanwhile. A session counts as "live" if the file grew within the last
+120 seconds, and as "an active request" if the last record is not a finished assistant turn.
 
-### SQLite: модель данных
+### SQLite: the data model
 
 ```sql
 files(path PK, inode, size, offset, mtime)
 projects(id PK, slug, root_path, display_name)
-sessions(id PK, project_id, started_at, last_at, first_prompt,   -- обрезанный до 200 симв.
-         parent_session_id,        -- resume-форк
+sessions(id PK, project_id, started_at, last_at, first_prompt,   -- trimmed to 200 chars
+         parent_session_id,        -- resume fork
          turns INT, tokens_in, tokens_out, cache_read, cache_write,
          cost_usd, is_live)
 turns(id PK, session_id, ts, model, role,
       input_tokens, output_tokens, cache_read, cache_write,
       context_estimate,            -- input + cache_read + cache_write
-      cost_usd, is_idle)           -- эвристика холостого хода, см. §6
+      cost_usd, is_idle)           -- the idle turn heuristic, see §6
 tool_calls(id PK, turn_id, tool,   -- Bash, Edit, Read, Task, mcp__*...
-           detail)                 -- для Bash: нормализованная команда (первое слово + подкоманда)
+           detail)                 -- for Bash: the normalised command (first word + subcommand)
 advice(id PK, ts, period_start, period_end, digest_json,
        response_md, model, cost_usd, max_severity)
 model_prices(model PK, in_per_mtok, out_per_mtok,
-             cache_write_per_mtok, cache_read_per_mtok)  -- редактируется в настройках
+             cache_write_per_mtok, cache_read_per_mtok)  -- edited in the settings
 ```
 
-Агрегаты по минутам/часам считаются на лету SQL-запросами; при деградации
-производительности добавить материализованную таблицу `minute_stats`.
+Per-minute and per-hour aggregates are computed on the fly by SQL queries; should performance
+degrade, add a materialised `minute_stats` table.
 
-## 4. Метрики и «спидометры»
+## 4. Metrics and the "speedometers"
 
-`context_estimate` последнего хода — это и есть «заполненность бака» сессии;
-стрелка спидометра — скорость расхода.
+The `context_estimate` of the last turn is the "tank level" of a session;
+the speedometer needle is the rate of spend.
 
-| Метрика              | Определение                                                                                                                           |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Burn rate            | токены/мин и $/час, скользящие окна 1 / 5 / 60 мин; по сессии и суммарно по машине                                                    |
-| Контекст сессии      | `context_estimate` последнего хода, шкала до 200k с зонами: зелёная < 80k, жёлтая < 150k, красная выше                                |
-| Стоимость            | по таблице `model_prices`; отдельно — «сколько стоил бы API», даже если тариф подписочный                                             |
-| Доля моделей         | ходы и токены Opus / Sonnet / Haiku за период                                                                                         |
-| Профиль инструментов | распределение вызовов, внутри Bash — по нормализованным командам                                                                      |
-| Холостые ходы        | ходы, где ответ модели короче 10 токенов при контексте > 50k (случай «жду» из отчёта)                                                 |
-| Окно лимитов         | оценка приближения к 5-часовому и недельному лимиту подписки по локальным данным; помечается как приближение, в M5 уточняется по OTel |
+| Metric               | Definition                                                                                                                             |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Burn rate            | tokens/min and $/hour, sliding windows of 1 / 5 / 60 min; per session and machine-wide                                                  |
+| Session context      | the `context_estimate` of the last turn, a scale up to 200k with zones: green < 80k, yellow < 150k, red above                           |
+| Cost                 | by the `model_prices` table; separately "what it would cost over the API", even on a subscription rate                                  |
+| Model share          | turns and tokens of Opus / Sonnet / Haiku over the period                                                                               |
+| Tool profile         | the distribution of calls, and inside Bash by normalised commands                                                                       |
+| Idle turns           | turns where the model answer is shorter than 10 tokens on a context > 50k (the "waiting" case from the report)                          |
+| Limit window         | an estimate of the approach to the 5-hour and weekly subscription limits from local data; marked as an approximation, refined over OTel in M5 |
 
-## 5. Интерфейс
+## 5. The interface
 
-**Экран «Обзор».** Главный спидометр (суммарный burn rate и $/час), счётчик за
-сегодня, живая лента последних ходов всех сессий (проект, модель, дельта токенов),
-топ-5 сессий по расходу за 24 часа, индикатор работы советчика и его собственная
-стоимость (self-cost должен быть виден честно).
+**The "Overview" screen.** The main speedometer (the combined burn rate and $/hour), today's
+counter, a live feed of the latest turns of every session (project, model, token delta),
+the top 5 sessions by spend over 24 hours, an indicator of the advisor at work and its own
+cost (the self-cost must be visible honestly).
 
-**Экран «Сессии».** Таблица всех сессий с фильтром по проекту и статусу
-(live / idle / завершена): проект, первый промпт, длительность, ходы, контекст
-сейчас, стоимость, спарклайн расхода. Цепочки resume-форков схлопываются в одну
-строку с раскрытием.
+**The "Sessions" screen.** A table of every session with a filter by project and status
+(live / idle / finished): the project, the first prompt, the duration, the turns, the context
+now, the cost, a spend sparkline. Resume fork chains collapse into one row with an expander.
 
-**Экран «Сессия».** Таймлайн: график `context_estimate` по ходам (виден момент
-автосуммаризации и форка), лента ходов с инструментами, разбивка стоимости по
-моделям, отметки холостых ходов. Кнопка «сформировать дайджест для советчика
-прямо сейчас».
+**The "Session" screen.** A timeline: a chart of `context_estimate` over turns (the moment of
+auto-compaction and of a fork is visible), a feed of turns with tools, a cost breakdown by
+model, marks on idle turns. A "build the advisor digest right now" button.
 
-**Экран «Советы».** История отчётов советчика с severity и статусом
-(новый / принят / отклонён — отклонённые советы в дайджест следующих запусков
-попадают как «уже отклонено, не повторять»).
+**The "Advice" screen.** The history of advisor reports with severity and status
+(new / accepted / dismissed - dismissed tips travel into the digest of later runs as "already
+dismissed, do not repeat").
 
-**Экран «Настройки».** Конфиг из §8 в форме.
+**The "Settings" screen.** The config from §8 as a form.
 
-**Меню-бар (трей Tauri, финальный этап M5).** Иконка с текущим суммарным burn rate (тыс. ток/мин
-или $/ч — переключается). Красная точка при любом активном алерте. Выпадающее
-меню: три самые горячие сессии со стрелками-мини-спидометрами, последний совет,
-пункты «Открыть дашборд» и «Пауза уведомлений на 2 часа».
+**The menu bar (the Tauri tray, the final stage M5).** An icon with the current combined burn
+rate (thousand tokens/min or $/h - switchable). A red dot on any active alert. A drop-down
+menu: the three hottest sessions with mini-speedometer needles, the last tip, the
+"Open the dashboard" and "Pause notifications for 2 hours" items.
 
-## 6. Советчик (analyzer)
+## 6. The advisor (analyzer)
 
-Запускается по расписанию (по умолчанию раз в час) и только если за период была
-активность (иначе тихо пропускает такт). Работает в два шага, чтобы сам стоить
-копейки.
+It runs on a schedule (once an hour by default) and only if there was activity over the period
+(otherwise it quietly skips the tick). It works in two steps, so that it costs pennies itself.
 
-**Шаг 1, без LLM: дайджест.** Collector собирает компактный JSON (цель — до 20k
-токенов): агрегаты периода; список сессий с контекстом > порога и числом ходов
-после последней «пустой» точки; цепочки форков; топ-20 нормализованных
-bash-команд с частотами и топ повторяющихся паттернов (heredoc-скрипты
-схлопываются по шинглам); счётчик холостых ходов с примерами длительности;
-доля Opus на механических операциях (эвристика: ходы, где только Bash/Edit без
-текста пользователя); размер CLAUDE.md и `@`-импортов по каждому активного
-проекта; список подключённых MCP-серверов и частота реального использования их
-инструментов; частота permission-подтверждений (по событиям в транскрипте).
-В дайджест **не входит** текст переписки — только команды, пути, имена
-инструментов и числа. Опция `allow_snippets = true` разрешает включать до 200
-символов повторяющихся команд целиком.
+**Step 1, without an LLM: the digest.** The collector builds a compact JSON (the target is up
+to 20k tokens): the period aggregates; the list of sessions with a context above the threshold
+and the number of turns after the last "empty" point; fork chains; the top 20 normalised
+bash commands with their frequencies and the top repeated patterns (heredoc scripts are
+collapsed by shingles); a counter of idle turns with duration samples; the share of Opus on
+mechanical operations (the heuristic: turns with Bash/Edit only and no user text); the size of
+CLAUDE.md and the `@`-imports for every active project; the list of connected MCP servers and
+how often their tools are actually used; the frequency of permission confirmations (from
+transcript events). The digest **does not include** conversation text - only commands, paths,
+tool names and numbers. The `allow_snippets = true` option permits including up to 200
+characters of repeated commands verbatim.
 
-**Шаг 2: `claude -p`.** Вызов вида:
+**Step 2: `claude -p`.** A call of the form:
 
 ```bash
 claude -p --model claude-haiku-4-5 --output-format json \
   --max-turns 1 < digest_prompt.txt
 ```
 
-Фиксированный системный промпт требует вернуть JSON-массив советов:
+A fixed system prompt demands a JSON array of tips in return:
 `{category: skill|mcp|permissions|hooks|hygiene|model, severity: info|warn|crit,
-title, body_md, evidence: [ссылки на сессии/команды из дайджеста]}`.
-Совет без evidence отбрасывается. Модель советчика настраивается (haiku по
-умолчанию, sonnet для еженедельного глубокого разбора). Точное имя модели для
-`--model` уточнить по актуальной документации на момент реализации.
+title, body_md, evidence: [references to sessions/commands from the digest]}`.
+A tip without evidence is dropped. The advisor model is configurable (haiku by
+default, sonnet for the weekly deep analysis). The exact model name for
+`--model` is to be checked against the current documentation at implementation time.
 
-Примеры советов, которые обязана давать система на данных из прототипного отчёта:
-«722 повторяющихся python-heredoc по `.test-cases/*.json` — кандидат в CLI-скрипт
-и скилл», «сессия X: 477 промптов и 26 форков без обнуления — правило
-одна задача = одна сессия», «31 752 хода на Opus при механических правках —
-перевести на Sonnet», «десятки ходов-«жду» по 300k контекста — чинить Stop-хук
-бриджа», «MCP-сервер Y подключён, инструменты не вызывались ни разу за 30 дней —
-отключить».
+Examples of tips the system must produce on the data from the prototype report:
+"722 repeated python heredocs over `.test-cases/*.json` - a candidate for a CLI script
+and a skill", "session X: 477 prompts and 26 forks without a reset - apply the rule
+one task = one session", "31,752 turns on Opus for mechanical edits - move them to Sonnet",
+"dozens of 'waiting' turns on a 300k context - fix the bridge Stop hook", "MCP server Y is
+connected, its tools were never called in 30 days - switch it off".
 
-## 7. Уведомления в telegram
+## 7. Telegram notifications
 
-Канал по умолчанию — существующий telegram-бридж (HTTP POST на `localhost:8788`;
-точный контракт эндпоинта — открытый вопрос §11, уточнить перед M3). Запасной
-канал — прямой Bot API с `bot_token` и `chat_id` в конфиге.
+The default channel is the existing telegram bridge (an HTTP POST to `localhost:8788`;
+the exact endpoint contract is an open question in §11, to be clarified before M3). The
+fallback channel is the direct Bot API with `bot_token` and `chat_id` in the config.
 
-Три типа сообщений. Часовой дайджест уходит только если советчик вернул хотя бы
-один совет уровня warn и выше — пустых «всё хорошо» сообщений не бывает. Дневная
-сводка в настраиваемое время (по умолчанию 21:00): расход за день, топ-3 сессии,
-сравнение с вчера. Мгновенные алерты, мимо расписания советчика: контекст сессии
-превысил порог (по умолчанию 150k), больше N холостых ходов подряд (по умолчанию 5),
-burn rate выше порога дольше 10 минут. У каждого алерта cooldown 30 минут на
-сессию, глобальная «пауза на 2 часа» из меню-бара действует на всё, кроме crit.
+Three message kinds. The hourly digest goes out only if the advisor returned at least
+one tip of warn severity or above - there are no empty "all is well" messages. The daily
+summary at a configurable time (21:00 by default): the day's spend, the top 3 sessions,
+a comparison with yesterday. Instant alerts, bypassing the advisor schedule: a session
+context passed the threshold (150k by default), more than N idle turns in a row (5 by default),
+the burn rate stayed above the threshold for longer than 10 minutes. Every alert has a 30-minute
+cooldown per session, and the global "pause for 2 hours" from the menu bar applies to
+everything except crit.
 
-## 8. Конфигурация
+## 8. Configuration
 
-`~/.config/cburn/config.toml`, редактируется и из UI:
+`~/.config/cburn/config.toml`, editable from the UI as well:
 
 ```toml
 [watch]
-include = ["**"]            # slug'и проектов
+include = ["**"]            # project slugs
 exclude = []
 
 [thresholds]
@@ -245,47 +239,49 @@ daily_summary_at = "21:00"
 [server]
 port = 8799
 
-[prices]                    # $/MTok, правится руками при смене прайса
+[prices]                    # $/MTok, edited by hand when the price list changes
 # "claude-opus-4-8" = { in = ..., out = ..., cache_write = ..., cache_read = ... }
 ```
 
-## 9. Нефункциональные требования
+## 9. Non-functional requirements
 
-Приватность: всё хранится и считается локально; наружу уходят ровно два потока —
-дайджест в `claude -p` (то есть в Anthropic API, куда транскрипты и так попадали
-при работе) и текст уведомлений в telegram. Содержимое переписки не покидает
-машину никогда, если `allow_snippets = false`.
+Privacy: everything is stored and computed locally; exactly two streams go out - the digest
+into `claude -p` (that is, into the Anthropic API, where the transcripts went anyway during
+work) and the text of telegram notifications. The conversation content never leaves the
+machine while `allow_snippets = false`.
 
-Производительность: дочитывание хвоста живого файла ≤ 200 мс от события watcher;
-CPU в простое < 1%; первичная индексация 10 ГБ истории — фоном, не блокируя UI.
-Надёжность: падение парсера на одной битой строке не останавливает collector
-(строка в лог, offset двигается дальше); удаление и ротация файлов переживаются;
-БД восстанавливается полной переиндексацией командой `cburn reindex`.
-Совместимость: macOS в первую очередь, но до M5 приложение — обычный
-веб-сервис, и переносимость даётся бесплатно; фронт не должен использовать
-браузерные API, отсутствующие в системном webview, чтобы обёртка в Tauri
-на финальном этапе прошла без переделок.
+Performance: reading the tail of a live file takes <= 200 ms from the watcher event;
+idle CPU stays below 1%; the initial indexing of 10 GB of history runs in the background
+without blocking the UI.
+Reliability: a parser failure on one broken line does not stop the collector
+(the line goes to the log, the offset moves on); file deletion and rotation are survived;
+the database is restored by a full reindex with the `cburn reindex` command.
+Compatibility: macOS comes first, but until M5 the application is an ordinary
+web service, and portability comes for free; the frontend must not use browser APIs
+missing from the system webview, so that the Tauri wrapper at the final stage goes
+through without rewrites.
 
-## 10. Этапы
+## 10. Milestones
 
-| Этап | Содержимое                                                                                                                              | Критерий приёмки                                                                                                                                      |
-| ---- | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M1   | CLI-прототип: парсер JSONL, SQLite, команды `cburn stats`, `cburn sessions`, `cburn session <id>`                                    | Цифры по одной реальной сессии совпадают с ручным подсчётом usage-полей; полная индексация истории машины проходит без падений                        |
-| M2   | API-сервер + веб-дашборд: экраны Обзор, Сессии, Сессия, Настройки; live через WebSocket; `cburn serve` + launchd-агент для автозапуска | Открытый в браузере дашборд показывает ход текущей сессии Claude Code с задержкой ≤ 1 с                                                               |
-| M3   | Советчик + telegram: дайджест, `claude -p`, экран Советы, все три типа уведомлений                                                      | На реплее истории прототипного проекта советчик находит минимум мега-сессию, холостые ходы и heredoc-паттерн; стоимость одного такта ≤ $0.02 на haiku |
-| M4   | OTLP-приёмник, уточнённые лимиты подписки, недельный глубокий разбор                                                                    | Метрики OTel и метрики из JSONL сходятся на общей сессии в пределах 2%                                                                                |
-| M5   | Десктоп: Tauri-обёртка готового фронта, трей с burn rate и меню, автозапуск вместо launchd                                              | Иконка в меню-баре обновляется live; приложение — один устанавливаемый .app; фронт не менялся                                                         |
+| Stage | Content                                                                                                                                | Acceptance criterion                                                                                                                                |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M1    | The CLI prototype: the JSONL parser, SQLite, the commands `cburn stats`, `cburn sessions`, `cburn session <id>`                     | The numbers for one real session match a manual count over the usage fields; a full indexing of the machine's history goes through without failures |
+| M2    | The API server + the web dashboard: the Overview, Sessions, Session and Settings screens; live over WebSocket; `cburn serve` + a launchd agent for autostart | The dashboard opened in a browser shows the turn of the current Claude Code session with a latency <= 1 s                                            |
+| M3    | The advisor + telegram: the digest, `claude -p`, the Advice screen, all three notification kinds                                        | On a replay of the prototype project's history the advisor finds at least the mega-session, the idle turns and the heredoc pattern; one tick costs <= $0.02 on haiku |
+| M4    | The OTLP receiver, refined subscription limits, the weekly deep analysis                                                                | The OTel metrics and the JSONL metrics agree on a shared session within 2%                                                                          |
+| M5    | The desktop: a Tauri wrapper around the finished frontend, a tray with the burn rate and a menu, autostart instead of launchd           | The menu-bar icon updates live; the application is one installable .app; the frontend did not change                                                 |
 
-## 11. Риски и открытые вопросы
+## 11. Risks and open questions
 
-Формат JSONL-транскриптов недокументирован и меняется между версиями Claude Code —
-закладывается терпимый парсер, набор фикстур из реальных транскриптов разных
-версий и smoke-тест «распарсить всю историю без падений» в CI. Оценка лимитов
-подписки по локальным данным приближённая — честно помечать в UI до M4. Цены
-моделей меняются — они в конфиге, не в коде. OTel-канал в бете — потому он M4,
-а не фундамент.
+The JSONL transcript format is undocumented and changes between Claude Code versions - hence
+a tolerant parser, a set of fixtures from real transcripts of different versions and a
+"parse the whole history without failures" smoke test in CI. The estimate of the subscription
+limits from local data is approximate - mark it honestly in the UI until M4. Model prices
+change - they live in the config, not in the code. The OTel channel is in beta - that is why
+it is M4 rather than the foundation.
 
-Открытые вопросы перед стартом: контракт telegram-бриджа на `localhost:8788`
-(эндпоинт, формат) — нужен для M3, до этого не блокирует; нужна ли в перспективе
-агрегация с нескольких машин (в текущем ТЗ — нет, но схема БД не должна этому
-мешать: `machine_id` заложить в advice и sessions заранее пустым полем).
+Open questions before the start: the contract of the telegram bridge on `localhost:8788`
+(the endpoint, the format) - needed for M3, not blocking before that; whether aggregation
+across several machines will be wanted eventually (in the current specification, no, but the
+database schema must not stand in its way: put `machine_id` into advice and sessions in
+advance as an empty field).

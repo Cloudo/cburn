@@ -1,14 +1,14 @@
-//! Трей меню-бара: расход всегда на виду (задача F2, ТЗ §5).
+//! The menu-bar tray: the spend always in sight (task F2, TZ §5).
 //!
-//! Данные берутся из того же `/api/overview`, что и дашборд, — трей ничего не
-//! считает сам. Опрос идёт раз в `POLL` секунд: чаще незачем, цифра в меню-баре
-//! читается глазами, а не измеряется.
+//! The data comes from the same `/api/overview` as the dashboard - the tray counts
+//! nothing itself. Polling runs every `POLL` seconds: more often is pointless, the figure
+//! in the menu bar is read by eye, not measured.
 //!
-//! Что показывается в заголовке иконки: burn rate выходных токенов в минуту,
-//! либо стоимость в час — переключается пунктом меню. Красная точка перед
-//! цифрой означает, что расход выше порога `thresholds.burn_rate_warn_per_min`
-//! из конфига; её можно погасить на два часа пунктом «Пауза на 2 часа» —
-//! это тишина именно в трее, уведомления в telegram живут отдельно (D5).
+//! What the icon title shows: the burn rate of output tokens per minute,
+//! or the cost per hour - switched by a menu item. A red dot before the
+//! figure means the spend is above the `thresholds.burn_rate_warn_per_min`
+//! threshold from the config; it can be silenced for two hours by the "pause for 2 hours"
+//! item - that is silence in the tray only, telegram notifications live apart (D5).
 
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
@@ -18,25 +18,25 @@ use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindowBuilder};
 
-/// Адрес дашборда: тот же, что открывается в браузере.
+/// The dashboard address: the same one that opens in a browser.
 pub const DASHBOARD: &str = "http://127.0.0.1:8799";
 
-/// Как часто спрашивать обзор. Прибор в меню-баре — не секундомер: пять секунд
-/// достаточно, чтобы цифра выглядела живой, и вчетверо дешевле, чем такт фронта.
+/// How often to ask for the overview. An instrument in the menu bar is no stopwatch: five
+/// seconds is enough for the figure to look alive, and it is four times cheaper than the frontend tick.
 const POLL: Duration = Duration::from_secs(5);
 
-/// Сколько длится тишина по пункту «Пауза на 2 часа» (ТЗ §5).
+/// How long the silence from the "pause for 2 hours" item lasts (TZ §5).
 const PAUSE: Duration = Duration::from_secs(2 * 60 * 60);
 
-/// Сколько сессий показывать в меню: три самые горячие, дальше список
-/// перестаёт читаться с одного взгляда.
+/// How many sessions to show in the menu: the three hottest, beyond that the list
+/// stops being readable at a glance.
 const HOT_SESSIONS: usize = 3;
 
-/// Что показывает заголовок иконки и до какого момента молчит тревога.
+/// What the icon title shows and until when the alert stays quiet.
 struct State {
-    /// `true` — деньги в час, `false` — тысячи токенов в минуту.
+    /// `true` means money per hour, `false` means thousands of tokens per minute.
     show_cost: AtomicBool,
-    /// Unix-время, до которого красная точка не показывается.
+    /// Unix time until which the red dot is not shown.
     quiet_until: AtomicI64,
 }
 
@@ -53,7 +53,7 @@ fn unix_now() -> i64 {
         .unwrap_or(0)
 }
 
-/// Пункты меню, которые обновляются на каждом опросе.
+/// Menu items refreshed on every poll.
 struct Items<R: Runtime> {
     burn: MenuItem<R>,
     today: MenuItem<R>,
@@ -121,8 +121,8 @@ pub fn setup<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         })
         .build(app)?;
 
-    // Опрос живёт своим потоком: обновление меню-бара не должно зависеть от
-    // того, открыто ли окно, а окна может не быть вовсе.
+    // Polling lives in its own thread: refreshing the menu bar must not depend on
+    // whether the window is open, and there may be no window at all.
     let poll_app = app.clone();
     let poll_state = Arc::clone(&state);
     let poll_items = Arc::clone(&items);
@@ -170,8 +170,8 @@ fn on_menu<R: Runtime>(
                 if quiet { 0 } else { unix_now() + PAUSE.as_secs() as i64 },
                 Ordering::Relaxed,
             );
-            // Та же пауза уходит и на сервер: она гасит не только красную точку
-            // в меню-баре, но и сообщения в telegram (D5).
+            // The same pause goes to the server too: it silences not only the red dot
+            // in the menu bar but also the telegram messages (D5).
             let _ = ureq::post(&format!(
                 "{DASHBOARD}/api/notify/pause?on={}",
                 if quiet { "false" } else { "true" }
@@ -185,8 +185,8 @@ fn on_menu<R: Runtime>(
             });
         }
         id => {
-            // Сессии подписаны своим идентификатором: `session-0` и так далее,
-            // а сам идентификатор сессии лежит в подсказке к пункту.
+            // Sessions are labelled by their own id: `session-0` and so on,
+            // while the session id itself sits in the item tooltip.
             if let Some(index) = id.strip_prefix("session-").and_then(|n| n.parse::<usize>().ok()) {
                 if let Some(session) = items.sessions.get(index) {
                     if let Ok(text) = session.text() {
@@ -200,7 +200,7 @@ fn on_menu<R: Runtime>(
     }
 }
 
-/// Показать дашборд: открытое окно поднимается, иначе создаётся заново.
+/// Show the dashboard: an open window is raised, otherwise it is created anew.
 fn show_dashboard<R: Runtime>(app: &AppHandle<R>, hash: &str) {
     let url = format!("{DASHBOARD}/{hash}");
     if let Some(window) = app.get_webview_window("main") {
@@ -221,8 +221,8 @@ fn show_dashboard<R: Runtime>(app: &AppHandle<R>, hash: &str) {
     }
 }
 
-/// Порог тревоги из конфига дашборда: держать его копию в трее нельзя —
-/// человек правит пороги в «Настройках», и трей должен слушаться того же числа.
+/// The alert threshold from the dashboard config: keeping a copy of it in the tray is not
+/// allowed - a human edits the thresholds in "Settings", and the tray must obey that same number.
 fn warn_threshold() -> f64 {
     ureq::get(&format!("{DASHBOARD}/api/config"))
         .timeout(Duration::from_secs(3))
@@ -257,8 +257,8 @@ fn apply<R: Runtime>(
     let output = burn.get("output_per_min").and_then(|v| v.as_f64()).unwrap_or(0.0);
     let cost_hour = burn.get("cost_per_hour").and_then(|v| v.as_f64()).unwrap_or(0.0);
     let tokens = burn.get("tokens_per_min").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    // Порог спрашивается один раз за такт: два вызова подряд стоили бы
-    // двух лишних запросов к своему же серверу каждые пять секунд.
+    // The threshold is asked for once per tick: two calls in a row would cost
+    // two extra requests to our own server every five seconds.
     let threshold = warn_threshold();
     let alert = threshold > 0.0 && tokens >= threshold;
 
@@ -267,8 +267,8 @@ fn apply<R: Runtime>(
     } else {
         format!("{:.1}K/мин", output / 1000.0)
     };
-    // Красная точка — единственная тревога в меню-баре: цвет иконке задать
-    // нельзя, а точка перед цифрой заметна и не мешает читать.
+    // The red dot is the only alert in the menu bar: the icon cannot be given
+    // a colour, and a dot before the figure is noticeable without hindering reading.
     let title = if alert && !state.is_quiet() {
         format!("● {value}")
     } else {
@@ -328,7 +328,7 @@ fn apply<R: Runtime>(
     });
 }
 
-/// Подпись пункта автозапуска: она же показывает текущее состояние.
+/// The caption of the autostart item: it also shows the current state.
 fn autostart_label<R: Runtime>(app: &AppHandle<R>) -> &'static str {
     if is_autostart_on(app) {
         "не запускать при входе"
@@ -342,8 +342,8 @@ fn is_autostart_on<R: Runtime>(app: &AppHandle<R>) -> bool {
     app.autolaunch().is_enabled().unwrap_or(false)
 }
 
-/// Включить или выключить автозапуск. Ошибку прячем не молча: без прав на
-/// LaunchAgents подпись просто не изменится, и это видно в меню.
+/// Switch autostart on or off. The error is not hidden silently: without rights to
+/// LaunchAgents the caption simply will not change, and that is visible in the menu.
 fn toggle_autostart<R: Runtime>(app: &AppHandle<R>) {
     use tauri_plugin_autostart::ManagerExt;
     let manager = app.autolaunch();
@@ -353,7 +353,7 @@ fn toggle_autostart<R: Runtime>(app: &AppHandle<R>) {
         manager.enable()
     };
     if let Err(error) = result {
-        log::warn!("автозапуск не переключился: {error}");
+        log::warn!("autostart did not toggle: {error}");
     }
 }
 

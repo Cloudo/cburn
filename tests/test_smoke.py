@@ -1,4 +1,4 @@
-"""Дымовые тесты каркаса: схема БД применяется, дефолты конфига читаются."""
+"""Smoke tests of the skeleton: the database schema applies, the config defaults are read."""
 
 from cburn import config
 from cburn.db import connect
@@ -11,11 +11,11 @@ def test_schema_applies(tmp_path):
 
 
 def test_schema_grows_on_an_existing_database(tmp_path):
-    """База у человека уже набита историей — новые таблицы должны появиться
-    в ней сами, не тронув то, что там лежит (веха E)."""
-    path = tmp_path / "старая.db"
+    """The human's database is already packed with history - new tables must appear
+    in it by themselves, without touching what is already there (milestone E)."""
+    path = tmp_path / "old.db"
     old = connect(path)
-    with old:  # состояние до вехи E: всё на месте, телеметрии нет вовсе
+    with old:  # the state before milestone E: everything in place, no telemetry at all
         old.execute("INSERT INTO sessions (id) VALUES ('s1')")
         old.execute(
             "INSERT INTO turns (message_id, session_id, ts) VALUES ('m1', 's1', ?)",
@@ -33,7 +33,7 @@ def test_schema_grows_on_an_existing_database(tmp_path):
 
 
 def test_config_defaults_without_file(tmp_path):
-    cfg = config.load(tmp_path / "нет-такого.toml")
+    cfg = config.load(tmp_path / "no-such.toml")
     assert cfg["server"]["port"] == 8799
     assert cfg["analyzer"]["model"] == "haiku"
 
