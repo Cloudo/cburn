@@ -238,6 +238,42 @@ main.empty {
   color: var(--text);
 }
 
+/* The scale switch stands next to the language and repeats its tone: the same muted
+   monospace, and the percentage in the middle is a button that returns the normal size. */
+.zoom-picker {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  margin-left: 6px;
+}
+
+.zoom {
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.zoom:hover {
+  color: var(--text);
+  background: var(--bg-sunken);
+}
+
+.zoom-level {
+  min-width: 34px;
+  font-variant-numeric: tabular-nums;
+}
+
+.zoom-on {
+  color: var(--text);
+}
+
 /* The averaging window stands in the header next to the clock and lives in its tone:
    the same monospaced size and the same muted colour. */
 .window-picker {

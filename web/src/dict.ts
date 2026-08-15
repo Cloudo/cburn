@@ -25,6 +25,10 @@ const DICT: Record<string, [string, string]> = {
   "app.theme": ["тема оформления", "colour theme"],
   "app.theme.light": ["светлая тема", "light theme"],
   "app.theme.dark": ["тёмная тема", "dark theme"],
+  "app.zoom": ["масштаб интерфейса", "interface scale"],
+  "app.zoom.in": ["крупнее", "larger"],
+  "app.zoom.out": ["мельче", "smaller"],
+  "app.zoom.reset": ["обычный масштаб", "normal scale"],
 
   "window.10s": ["10 секунд", "10 seconds"],
   "window.1m": ["минута", "minute"],

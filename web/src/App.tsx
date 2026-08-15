@@ -9,6 +9,7 @@ import { Sessions } from "./Sessions";
 import { Settings } from "./Settings";
 import { useLang } from "./i18n";
 import { useTheme } from "./theme";
+import { useZoom } from "./zoom";
 import {
   agoLabel,
   clockTime,
@@ -83,6 +84,7 @@ const SCREENS = ["", "sessions", "advice", "settings"];
 export default function App() {
   const { lang, setLang, t } = useLang();
   const { theme, setTheme } = useTheme();
+  const { zoom, zoomIn, zoomOut, reset: resetZoom } = useZoom();
   const { data, connection, updatedAt, refresh } = useOverview();
   const [, tick] = useState(0);
   const [burnWindow, setBurnWindow] = useState<string>("1m");
@@ -141,6 +143,21 @@ export default function App() {
                 {key.toUpperCase()}
               </button>
             ))}
+          </div>
+          <div className="zoom-picker" role="group" aria-label={t("app.zoom")}>
+            <button className="zoom" title={t("app.zoom.out")} onClick={zoomOut}>
+              &minus;
+            </button>
+            <button
+              className={zoom === 1 ? "zoom zoom-level" : "zoom zoom-level zoom-on"}
+              title={t("app.zoom.reset")}
+              onClick={resetZoom}
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+            <button className="zoom" title={t("app.zoom.in")} onClick={zoomIn}>
+              +
+            </button>
           </div>
         </div>
       </header>
