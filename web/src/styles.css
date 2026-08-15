@@ -1,6 +1,9 @@
-/* The instrument panel: a dark case, a warm needle glow, monospaced digits.
+/* The instrument panel: a dark case by default, a warm needle glow, monospaced digits.
    System fonts only - the service works offline and in M5 it moves into a webview. */
 
+/* The colours below are the fallback palette - the same one `themes.ts` holds under the name
+   "cburn Dark". The chosen theme puts its own values into these very tokens on `<html>`, so
+   the stylesheet has no idea which of the eighteen palettes is on the screen. */
 :root {
   --bg: #0f1216;
   --bg-panel: #171b21;
@@ -26,22 +29,9 @@
   --radius: 10px;
 }
 
-/* The light theme: the same instrument in daylight. The accents are darkened - on a white
-   background the original ones read as faded. */
+/* Daylight: the tint and the shadows turn over. The colours themselves are not here - a light
+   theme brings its own, and there are six of them. */
 :root[data-theme="light"] {
-  --bg: #f2f4f7;
-  --bg-panel: #ffffff;
-  --bg-sunken: #eaeef3;
-  --line: #d8dee6;
-  --text: #171c23;
-  --text-dim: #55606d;
-  --text-faint: #828d9b;
-  --amber: #b87613;
-  --steel: #3a6b8f;
-  --indigo: #5f4fa8;
-  --mint: #35825c;
-  --danger: #b34a4a;
-  --danger-strong: #a03b3b;
   --tint: rgb(0 0 0 / 5%);
   --tint-soft: rgb(0 0 0 / 3%);
   --shadow: 0 10px 28px rgb(23 28 35 / 18%);
@@ -191,22 +181,128 @@ main.empty {
 
 /* --- window switch --- */
 
-.theme-toggle {
+/* The theme picker: a quiet button in the status line and a quick-pick list under it. */
+.theme-picker {
+  position: relative;
+  display: flex;
+  margin-left: 6px;
+}
+
+.theme-button {
   display: flex;
   align-items: center;
   border: 0;
   background: transparent;
   color: var(--text-faint);
   padding: 3px 5px;
-  margin-left: 6px;
   border-radius: 4px;
   cursor: pointer;
   transition: color 0.15s, background 0.15s;
 }
 
-.theme-toggle:hover {
+.theme-button:hover,
+.theme-button[aria-expanded="true"] {
   color: var(--text);
   background: var(--bg-sunken);
+}
+
+.theme-button:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 1px;
+}
+
+/* `.popover` is declared further down the file, so the size of the menu needs the pair of
+   classes to win over it. */
+.popover.theme-menu {
+  width: 232px;
+  padding: 6px;
+}
+
+.theme-filter {
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--bg-sunken);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 12px;
+}
+
+.theme-filter:focus {
+  outline: none;
+  border-color: var(--steel);
+}
+
+/* Eighteen palettes do not fit into the header, so the list scrolls - as it does in the
+   editor's own picker. */
+.theme-list {
+  max-height: 292px;
+  overflow-y: auto;
+}
+
+.theme-group {
+  padding: 6px 6px 3px;
+  color: var(--text-faint);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.theme-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 5px;
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* One highlight for the mouse and for the arrows: the row under the cursor is the row
+   already shown on the screen. */
+.theme-item-at {
+  background: var(--tint);
+  color: var(--text);
+}
+
+.theme-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.theme-check {
+  flex: 0 0 auto;
+  color: var(--amber);
+  font-size: 11px;
+}
+
+.theme-swatch {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  padding: 3px;
+  border: 1px solid;
+  border-radius: 4px;
+}
+
+.theme-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.theme-empty {
+  margin: 0;
+  padding: 6px;
+  color: var(--text-faint);
+  font-size: 12px;
 }
 
 /* The language switch lives in the status line and follows its tone. */
@@ -488,7 +584,7 @@ main.empty {
 
 .meter-fill {
   height: 100%;
-  background: linear-gradient(90deg, rgb(232 163 61 / 55%), var(--amber));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--amber) 55%, transparent), var(--amber));
   border-radius: 4px;
   transition: width 0.5s cubic-bezier(0.2, 0.8, 0.3, 1);
 }

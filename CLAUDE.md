@@ -89,6 +89,16 @@ tests/fixtures/transcripts/   anonymised transcripts for the parser tests
   name are read as a fallback); the API knows nothing about them. The markup inside a widget
   reacts to its own width through `@container` rather than to the window width: widgets are
   dragged by hand while the window does not change.
+- **The colour theme is data, and the choice is the browser's business too.** The eighteen
+  palettes live in `web/src/themes.ts` as a table of thirteen tokens - the same ones
+  `styles.css` declares in `:root` - and are borrowed from the VS Code themes of the same
+  name, so the dashboard offers the choice a person already made in the editor. The chosen
+  theme writes those tokens onto `<html>`, and the stylesheet keeps only the fallback palette
+  and what depends on the kind alone (the row tint, the shadows). The choice lies in
+  `localStorage` next to the layout and the language: the id in `cburn.theme`, and beside it a
+  remembered dark and light theme, which is what "follow the system" switches between. A
+  colour written into the code instead of a token would stay at the old theme - that is why
+  the chart slices read `var(--steel)` rather than a hex.
 - **The subscription limits come from Anthropic, we do not count them.** Claude Code calls
   `GET /api/oauth/usage` with an OAuth token from the macOS keychain (the
   `Claude Code-credentials` entry) and stores the answer in `~/.claude.json` under
