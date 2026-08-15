@@ -258,7 +258,7 @@ def create_app(
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
             if not changed:
-                raise HTTPException(status_code=404, detail="совет не найден")
+                raise HTTPException(status_code=404, detail="tip not found")
             return {"item_id": item_id, "status": status}
         finally:
             conn.close()
@@ -299,7 +299,7 @@ def create_app(
         """Write the settings. Prices are applied at once: recomputing takes seconds."""
         incoming = payload.get("config")
         if not isinstance(incoming, dict):
-            raise HTTPException(status_code=400, detail="ждём объект config")
+            raise HTTPException(status_code=400, detail="expected a config object")
         errors = config.validate(incoming)
         if errors:
             raise HTTPException(status_code=400, detail="; ".join(errors))
@@ -351,7 +351,7 @@ def create_app(
         try:
             summary = session_summary(conn, session_id)
             if summary is None:
-                raise HTTPException(status_code=404, detail="сессия не найдена")
+                raise HTTPException(status_code=404, detail="session not found")
             return {
                 "session": vars(summary) | {"cache_write": summary.cache_write},
                 "models": [
@@ -379,7 +379,7 @@ def create_app(
         conn = connect(db_path, apply_schema=False)
         try:
             if not set_hidden(conn, session_id, hidden):
-                raise HTTPException(status_code=404, detail="сессия не найдена")
+                raise HTTPException(status_code=404, detail="session not found")
         finally:
             conn.close()
         return {"session_id": session_id, "hidden": hidden}
@@ -395,7 +395,7 @@ def create_app(
         conn = connect(db_path, apply_schema=False)
         try:
             if session_summary(conn, session_id) is None:
-                raise HTTPException(status_code=404, detail="сессия не найдена")
+                raise HTTPException(status_code=404, detail="session not found")
             process = await asyncio.to_thread(process_for_session, session_id)
             stopped = terminate(process.pid) if process is not None else False
             set_hidden(conn, session_id, True)
@@ -406,7 +406,7 @@ def create_app(
             "hidden": True,
             "stopped": stopped,
             "pid": process.pid if process is not None else None,
-            "note": None if stopped else "процесс уже не запущен — сессия убрана с дашборда",
+            "note": None if stopped else "the process is gone - the session was hidden",
         }
 
     @app.post("/otlp/v1/{signal}")
@@ -423,7 +423,7 @@ def create_app(
         4xx would make the exporter pile up retries and complain into the Claude Code log.
         """
         if signal not in otlp.SIGNALS:
-            raise HTTPException(status_code=404, detail="неизвестный сигнал OTLP")
+            raise HTTPException(status_code=404, detail="unknown OTLP signal")
         if not config.load().get("otel", {}).get("enabled", True):
             return JSONResponse({})
         body = await request.body()
@@ -616,7 +616,7 @@ def _mount_frontend(app: FastAPI) -> None:
     @app.get("/")
     async def placeholder() -> dict[str, Any]:
         return {
-            "cburn": "фронт ещё не собран",
-            "как собрать": "cd web && npm install && npm run build",
+            "cburn": "the frontend is not built yet",
+            "how to build": "cd web && npm install && npm run build",
             "api": ["/api/overview", "/api/sessions", "/api/plan/refresh", "/api/health", "/ws"],
         }

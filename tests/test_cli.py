@@ -52,11 +52,11 @@ def jq_style_totals(path: Path) -> dict[str, dict[str, int]]:
         usage = message.get("usage") or {}
         creation = usage.get("cache_creation") or {}
         current = {
-            "вход": usage.get("input_tokens", 0),
-            "выход": usage.get("output_tokens", 0),
-            "кэш чтение": usage.get("cache_read_input_tokens", 0),
-            "кэш 5m": creation.get("ephemeral_5m_input_tokens", 0),
-            "кэш 1h": creation.get("ephemeral_1h_input_tokens", 0),
+            "input": usage.get("input_tokens", 0),
+            "output": usage.get("output_tokens", 0),
+            "cache read": usage.get("cache_read_input_tokens", 0),
+            "cache 5m": creation.get("ephemeral_5m_input_tokens", 0),
+            "cache 1h": creation.get("ephemeral_1h_input_tokens", 0),
         }
         known = per_session[record["sessionId"]].get(message["id"])
         if known is None:
@@ -67,10 +67,10 @@ def jq_style_totals(path: Path) -> dict[str, dict[str, int]]:
 
     return {
         session_id: {
-            "ходов": len(turns),
+            "turns": len(turns),
             **{
                 key: sum(turn[key] for turn in turns.values())
-                for key in ("вход", "выход", "кэш чтение", "кэш 5m", "кэш 1h")
+                for key in ("input", "output", "cache read", "cache 5m", "cache 1h")
             },
         }
         for session_id, turns in per_session.items()
@@ -81,12 +81,12 @@ def parse_output(text: str) -> dict[str, int]:
     """Pull the numbers out of the `cburn session` output."""
     numbers: dict[str, int] = {}
     for label, pattern in (
-        ("ходов", r"^ходов\s+: (\d+)"),
-        ("вход", r"^вход\s+: ([\d ]+)"),
-        ("выход", r"^выход\s+: ([\d ]+)"),
-        ("кэш чтение", r"^кэш чтение\s+: ([\d ]+)"),
-        ("кэш 5m", r"5m ([\d ]+),"),
-        ("кэш 1h", r"1h ([\d ]+)\)"),
+        ("turns", r"^turns\s+: (\d+)"),
+        ("input", r"^input\s+: ([\d ]+)"),
+        ("output", r"^output\s+: ([\d ]+)"),
+        ("cache read", r"^cache read\s+: ([\d ]+)"),
+        ("cache 5m", r"5m ([\d ]+),"),
+        ("cache 1h", r"1h ([\d ]+)\)"),
     ):
         match = re.search(pattern, text, re.MULTILINE)
         assert match, f"the output has no line for {label!r}:\n{text}"
@@ -126,7 +126,7 @@ def test_session_reports_unknown_id(project: Path, capsys: pytest.CaptureFixture
     cli.main(["reindex"])
     capsys.readouterr()
     assert cli.main(["session", "no-such"]) == 1
-    assert "не найдена" in capsys.readouterr().err
+    assert "not found" in capsys.readouterr().err
 
 
 def test_reindex_is_idempotent(project: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -136,9 +136,9 @@ def test_reindex_is_idempotent(project: Path, capsys: pytest.CaptureFixture[str]
     assert cli.main(["reindex"]) == 0
     second = capsys.readouterr().out
 
-    assert "прочитано строк: 0" not in first
-    assert "прочитано строк: 0" in second
-    assert "новых ходов: 0," in second
+    assert "lines read: 0" not in first
+    assert "lines read: 0" in second
+    assert "new turns: 0," in second
 
 
 def test_sessions_lists_indexed(project: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -173,8 +173,8 @@ def test_stats_reports_period_and_totals(project: Path, capsys: pytest.CaptureFi
 
     assert cli.main(["stats", "--period", "all"]) == 0
     out = capsys.readouterr().out
-    assert "период       : all" in out
-    assert "стоимость" in out
+    assert "period       : all" in out
+    assert "cost" in out
 
 
 def test_stats_filters_by_project(project: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -185,9 +185,9 @@ def test_stats_filters_by_project(project: Path, capsys: pytest.CaptureFixture[s
     capsys.readouterr()
 
     assert cli.main(["stats", "--period", "all", "--project", "proj"]) == 0
-    assert "проект ~ proj" in capsys.readouterr().out
+    assert "project ~ proj" in capsys.readouterr().out
     assert cli.main(["stats", "--period", "all", "--project", "nosuch"]) == 1
-    assert "ходов нет" in capsys.readouterr().err
+    assert "no turns" in capsys.readouterr().err
 
 
 def test_period_is_parsed(project: Path) -> None:
@@ -244,7 +244,7 @@ def test_otel_status_explains_silence(project: Path, capsys: pytest.CaptureFixtu
     """While telemetry is off, the command says so and hints at how to switch it on."""
     assert cli.main(["otel"]) == 0
     out = capsys.readouterr().out
-    assert "посылок не было" in out
+    assert "no payloads arrived" in out
     assert "cburn otel --env" in out
 
 
@@ -287,10 +287,10 @@ def test_otel_status_counts_what_arrived(project: Path, capsys: pytest.CaptureFi
     assert cli.main(["otel"]) == 0
     out = capsys.readouterr().out
     assert "logs" in out
-    assert "событие api_request" in out
-    assert "накоплено: 1 строк" in out  # volume and span: it shows whether the base grows
+    assert "event api_request" in out
+    assert "accumulated: 1 rows" in out  # volume and span: it shows whether the base grows
     # Channel reconciliation: how many sessions telemetry sees and how many the parser does.
-    assert "сессии за сутки: 1 по телеметрии, 0 по транскриптам" in out
+    assert "sessions over a day: 1 by telemetry, 0 by transcripts" in out
 
 
 def test_stats_shows_spending_off_the_transcript(
@@ -333,8 +333,8 @@ def test_stats_shows_spending_off_the_transcript(
 
     assert cli.main(["stats", "--period", "all"]) == 0
     out = capsys.readouterr().out
-    assert "мимо истории : 517 токенов" in out
-    assert "разрешения   : 1 подтверждено руками" in out
+    assert "off history  : 517 tokens" in out
+    assert "permissions  : 1 confirmed by hand" in out
 
 
 def test_stats_stays_silent_without_telemetry(
@@ -346,8 +346,8 @@ def test_stats_stays_silent_without_telemetry(
     capsys.readouterr()
     assert cli.main(["stats", "--period", "all"]) == 0
     out = capsys.readouterr().out
-    assert "мимо истории" not in out
-    assert "разрешения" not in out
+    assert "off history" not in out
+    assert "permissions" not in out
 
 
 def test_otel_status_hints_at_wrong_protocol(
@@ -360,7 +360,7 @@ def test_otel_status_hints_at_wrong_protocol(
         otlp.note_ingest(conn, "metrics", stored=0, dropped=1)
     assert cli.main(["otel"]) == 0
     out = capsys.readouterr().out
-    assert "посылки приходят, но не разобраны" in out
+    assert "payloads arrive but are not parsed" in out
     assert "http/json" in out
 
 
@@ -378,4 +378,4 @@ def test_otel_prune_removes_old_records(project: Path, capsys: pytest.CaptureFix
             ],
         )
     assert cli.main(["otel", "--prune"]) == 0
-    assert "убрано: метрик 0, событий 1" in capsys.readouterr().out
+    assert "removed: metrics 0, events 1" in capsys.readouterr().out

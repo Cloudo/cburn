@@ -120,6 +120,13 @@ export function Settings() {
             options={["haiku", "sonnet", "opus"]}
             onChange={(value) => patch("analyzer", "weekly_deep_model", value)}
           />
+          <Choice
+            label={t("settings.analyzer.language")}
+            value={config.analyzer.language ?? "en"}
+            options={["en", "ru"]}
+            render={(value) => t(`settings.lang.${value}`)}
+            onChange={(value) => patch("analyzer", "language", value)}
+          />
           <Check
             label={t("settings.snippets")}
             value={config.analyzer.allow_snippets}
@@ -291,11 +298,14 @@ function Choice({
   value,
   options,
   onChange,
+  render,
 }: {
   label: string;
   value: string;
   options: string[];
   onChange: (value: string) => void;
+  /** How to show an option: model names stay as they are, languages are translated. */
+  render?: (option: string) => string;
 }) {
   return (
     <label className="field">
@@ -303,7 +313,7 @@ function Choice({
       <select value={value} onChange={(event) => onChange(event.target.value)}>
         {options.map((option) => (
           <option key={option} value={option}>
-            {option}
+            {render ? render(option) : option}
           </option>
         ))}
       </select>

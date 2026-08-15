@@ -47,12 +47,10 @@ REQUEST_TIMEOUT = 10.0
 #: we wait longer than usual and live on the last known value.
 BACKOFF_SECONDS = 900.0
 
-#: Human names of the windows - the same as on the `/usage` screen.
-KIND_LABELS = {
-    "session": "текущая сессия",
-    "weekly_all": "неделя, все модели",
-    "weekly_scoped": "неделя, модель",
-}
+#: The window kinds Anthropic returns - the same ones the `/usage` screen shows.
+#: Their captions live in the frontend dictionary: the text belongs to the interface,
+#: and the interface has two languages.
+KINDS = ("session", "weekly_all", "weekly_scoped")
 
 
 @dataclass
@@ -109,7 +107,7 @@ def _normalize(payload: dict[str, Any]) -> list[dict[str, Any]]:
         return [
             {
                 "kind": row.get("kind"),
-                "label": _label(row),
+                "model": _model_name(row),
                 "percent": row.get("percent"),
                 "resets_at": row.get("resets_at"),
                 "severity": row.get("severity"),
@@ -122,7 +120,7 @@ def _normalize(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         {
             "kind": kind,
-            "label": KIND_LABELS.get(kind, kind),
+            "model": None,
             "percent": window.get("utilization"),
             "resets_at": window.get("resets_at"),
             "severity": None,
@@ -133,14 +131,14 @@ def _normalize(payload: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
-def _label(row: dict[str, Any]) -> str:
-    base = KIND_LABELS.get(str(row.get("kind")), str(row.get("kind")))
+def _model_name(row: dict[str, Any]) -> str | None:
+    """The model a window is scoped to; the caption around it is built by the frontend."""
     scope = row.get("scope")
     if isinstance(scope, dict):
         model = scope.get("model")
         if isinstance(model, dict) and model.get("display_name"):
-            return f"{base}: {model['display_name']}"
-    return base
+            return str(model["display_name"])
+    return None
 
 
 class RateLimited(Exception):
@@ -232,7 +230,7 @@ class LimitsWatcher:
         if value is None:
             value = (known if known and known.source == "api" else None) or read_from_cache()
         if value is None:
-            value = PlanLimits("none", None, None, None, [], "лимиты недоступны")
+            value = PlanLimits("none", None, None, None, [], "limits are unavailable")
 
         with self._lock:
             self._value = value

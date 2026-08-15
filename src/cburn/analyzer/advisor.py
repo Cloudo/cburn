@@ -64,40 +64,51 @@ RESPONSE_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
 }
 
-SYSTEM_PROMPT = """
-Ты разбираешь расход токенов Claude Code на одной машине и предлагаешь, что
-поменять в работе с ним. На входе — JSON-дайджест за период: агрегаты, тяжёлые
-сессии, линии работы, профиль инструментов, доля моделей.
+#: In which language the tips come back. The prompt is English, the answer follows the
+#: `analyzer.language` config key: the tips are read by a human, and that is their choice.
+LANGUAGE_NAMES = {"en": "English", "ru": "Russian"}
 
-Две секции приходят из телеметрии самого Claude Code, а не из транскриптов:
-`permissions` — сколько раз работа вставала ради ручного подтверждения, по
-каким инструментам и как часто человек уходил в другой режим разрешений
-(повод предложить правку `permissions.allow`), и
-`off_transcript` — служебные запросы, которых в транскриптах нет вовсе, то
-есть остальные цифры дайджеста на эту величину занижены; там же активное
-время работы и строки кода: расход сам по себе ни хорош, ни плох — важно,
-что за него сделано. Если у секции `available: false`, телеметрия выключена
-— молчи про них, а не считай нулём. Оттуда же `mcp.connections`: сколько
-секунд уходит на подключение каждого MCP-сервера при запуске сессии. Сервер,
-который стартует секунды и ни разу не позван, — повод его отключить. И
-`off_transcript.hooks`: сколько времени съели хуки и какие вообще объявлены.
-Хук выполняется между ходами, поэтому его ожидание выглядит как пауза, а не
-как расход, — но человек ждёт ровно так же.
+SYSTEM_PROMPT_TEMPLATE = """
+You analyse the Claude Code token spend on a single machine and suggest what to
+change in the way it is used. The input is a JSON digest for a period: aggregates, heavy
+sessions, work lines, the tool profile, the model share.
 
-Правила:
-1. Каждый совет опирается на конкретные числа из дайджеста. В `evidence` —
-   эти числа и откуда они взяты. Без опоры совет не нужен: лучше меньше.
-2. Никаких общих мест вида «следите за контекстом» и «используйте кэш».
-   Совет должен говорить, что именно сделать: вынести в скилл, отключить
-   MCP-сервер, сменить модель на конкретной работе, закрыть разросшуюся линию.
-3. `severity`: crit — расход уже сгорает прямо сейчас; warn — заметная утечка;
-   info — стоит иметь в виду.
-4. Не больше пяти советов. Не повторяй то, что помечено уже отклонённым.
-5. Отвечай по-русски, без вводных и без пересказа дайджеста.
+Two sections come from Claude Code's own telemetry rather than from the transcripts:
+`permissions` - how many times the work stopped for a manual confirmation, for
+which tools and how often the human went into another permission mode
+(a reason to suggest a `permissions.allow` fix), and
+`off_transcript` - service requests that are absent from the transcripts entirely, which
+means the other digest numbers are understated by that much; the same section holds the
+active working time and the lines of code: the spend is neither good nor bad on its own -
+what matters is what was done for it. If a section has `available: false`, telemetry is
+switched off - stay silent about it rather than treating it as zero. From there also comes
+`mcp.connections`: how many seconds connecting every MCP server takes at session start. A
+server that takes seconds to start and was never called is a reason to switch it off. And
+`off_transcript.hooks`: how much time the hooks ate and which ones are declared at all.
+A hook runs between turns, so waiting for it looks like a pause rather than
+spend - but the human waits exactly the same.
+
+Rules:
+1. Every tip rests on concrete numbers from the digest. `evidence` holds
+   those numbers and where they come from. Without support a tip is not needed: fewer is better.
+2. No generalities like "watch your context" or "use the cache".
+   A tip must say what exactly to do: move something into a skill, switch off an
+   MCP server, change the model for a particular kind of work, close an overgrown line.
+3. `severity`: crit - the spend is burning right now; warn - a noticeable leak;
+   info - worth keeping in mind.
+4. No more than five tips. Do not repeat what is marked as already dismissed.
+5. Answer in {language}, without preambles and without retelling the digest.
 """.strip()
 
 
-def build_command(model: str, budget_usd: float = MAX_BUDGET_USD) -> list[str]:
+def system_prompt(language: str = "en") -> str:
+    """The system prompt with the answer language substituted (`analyzer.language`)."""
+    return SYSTEM_PROMPT_TEMPLATE.format(language=LANGUAGE_NAMES.get(language, "English"))
+
+
+def build_command(
+    model: str, budget_usd: float = MAX_BUDGET_USD, language: str = "en"
+) -> list[str]:
     """Assemble the command. Extracted for tests: they never touch the network."""
     return [
         CLAUDE_BINARY,
@@ -107,7 +118,7 @@ def build_command(model: str, budget_usd: float = MAX_BUDGET_USD) -> list[str]:
         "--json-schema",
         json.dumps(RESPONSE_SCHEMA, ensure_ascii=False),
         "--system-prompt",
-        SYSTEM_PROMPT,
+        system_prompt(language),
         "--model",
         model,
         # The advisor needs no tools: it looks at a ready digest.
@@ -120,10 +131,12 @@ def build_command(model: str, budget_usd: float = MAX_BUDGET_USD) -> list[str]:
     ]
 
 
-def run_claude(prompt: str, model: str, budget_usd: float = MAX_BUDGET_USD) -> dict[str, Any]:
+def run_claude(
+    prompt: str, model: str, budget_usd: float = MAX_BUDGET_USD, language: str = "en"
+) -> dict[str, Any]:
     """Call `claude -p` and return the parsed answer envelope."""
     result = subprocess.run(  # noqa: S603 - the command is assembled right here
-        build_command(model, budget_usd),
+        build_command(model, budget_usd, language),
         input=prompt,
         capture_output=True,
         text=True,
@@ -195,18 +208,20 @@ def advise(
     budget_usd: float = MAX_BUDGET_USD,
     runner: Any = None,
     kind: str = "manual",
+    language: str = "en",
 ) -> dict[str, Any]:
     """Run the digest through the model and store the tips. Returns the tick result.
 
     `kind` is how the tick happened: `manual` from the CLI and from the button,
     `hourly`/`weekly` from the scheduler. It drives the schedule and labels the analysis.
+    `language` is the language of the answer (`analyzer.language`).
     """
     call = runner or run_claude
     prompt = json.dumps(
         {"digest": digest, "already_rejected": rejected_keys(conn)},
         ensure_ascii=False,
     )
-    envelope = call(prompt, model, budget_usd)
+    envelope = call(prompt, model, budget_usd, language)
     # The check lives here and not in the runner: the error must be caught for any
     # envelope source, including one swapped in tests.
     if envelope.get("is_error"):

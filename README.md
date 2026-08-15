@@ -119,6 +119,17 @@ when the spend goes above the threshold from "Settings", and the menu holds toda
 three live sessions with their statuses, "pause for 2 hours" and "start at login". The last
 item replaces the launchd agent: if you use the application, `cburn install` is not needed.
 
+## Languages
+
+The interface speaks two languages: the RU/EN switch in the status line picks one, and the
+pairs live in a single dictionary, [web/src/dict.ts](web/src/dict.ts). Everything else -
+the CLI output, the HTTP answers, the telegram notifications and the tray menu - is English.
+
+The advisor is a separate case: its prompt is always English, while the language of the tips
+it returns is set by `analyzer.language` (`en` by default, `ru` for tips in Russian) in the
+config or on the "Settings" screen. Tips already stored keep the language they were written
+in.
+
 ## Telegram notifications
 
 Three reasons to write, and all of them are about "look, something is off here": the hourly

@@ -70,14 +70,14 @@ pub fn setup<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         quiet_until: AtomicI64::new(0),
     });
 
-    let burn = MenuItem::with_id(app, "burn", "расход: —", false, None::<&str>)?;
-    let today = MenuItem::with_id(app, "today", "за сегодня: —", false, None::<&str>)?;
-    let advice = MenuItem::with_id(app, "advice", "советов пока нет", true, None::<&str>)?;
-    let unit = MenuItem::with_id(app, "unit", "показывать $/ч", true, None::<&str>)?;
-    let pause = MenuItem::with_id(app, "pause", "пауза на 2 часа", true, None::<&str>)?;
+    let burn = MenuItem::with_id(app, "burn", "burn rate: -", false, None::<&str>)?;
+    let today = MenuItem::with_id(app, "today", "today: -", false, None::<&str>)?;
+    let advice = MenuItem::with_id(app, "advice", "no tips yet", true, None::<&str>)?;
+    let unit = MenuItem::with_id(app, "unit", "show $/h", true, None::<&str>)?;
+    let pause = MenuItem::with_id(app, "pause", "pause for 2 hours", true, None::<&str>)?;
     let autostart = MenuItem::with_id(app, "autostart", autostart_label(app), true, None::<&str>)?;
-    let open = MenuItem::with_id(app, "open", "открыть дашборд", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "выйти", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", "open the dashboard", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "quit", true, None::<&str>)?;
     let sessions: Vec<MenuItem<R>> = (0..HOT_SESSIONS)
         .map(|index| MenuItem::with_id(app, format!("session-{index}"), "—", false, None::<&str>))
         .collect::<tauri::Result<_>>()?;
@@ -131,7 +131,7 @@ pub fn setup<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
             Ok(overview) => apply(&tray, &poll_state, &poll_items, &overview),
             Err(error) => {
                 let _ = tray.set_title(Some("—"));
-                let _ = poll_items.burn.set_text(format!("нет связи с cburn serve: {error}"));
+                let _ = poll_items.burn.set_text(format!("no connection to cburn serve: {error}"));
             }
         }
         let _ = &poll_app;
@@ -159,9 +159,9 @@ fn on_menu<R: Runtime>(
             let cost = !state.show_cost.load(Ordering::Relaxed);
             state.show_cost.store(cost, Ordering::Relaxed);
             let _ = items.unit.set_text(if cost {
-                "показывать тыс.ток/мин"
+                "show k tok/min"
             } else {
-                "показывать $/ч"
+                "show $/h"
             });
         }
         "pause" => {
@@ -179,9 +179,9 @@ fn on_menu<R: Runtime>(
             .timeout(Duration::from_secs(3))
             .call();
             let _ = items.pause.set_text(if quiet {
-                "пауза на 2 часа"
+                "pause for 2 hours"
             } else {
-                "снять паузу"
+                "resume notifications"
             });
         }
         id => {
@@ -263,9 +263,9 @@ fn apply<R: Runtime>(
     let alert = threshold > 0.0 && tokens >= threshold;
 
     let value = if state.show_cost.load(Ordering::Relaxed) {
-        format!("${cost_hour:.2}/ч")
+        format!("${cost_hour:.2}/h")
     } else {
-        format!("{:.1}K/мин", output / 1000.0)
+        format!("{:.1}K/min", output / 1000.0)
     };
     // The red dot is the only alert in the menu bar: the icon cannot be given
     // a colour, and a dot before the figure is noticeable without hindering reading.
@@ -277,7 +277,7 @@ fn apply<R: Runtime>(
     let _ = tray.set_title(Some(&title));
 
     let _ = items.burn.set_text(format!(
-        "расход: {:.1}K ток/мин · ${:.2}/ч",
+        "burn rate: {:.1}K tok/min · ${:.2}/h",
         output / 1000.0,
         cost_hour
     ));
@@ -291,7 +291,7 @@ fn apply<R: Runtime>(
         .unwrap_or(0);
     let _ = items
         .today
-        .set_text(format!("за сегодня: {today_turns} ходов · ${today_cost:.2}"));
+        .set_text(format!("today: {today_turns} turns · ${today_cost:.2}"));
 
     let empty = Vec::new();
     let sessions = overview
@@ -322,18 +322,18 @@ fn apply<R: Runtime>(
         .and_then(|v| v.as_i64())
         .unwrap_or(0);
     let _ = items.advice.set_text(if advice_ticks > 0 {
-        format!("советы: {advice_ticks} разбор(а/ов) за сегодня")
+        format!("advice: {advice_ticks} analysis(es) today")
     } else {
-        "советов пока нет".to_string()
+        "no tips yet".to_string()
     });
 }
 
 /// The caption of the autostart item: it also shows the current state.
 fn autostart_label<R: Runtime>(app: &AppHandle<R>) -> &'static str {
     if is_autostart_on(app) {
-        "не запускать при входе"
+        "do not start at login"
     } else {
-        "запускать при входе"
+        "start at login"
     }
 }
 
@@ -359,11 +359,11 @@ fn toggle_autostart<R: Runtime>(app: &AppHandle<R>) {
 
 fn status_label(status: &str) -> &str {
     match status {
-        "permission" => "ждёт разрешения",
-        "working" => "работает",
-        "answered" => "ждёт вас",
-        "idle" => "простаивает",
-        "done" => "закончилась",
+        "permission" => "awaiting permission",
+        "working" => "working",
+        "answered" => "waiting for you",
+        "idle" => "idle",
+        "done" => "finished",
         other => other,
     }
 }

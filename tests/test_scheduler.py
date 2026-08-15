@@ -137,7 +137,7 @@ def test_run_tick_records_its_kind(conn: sqlite3.Connection) -> None:
         conn,
         CONFIG,
         scheduler.Tick(scheduler.WEEKLY, now - timedelta(days=7), "sonnet"),
-        runner=lambda prompt, model, budget: envelope,
+        runner=lambda prompt, model, budget, language="en": envelope,
     )
 
     assert result["kind"] == scheduler.WEEKLY

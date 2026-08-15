@@ -69,7 +69,7 @@ def build_plist(port: int, executable: Path | None = None) -> bytes:
 def install(port: int, run: Runner | None = None) -> str:
     """Install the agent and start it. A repeated call refreshes the plist."""
     if sys.platform != "darwin":
-        raise SystemExit("автозапуск через launchd есть только на macOS")
+        raise SystemExit("autostart through launchd exists on macOS only")
     runner = run or _run
     target = plist_path()
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -81,34 +81,34 @@ def install(port: int, run: Runner | None = None) -> str:
     runner([LAUNCHCTL, "bootout", f"{domain}/{LABEL}"], check=False)
     code, err = runner([LAUNCHCTL, "bootstrap", domain, str(target)], check=False)
     if code != 0:
-        raise SystemExit(f"launchctl не смог загрузить агент: {err.strip() or code}")
-    return f"агент {LABEL} поставлен: порт {port}, логи {log_path()}"
+        raise SystemExit(f"launchctl could not load the agent: {err.strip() or code}")
+    return f"agent {LABEL} installed: port {port}, logs {log_path()}"
 
 
 def uninstall(run: Runner | None = None) -> str:
     """Remove the agent and delete the plist. An already removed agent is not an error."""
     if sys.platform != "darwin":
-        raise SystemExit("автозапуск через launchd есть только на macOS")
+        raise SystemExit("autostart through launchd exists on macOS only")
     runner = run or _run
     target = plist_path()
     runner([LAUNCHCTL, "bootout", f"gui/{_uid()}/{LABEL}"], check=False)
     if target.exists():
         target.unlink()
-        return f"агент {LABEL} снят, {target} удалён"
-    return f"агента {LABEL} и не было"
+        return f"agent {LABEL} removed, {target} deleted"
+    return f"agent {LABEL} was not there"
 
 
 def status(run: Runner | None = None) -> str:
     """What launchd thinks about the agent right now."""
     if not plist_path().exists():
-        return "агент не поставлен — `cburn install`"
+        return "the agent is not installed - `cburn install`"
     runner = run or _run
     code, out = runner([LAUNCHCTL, "print", f"gui/{_uid()}/{LABEL}"], check=False)
     if code != 0:
-        return f"plist на месте, но launchd агента не знает — попробуйте `cburn install`\n{out}"
-    state = next((line.strip() for line in out.splitlines() if "state =" in line), "загружен")
+        return f"the plist is there, but launchd does not know it - try `cburn install`\n{out}"
+    state = next((line.strip() for line in out.splitlines() if "state =" in line), "loaded")
     pid = next((line.strip() for line in out.splitlines() if line.strip().startswith("pid =")), "")
-    return f"агент {LABEL}: {state} {pid}".strip()
+    return f"agent {LABEL}: {state} {pid}".strip()
 
 
 def _run(command: list[str], check: bool = True) -> tuple[int, str]:

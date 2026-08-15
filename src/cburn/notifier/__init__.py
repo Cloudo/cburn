@@ -104,12 +104,12 @@ def remember(conn: sqlite3.Connection, message: Message, channel: str, ok: bool)
 def digest_text(run: dict[str, Any], items: list[dict[str, Any]]) -> str:
     """Hourly summary: what the period cost and what the advisor suggests."""
     lines = [
-        f"Разбор за час: {len(items)} совет(а/ов), такт ${run.get('cost_usd', 0):.2f}",
+        f"Hourly analysis: {len(items)} tip(s), the tick cost ${run.get('cost_usd', 0):.2f}",
     ]
     for item in items[:3]:
         mark = {"crit": "🔴", "warn": "🟠"}.get(item.get("severity", "info"), "•")
         lines.append(f"{mark} {item.get('title', '')}".strip())
-    lines.append("Подробности — на экране «Советы».")
+    lines.append('The details are on the "Advice" screen.')
     return "\n".join(lines)
 
 
@@ -117,12 +117,12 @@ def daily_text(usage: dict[str, Any], top: list[dict[str, Any]]) -> str:
     """Daily digest: how much was burned and who burned the most."""
     tokens = usage.get("tokens", 0)
     lines = [
-        f"За день: {usage.get('turns', 0)} ходов, {tokens / 1000:.0f}k токенов,"
-        f" ${usage.get('cost_usd', 0):.2f} по тарифам API",
+        f"Today: {usage.get('turns', 0)} turns, {tokens / 1000:.0f}k tokens,"
+        f" ${usage.get('cost_usd', 0):.2f} at API rates",
     ]
     for session in top[:3]:
         name = session.get("title") or (session.get("id") or "")[:8]
-        lines.append(f"• {name} — {session.get('tokens', 0) / 1000:.0f}k")
+        lines.append(f"• {name} - {session.get('tokens', 0) / 1000:.0f}k")
     return "\n".join(lines)
 
 
@@ -150,8 +150,8 @@ def alerts_for(
             (
                 "burn",
                 "crit",
-                f"Расход {tokens_per_min / 1000:.0f}k ток/мин —"
-                f" выше порога {burn_limit / 1000:.0f}k",
+                f"Burn rate {tokens_per_min / 1000:.0f}k tok/min -"
+                f" above the {burn_limit / 1000:.0f}k threshold",
             )
         )
     for session in overview.get("live_sessions") or []:
@@ -162,7 +162,7 @@ def alerts_for(
                 (
                     str(session.get("id")),
                     "warn",
-                    f"{name}: контекст {context / 1000:.0f}k — пора /clear",
+                    f"{name}: context {context / 1000:.0f}k - time to /clear",
                 )
             )
     return alert_messages(moment, candidates, last_alerts(conn))

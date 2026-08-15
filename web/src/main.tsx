@@ -1,6 +1,7 @@
 import { Component, StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import { detect, translate } from "./dict";
 import { LangProvider } from "./i18n";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -21,9 +22,9 @@ class Boundary extends Component<{ children: ReactNode }, { error: Error | null 
     return (
       <main>
         <p className="empty-note">
-          дашборд не отрисовался: {error.message}
+          {translate(detect(), "boundary.title", { message: error.message })}
           <br />
-          если сервер запущен давно, а фронт пересобран — перезапустите cburn serve
+          {translate(detect(), "boundary.hint")}
         </p>
       </main>
     );

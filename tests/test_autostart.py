@@ -81,7 +81,7 @@ def test_install_twice_replaces_plist(home: Path) -> None:
 
 def test_install_reports_launchctl_failure(home: Path) -> None:
     """There is no silent install: a launchd refusal is visible to the human."""
-    with pytest.raises(SystemExit, match="не смог загрузить"):
+    with pytest.raises(SystemExit, match="could not load"):
         autostart.install(8799, run=FakeLaunchctl(code=5, output="Load failed"))
 
 
@@ -92,15 +92,15 @@ def test_uninstall_removes_plist(home: Path) -> None:
     message = autostart.uninstall(run=launchctl)
 
     assert not autostart.plist_path().exists()
-    assert "снят" in message
+    assert "removed" in message
 
 
 def test_uninstall_without_agent_is_not_an_error(home: Path) -> None:
-    assert "не было" in autostart.uninstall(run=FakeLaunchctl(code=3))
+    assert "was not there" in autostart.uninstall(run=FakeLaunchctl(code=3))
 
 
 def test_status_without_plist(home: Path) -> None:
-    assert "не поставлен" in autostart.status(run=FakeLaunchctl())
+    assert "not installed" in autostart.status(run=FakeLaunchctl())
 
 
 def test_status_reads_launchctl(home: Path) -> None:

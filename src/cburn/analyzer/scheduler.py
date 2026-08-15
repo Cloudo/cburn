@@ -94,7 +94,10 @@ def run_tick(
 ) -> dict[str, Any]:
     """Build the digest for the tick period and run it through the advisor."""
     payload = digest.build(conn, tick.since, config=config)
-    result = advisor.advise(conn, payload, model=tick.model, runner=runner, kind=tick.kind)
+    language = str((config.get("analyzer") or {}).get("language") or "en")
+    result = advisor.advise(
+        conn, payload, model=tick.model, runner=runner, kind=tick.kind, language=language
+    )
     result["kind"] = tick.kind
     # The analysis found something important - the human learns about it in telegram,
     # not whenever they open the "Advice" screen themselves (task D5).

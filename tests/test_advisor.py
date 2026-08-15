@@ -33,7 +33,7 @@ def envelope(advice: list[dict], cost: float = 0.021) -> dict:
 
 
 def runner_for(payload: dict) -> object:
-    def run(prompt: str, model: str, budget_usd: float) -> dict:
+    def run(prompt: str, model: str, budget_usd: float, language: str = "en") -> dict:
         run.prompt = prompt  # type: ignore[attr-defined]
         return payload
 
@@ -43,6 +43,17 @@ def runner_for(payload: dict) -> object:
 @pytest.fixture
 def conn(tmp_path: Path) -> sqlite3.Connection:
     return connect(tmp_path / "advice.db")
+
+
+def test_prompt_language_comes_from_the_config() -> None:
+    """The prompt is always English; the answer language is a setting (`analyzer.language`)."""
+    default = advisor.build_command("haiku")
+    russian = advisor.build_command("haiku", language="ru")
+    prompt = russian[russian.index("--system-prompt") + 1]
+
+    assert "Answer in English" in default[default.index("--system-prompt") + 1]
+    assert "Answer in Russian" in prompt
+    assert "You analyse the Claude Code token spend" in prompt  # the prompt itself stays English
 
 
 def test_command_matches_installed_cli(conn: sqlite3.Connection) -> None:
@@ -160,7 +171,7 @@ def test_broken_answer_does_not_break_the_tick(conn: sqlite3.Connection) -> None
 def test_error_envelope_is_raised(conn: sqlite3.Connection) -> None:
     """A CLI error is hidden in an exception, not in an empty list of tips."""
 
-    def run(prompt: str, model: str, budget_usd: float) -> dict:
+    def run(prompt: str, model: str, budget_usd: float, language: str = "en") -> dict:
         return {"is_error": True, "result": "credit balance too low"}
 
     with pytest.raises(RuntimeError, match="credit balance"):

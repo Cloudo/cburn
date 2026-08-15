@@ -257,6 +257,16 @@ export function LimitWindow({ limits, now }: { limits: Limits; now: string }) {
 
 const PLAN_LABELS: Record<string, string> = { max: "Max", pro: "Pro", team: "Team" };
 
+/** The window caption: the server sends the kind, the words come from the dictionary. */
+function limitLabel(
+  t: (key: string, vars?: Record<string, string | number>) => string,
+  kind: string,
+  model: string | null,
+): string {
+  const window = t(`limit.${kind}`);
+  return model ? t("limit.scoped", { window, model }) : window;
+}
+
 /** Subscription limits - the same percentages `/usage` shows in Claude Code. */
 export function PlanLimits({ plan }: { plan: Plan }) {
   const { lang, t } = useLang();
@@ -280,9 +290,9 @@ export function PlanLimits({ plan }: { plan: Plan }) {
 
       <ul className="plan-limits">
         {plan.limits.map((limit) => (
-          <li key={limit.kind + limit.label} className={limit.is_active ? "plan-active" : ""}>
+          <li key={limit.kind + (limit.model ?? "")} className={limit.is_active ? "plan-active" : ""}>
             <div className="plan-head">
-              <span className="plan-label">{limit.label}</span>
+              <span className="plan-label">{limitLabel(t, limit.kind, limit.model)}</span>
               <span className={`plan-percent plan-${limit.severity ?? "normal"}`}>
                 {Math.round(limit.percent)}%
               </span>

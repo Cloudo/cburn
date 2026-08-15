@@ -149,7 +149,7 @@ def test_alerts_come_from_the_same_numbers_as_the_dashboard(conn: Any) -> None:
     assert [message.key for message in messages] == ["burn", "s1"]
     assert messages[0].severity == "crit"
     assert "120k" in messages[0].text
-    assert "пора /clear" in messages[1].text
+    assert "time to /clear" in messages[1].text
 
 
 def test_alert_is_not_repeated_within_cooldown(conn: Any) -> None:

@@ -50,8 +50,9 @@ def test_normalize_uses_limits_array() -> None:
     rows = _normalize(USAGE_RESPONSE)
     assert [row["kind"] for row in rows] == ["session", "weekly_all", "weekly_scoped"]
     assert rows[0]["percent"] == 48
-    # The model name reaches the caption - just like on the `/usage` screen.
-    assert rows[2]["label"] == "неделя, модель: Fable"
+    # The model travels as data: the caption around it is built by the frontend dictionary.
+    assert rows[2]["model"] == "Fable"
+    assert rows[0]["model"] is None
 
 
 def test_normalize_falls_back_to_window_fields() -> None:

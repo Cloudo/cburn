@@ -16,7 +16,7 @@ LOG="$HOME/.local/share/cburn/serve.log"
 [ -x "$CBURN" ] || { echo "no $CBURN - build the environment: pip install -e '.[dev]'" >&2; exit 1; }
 
 # The port comes from the config rather than being hardcoded: it is edited in config.toml.
-PORT="$("$CBURN" paths | awk '/^порт/ {print $NF}')"  # the CLI label is Russian
+PORT="$("$CBURN" paths | awk '/^port/ {print $NF}')"
 PORT="${PORT:-8799}"
 
 # SIGTERM, not KILL: the server must have time to close the watcher and the connections.

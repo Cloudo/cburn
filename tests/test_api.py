@@ -522,7 +522,7 @@ def test_close_of_finished_session_only_hides(
         result = api.post("/api/sessions/s1/close").json()
         assert result["stopped"] is False
         assert result["pid"] is None
-        assert "уже не запущен" in result["note"]
+        assert "the process is gone" in result["note"]
         assert api.get("/api/overview").json()["live_sessions"] == []
 
 
@@ -822,11 +822,13 @@ def test_config_rejects_broken_values(
         current = api.get("/api/config").json()["config"]
         current["thresholds"]["context_warn"] = 200_000  # yellow later than red
         current["telegram"]["daily_summary_at"] = "in the evening"
+        current["analyzer"]["language"] = "klingon"
         response = api.put("/api/config", json={"config": current})
 
     assert response.status_code == 400
     detail = response.json()["detail"]
-    assert "жёлтая зона" in detail and "daily_summary_at" in detail
+    assert "yellow zone" in detail and "daily_summary_at" in detail
+    assert "analyzer.language" in detail
     assert not config_path.exists()
 
 

@@ -1,8 +1,18 @@
 // The only channel to the backend: HTTP and WebSocket on localhost. The frontend has no
 // direct filesystem access - otherwise the Tauri wrapper in M5 would have demanded
 // a rewrite (see CLAUDE.md, the invariants).
+//
+// Failures are thrown as dictionary keys rather than as ready phrases: the screen that
+// catches them knows the language, and this module does not.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+
+import { detect, translate } from "./dict";
+
+/** A failure message: the key is translated at the moment it is thrown. */
+function fail(key: string, status: number): string {
+  return translate(detect(), key, { status });
+}
 
 export type Usage = {
   turns: number;
@@ -56,14 +66,14 @@ export type CloseResult = {
 /** Close a session: terminate its process and remove it from the dashboard. */
 export async function closeSession(id: string): Promise<CloseResult> {
   const response = await fetch(`api/sessions/${encodeURIComponent(id)}/close`, { method: "POST" });
-  if (!response.ok) throw new Error(`не удалось закрыть сессию: ${response.status}`);
+  if (!response.ok) throw new Error(fail("error.sessionClose", response.status));
   return response.json();
 }
 
 /** Remove a session from the dashboard without touching the process. */
 export async function hideSession(id: string): Promise<void> {
   const response = await fetch(`api/sessions/${encodeURIComponent(id)}/hide`, { method: "POST" });
-  if (!response.ok) throw new Error(`не удалось убрать сессию: ${response.status}`);
+  if (!response.ok) throw new Error(fail("error.sessionHide", response.status));
 }
 
 export type Turn = {
@@ -111,7 +121,7 @@ export type Limits = {
 
 export type PlanLimit = {
   kind: string;
-  label: string;
+  model: string | null;
   percent: number;
   resets_at: string | null;
   severity: string | null;
@@ -233,7 +243,7 @@ export type Overview = {
 /** Ask for the subscription limits at once: the overview caches them for five minutes. */
 export async function refreshPlan(): Promise<void> {
   const response = await fetch("api/plan/refresh", { method: "POST" });
-  if (!response.ok) throw new Error(`не удалось обновить лимиты: ${response.status}`);
+  if (!response.ok) throw new Error(fail("error.limitsRefresh", response.status));
 }
 
 export type Connection = "connecting" | "live" | "offline";
@@ -409,6 +419,8 @@ export type Config = {
     model: string;
     weekly_deep_model: string;
     allow_snippets: boolean;
+    /** May be missing: the server is older than this frontend. */
+    language?: string;
   };
   /** May be missing: the server is older than this frontend. */
   otel?: { enabled: boolean; keep_days: number };
@@ -426,7 +438,7 @@ export type Config = {
 /** Settings exactly as they sit in the file (the "Settings" screen, task C3). */
 export async function loadConfig(): Promise<{ config: Config; path: string }> {
   const response = await fetch("api/config");
-  if (!response.ok) throw new Error(`не удалось прочитать настройки: ${response.status}`);
+  if (!response.ok) throw new Error(fail("error.configRead", response.status));
   return response.json();
 }
 
@@ -439,7 +451,7 @@ export async function saveConfig(config: Config): Promise<{ config: Config }> {
     body: JSON.stringify({ config }),
   });
   const payload = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(payload?.detail ?? `ошибка ${response.status}`);
+  if (!response.ok) throw new Error(payload?.detail ?? fail("error.request", response.status));
   return payload;
 }
 
@@ -497,7 +509,7 @@ export function useAdvice(): {
 
 export async function setAdviceStatus(id: number, status: AdviceItem["status"]): Promise<void> {
   const response = await fetch(`api/advice/items/${id}?status=${status}`, { method: "POST" });
-  if (!response.ok) throw new Error(`не удалось сохранить статус: ${response.status}`);
+  if (!response.ok) throw new Error(fail("error.adviceStatus", response.status));
 }
 
 /** Analyse the period now. It costs money - called from the button only. */
@@ -506,7 +518,7 @@ export async function runAdvice(
 ): Promise<{ cost_usd: number; advice: AdviceItem[] }> {
   const response = await fetch(`api/advice/run?period=${period}`, { method: "POST" });
   const payload = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(payload?.detail ?? `ошибка ${response.status}`);
+  if (!response.ok) throw new Error(payload?.detail ?? fail("error.request", response.status));
   return payload;
 }
 
@@ -554,7 +566,7 @@ export function useOverview(): OverviewFeed {
   // but with a broken socket this is the only way to see fresh numbers.
   const refresh = useCallback(async () => {
     const response = await fetch("api/overview");
-    if (!response.ok) throw new Error(`не удалось обновить обзор: ${response.status}`);
+    if (!response.ok) throw new Error(fail("error.overviewRefresh", response.status));
     setData(await response.json());
     setUpdatedAt(Date.now());
   }, []);

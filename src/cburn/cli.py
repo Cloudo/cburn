@@ -36,67 +36,65 @@ from .metrics import (
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="cburn", description="Спидометр Claude")
+    parser = argparse.ArgumentParser(prog="cburn", description="The Claude speedometer")
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("paths", help="показать пути конфига, БД и транскриптов")
-    sub.add_parser("initdb", help="создать БД и применить схему")
-    stats = sub.add_parser("stats", help="сводка расхода за период")
+    sub.add_parser("paths", help="show the config, database and transcript paths")
+    sub.add_parser("initdb", help="create the database and apply the schema")
+    stats = sub.add_parser("stats", help="the spend summary for a period")
     _add_filters(stats)
-    sessions = sub.add_parser("sessions", help="список сессий")
-    sessions.add_argument("-n", "--limit", type=int, default=20, help="сколько показать")
+    sessions = sub.add_parser("sessions", help="the session list")
+    sessions.add_argument("-n", "--limit", type=int, default=20, help="how many to show")
     # The list is already bounded by -n, so by default it covers the whole history.
     _add_filters(sessions, period="all")
-    session = sub.add_parser("session", help="детали одной сессии")
-    session.add_argument("session_id", help="полный id или его начало")
-    reindex = sub.add_parser("reindex", help="дочитать транскрипты в БД")
+    session = sub.add_parser("session", help="the details of one session")
+    session.add_argument("session_id", help="the full id or its beginning")
+    reindex = sub.add_parser("reindex", help="read the transcripts into the database")
     reindex.add_argument(
-        "--full", action="store_true", help="перечитать файлы целиком, а не только хвосты"
+        "--full", action="store_true", help="re-read the files whole, not only the tails"
     )
-    reindex.add_argument(
-        "--project", help="только транскрипты этого проекта (часть имени или пути)"
-    )
-    digest_cmd = sub.add_parser("digest", help="выжимка периода для советчика (JSON)")
+    reindex.add_argument("--project", help="only this project's transcripts (name or path part)")
+    digest_cmd = sub.add_parser("digest", help="the period digest for the advisor (JSON)")
     _add_filters(digest_cmd, period="24h")
-    digest_cmd.add_argument("--out", metavar="ФАЙЛ", help="записать в файл вместо вывода")
-    advise = sub.add_parser("advise", help="разобрать период советчиком (claude -p)")
+    digest_cmd.add_argument("--out", metavar="FILE", help="write into a file instead of stdout")
+    advise = sub.add_parser("advise", help="analyse the period with the advisor (claude -p)")
     _add_filters(advise, period="24h")
-    advise.add_argument("--model", default=None, help="алиас модели (по умолчанию из конфига)")
+    advise.add_argument("--model", default=None, help="model alias (from the config by default)")
     advise.add_argument(
-        "--dry-run", action="store_true", help="показать дайджест и команду, не вызывая модель"
+        "--dry-run", action="store_true", help="show the digest and the command, skip the model"
     )
-    events = sub.add_parser("events", help="незнакомые типы записей транскрипта")
-    events.add_argument("--show", metavar="ТИП", help="показать сохранённые примеры записи")
-    prices = sub.add_parser("prices", help="применить цены из конфига и пересчитать стоимость")
+    events = sub.add_parser("events", help="unknown transcript record types")
+    events.add_argument("--show", metavar="TYPE", help="show the stored samples of a record")
+    prices = sub.add_parser("prices", help="apply the config prices and recompute the cost")
     prices.add_argument(
-        "--init", action="store_true", help="записать в конфиг заготовку тарифов, если их нет"
+        "--init", action="store_true", help="write a rate template into the config if absent"
     )
-    install = sub.add_parser("install", help="автозапуск дашборда при логине (launchd)")
-    install.add_argument("--port", type=int, help="порт (по умолчанию из конфига)")
-    sub.add_parser("uninstall", help="убрать автозапуск")
-    sub.add_parser("status", help="что launchd думает про агент автозапуска")
-    otel = sub.add_parser("otel", help="телеметрия Claude Code: что дошло и как включить")
-    otel.add_argument("--env", action="store_true", help="строки export для профиля шелла")
+    install = sub.add_parser("install", help="autostart the dashboard at login (launchd)")
+    install.add_argument("--port", type=int, help="port (from the config by default)")
+    sub.add_parser("uninstall", help="remove the autostart")
+    sub.add_parser("status", help="what launchd thinks about the autostart agent")
+    otel = sub.add_parser("otel", help="Claude Code telemetry: what arrived and how to enable")
+    otel.add_argument("--env", action="store_true", help="export lines for the shell profile")
     otel.add_argument(
-        "--settings", action="store_true", help="фрагмент env для ~/.claude/settings.json"
+        "--settings", action="store_true", help="an env snippet for ~/.claude/settings.json"
     )
-    otel.add_argument("--port", type=int, help="порт дашборда (по умолчанию из конфига)")
-    otel.add_argument("--prune", action="store_true", help="убрать данные старше otel.keep_days")
-    serve = sub.add_parser("serve", help="запустить API-сервер и дашборд")
-    serve.add_argument("--port", type=int, help="порт (по умолчанию из конфига)")
-    serve.add_argument("--host", default="127.0.0.1", help="только localhost, TZ §7")
-    serve.add_argument("--reload", action="store_true", help="перезапуск при правках кода")
+    otel.add_argument("--port", type=int, help="dashboard port (from the config by default)")
+    otel.add_argument("--prune", action="store_true", help="remove data older than otel.keep_days")
+    serve = sub.add_parser("serve", help="start the API server and the dashboard")
+    serve.add_argument("--port", type=int, help="port (from the config by default)")
+    serve.add_argument("--host", default="127.0.0.1", help="localhost only, TZ §7")
+    serve.add_argument("--reload", action="store_true", help="restart on code edits")
     return parser
 
 
 def _add_filters(parser: argparse.ArgumentParser, *, period: str = "7d") -> None:
     """Shared filters: project as a path substring, period as `today`, `24h`, `7d`, `all`."""
-    parser.add_argument("--project", help="часть имени или пути проекта, например cburn")
+    parser.add_argument("--project", help="part of the project name or path, for example cburn")
     parser.add_argument(
         "--period",
         default=period,
-        help=f"today | 24h | 7d | 30d | all | дата (по умолчанию {period})",
+        help=f"today | 24h | 7d | 30d | all | date (default {period})",
     )
 
 
@@ -106,7 +104,7 @@ def _since(period: str) -> datetime | None:
         return period_start(period)
     except ValueError as exc:
         raise SystemExit(
-            f"не разобран период «{period}»: ждём today, 24h, 7d, all или дату"
+            f"period {period!r} not parsed: expected today, 24h, 7d, all or a date"
         ) from exc
 
 
@@ -115,10 +113,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "paths":
         cfg = config.load()
-        print(f"транскрипты : {paths.CLAUDE_PROJECTS_DIR} (read-only)")
-        print(f"конфиг      : {paths.CONFIG_PATH}")
-        print(f"БД          : {paths.DB_PATH}")
-        print(f"порт        : {cfg['server']['port']}")
+        print(f"transcripts : {paths.CLAUDE_PROJECTS_DIR} (read-only)")
+        print(f"config      : {paths.CONFIG_PATH}")
+        print(f"database    : {paths.DB_PATH}")
+        print(f"port        : {cfg['server']['port']}")
         return 0
 
     if args.command == "initdb":
@@ -174,7 +172,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "serve":
         return _serve(args.host, args.port, args.reload)
 
-    print(f"неизвестная команда `{args.command}`", file=sys.stderr)
+    print(f"unknown command `{args.command}`", file=sys.stderr)
     return 2
 
 
@@ -217,30 +215,30 @@ def _otel(show_env: bool, show_settings: bool, port: int | None, prune: bool = F
     with connect() as conn:
         if prune:
             removed = otlp.prune(conn, keep_days)
-            print(f"убрано: метрик {removed['metrics']}, событий {removed['events']}")
+            print(f"removed: metrics {removed['metrics']}, events {removed['events']}")
         state = otlp.status(conn)
     print(
-        f"приёмник : http://127.0.0.1:{bind_port}/otlp (в конфиге: "
-        f"{'включён' if settings['enabled'] else 'выключен'})"
+        f"receiver : http://127.0.0.1:{bind_port}/otlp (in the config: "
+        f"{'on' if settings['enabled'] else 'off'})"
     )
     if not state["signals"]:
-        print("посылок не было — телеметрия в Claude Code ещё не включена")
+        print("no payloads arrived - telemetry is not switched on in Claude Code yet")
     for signal, row in state["signals"].items():
         print(
-            f"{signal:8}: посылок {row['batches']}, записей {row['stored']}, "
-            f"потеряно {row['dropped']}, последняя {row['last_at']}"
+            f"{signal:8}: payloads {row['batches']}, records {row['stored']}, "
+            f"lost {row['dropped']}, last {row['last_at']}"
         )
     # Payloads arrive but no records appear - almost always that is a foreign encoding:
     # the receiver reads only `http/json`, and `http/protobuf` cannot be parsed here.
     if state["signals"] and not any(row["stored"] for row in state["signals"].values()):
         print(
-            "посылки приходят, но не разобраны — проверьте"
+            "payloads arrive but are not parsed - check"
             " OTEL_EXPORTER_OTLP_PROTOCOL=http/json (`cburn otel --env`)"
         )
     for row in state["metrics"]:
-        print(f"  {row['name']:34} точек {row['points']:6}  сумма {row['total']:,.2f}")
+        print(f"  {row['name']:34} points {row['points']:6}  total {row['total']:,.2f}")
     for row in state["events"]:
-        print(f"  событие {row['name']:26} {row['records']:6}")
+        print(f"  event {row['name']:28} {row['records']:6}")
     if state["signals"]:
         with connect() as conn:
             counts = otel_sessions(conn, datetime.now(UTC) - timedelta(days=1))
@@ -248,22 +246,22 @@ def _otel(show_env: bool, show_settings: bool, port: int | None, prune: bool = F
             f"{row['start_type']} {int(row['sessions'])}" for row in counts["starts"]
         )
         print(
-            f"сессии за сутки: {counts['telemetry']} по телеметрии,"
-            f" {counts['transcripts']} по транскриптам" + (f" ({starts})" if starts else "")
+            f"sessions over a day: {counts['telemetry']} by telemetry,"
+            f" {counts['transcripts']} by transcripts" + (f" ({starts})" if starts else "")
         )
     stored = state["stored"]
     if stored["rows"]:
-        keep = f"хранится {keep_days} суток" if keep_days else "хранится всё"
+        keep = f"kept for {keep_days} days" if keep_days else "kept forever"
         print(
-            f"накоплено: {_thousands(stored['rows'])} строк, "
-            f"{stored['bytes'] / 1024:,.0f} КБ атрибутов, с {stored['oldest']} ({keep})"
+            f"accumulated: {_thousands(stored['rows'])} rows, "
+            f"{stored['bytes'] / 1024:,.0f} KB of attributes, since {stored['oldest']} ({keep})"
         )
     if not state["signals"]:
         print()
-        print("включить (в профиль шелла или в env-секцию ~/.claude/settings.json):")
-        print("  cburn otel --env        # строки export")
-        print("  cburn otel --settings   # фрагмент для settings.json")
-        print("после правки Claude Code надо перезапустить — окружение читается на старте")
+        print("to switch on (in the shell profile or the env section of ~/.claude/settings.json):")
+        print("  cburn otel --env        # export lines")
+        print("  cburn otel --settings   # a snippet for settings.json")
+        print("after the edit Claude Code has to be restarted - it reads the environment at start")
     return 0
 
 
@@ -275,7 +273,7 @@ def _serve(host: str, port: int | None, reload: bool) -> int:
 
     cfg = config.load()
     bind_port = port or int(cfg["server"]["port"])
-    print(f"cburn: http://{host}:{bind_port}  (Ctrl+C — остановить)")
+    print(f"cburn: http://{host}:{bind_port}  (Ctrl+C to stop)")
     uvicorn.run(
         "cburn.api.server:create_app" if reload else create_app(),
         host=host,
@@ -306,7 +304,7 @@ def _reindex(full: bool = False, project: str | None = None) -> int:
     started = time.monotonic()
     roots = _project_dirs(project)
     if not roots:
-        print(f"проект «{project}» не найден в {paths.CLAUDE_PROJECTS_DIR}", file=sys.stderr)
+        print(f"project {project!r} not found in {paths.CLAUDE_PROJECTS_DIR}", file=sys.stderr)
         return 1
     with connect() as conn:
         pricing.sync_prices(conn, config.load())
@@ -323,8 +321,8 @@ def _reindex(full: bool = False, project: str | None = None) -> int:
     turns = sum(result.turns_new for result in results)
     known = sum(result.turns_known for result in results)
     elapsed = time.monotonic() - started
-    print(f"файлов: {len(results)}, прочитано строк: {_thousands(lines)}, за {elapsed:.1f} с")
-    print(f"новых ходов: {_thousands(turns)}, уже известных: {_thousands(known)}")
+    print(f"files: {len(results)}, lines read: {_thousands(lines)}, in {elapsed:.1f} s")
+    print(f"new turns: {_thousands(turns)}, already known: {_thousands(known)}")
     return 0
 
 
@@ -347,33 +345,34 @@ def _advise(project: str | None, period: str, model: str | None, dry_run: bool) 
     """Run the digest through the advisor (task D2)."""
     cfg = config.load()
     chosen = model or cfg["analyzer"]["model"]
+    language = str(cfg["analyzer"].get("language") or "en")
     since = _since(period) or datetime.fromtimestamp(0, UTC)
     with connect() as conn:
         payload = digest.build(conn, since, config=cfg, project=project)
         if dry_run:
-            print(" ".join(advisor.build_command(chosen)))
-            print(f"дайджест: ~{payload['size']['tokens_approx']} токенов")
+            print(" ".join(advisor.build_command(chosen, language=language)))
+            print(f"digest: ~{payload['size']['tokens_approx']} tokens")
             return 0
         if not payload["usage"]["turns"]:
-            print("за период ходов нет — советовать не о чем", file=sys.stderr)
+            print("no turns in the period - nothing to advise about", file=sys.stderr)
             return 1
         try:
-            result = advisor.advise(conn, payload, model=chosen)
+            result = advisor.advise(conn, payload, model=chosen, language=language)
         except (RuntimeError, OSError) as exc:
-            print(f"советчик не отработал: {exc}", file=sys.stderr)
+            print(f"the advisor failed: {exc}", file=sys.stderr)
             return 1
 
-    print(f"модель {result['model']}, такт стоил {_usd(result['cost_usd'])}")
+    print(f"model {result['model']}, the tick cost {_usd(result['cost_usd'])}")
     if not result["advice"]:
-        print("советов нет — либо всё ровно, либо совет не подкрепился цифрами")
+        print("no tips - either all is well or no tip was backed by numbers")
         return 0
     for item in result["advice"]:
         print(f"\n[{item['severity']}] {item['title']}")
         if item["detail"]:
             print(f"  {item['detail']}")
         if item["action"]:
-            print(f"  что сделать: {item['action']}")
-        print(f"  на основании: {item['evidence']}")
+            print(f"  what to do: {item['action']}")
+        print(f"  based on: {item['evidence']}")
     return 0
 
 
@@ -386,7 +385,7 @@ def _digest(project: str | None, period: str, out: str | None) -> int:
     if out:
         Path(out).write_text(text, encoding="utf-8")
         size = payload["size"]
-        print(f"дайджест записан в {out}: ~{size['tokens_approx']} токенов из {size['limit']}")
+        print(f"digest written to {out}: ~{size['tokens_approx']} tokens out of {size['limit']}")
     else:
         print(text)
     return 0 if payload["size"]["within_limit"] else 1
@@ -401,25 +400,25 @@ def _events(show: str | None) -> int:
                 (show,),
             ).fetchall()
             if not rows:
-                print(f"примеров записи «{show}» не сохранено", file=sys.stderr)
+                print(f"no samples of record {show!r} are stored", file=sys.stderr)
                 return 1
             for row in rows:
-                print(f"--- {row['ts'] or '—'}  версия {row['version'] or '—'}")
+                print(f"--- {row['ts'] or '-'}  version {row['version'] or '-'}")
                 print(row["payload"][:2000])
             return 0
         counts = conn.execute(
             "SELECT type, version, seen, first_at, last_at FROM raw_event_counts ORDER BY seen DESC"
         ).fetchall()
     if not counts:
-        print("незнакомых записей нет — выполните `cburn reindex`", file=sys.stderr)
+        print("no unknown records - run `cburn reindex`", file=sys.stderr)
         return 1
-    print("тип                       версия     сколько  впервые")
+    print("type                      version      count  first seen")
     for row in counts:
-        first = (row["first_at"] or "—")[:16].replace("T", " ")
+        first = (row["first_at"] or "-")[:16].replace("T", " ")
         print(
-            f"{row['type']:<25} {row['version'] or '—':<10} {_thousands(row['seen']):>8}  {first}"
+            f"{row['type']:<25} {row['version'] or '-':<10} {_thousands(row['seen']):>8}  {first}"
         )
-    print("примеры: cburn events --show <тип>")
+    print("samples: cburn events --show <type>")
     return 0
 
 
@@ -429,16 +428,16 @@ def _prices(init: bool) -> int:
     if init and not cfg["prices"]:
         cfg["prices"] = pricing.sample_prices()
         config.save(cfg)
-        print(f"заготовка тарифов записана в {paths.CONFIG_PATH} — проверьте цены")
+        print(f"a rate template was written to {paths.CONFIG_PATH} - check the prices")
     with connect() as conn:
         models = pricing.recalculate(conn, cfg)
         rows = pricing.known_prices(conn)
         unknown = pricing.unknown_models(conn)
         total = conn.execute("SELECT COALESCE(SUM(cost_usd), 0) FROM turns").fetchone()[0]
     if not models:
-        print("цен нет: заполните секцию [prices] в конфиге или запустите `cburn prices --init`")
+        print("no prices: fill the [prices] config section or run `cburn prices --init`")
         return 1
-    print("модель                вход   выход   кэш 5m   кэш 1h   чтение  (за млн токенов)")
+    print("model                  input  output  cache 5m  cache 1h    read  (per Mtok)")
     for row in rows:
         print(
             f"{row['model']:<20} {row['in_per_mtok']:>6.2f} {row['out_per_mtok']:>7.2f}"
@@ -446,8 +445,8 @@ def _prices(init: bool) -> int:
             f" {row['cache_read_per_mtok']:>8.2f}"
         )
     for row in unknown:
-        print(f"без цены: {row['model']} ({_thousands(row['turns'])} ходов, считается нулём)")
-    print(f"вся история: {_usd(total)}")
+        print(f"no price: {row['model']} ({_thousands(row['turns'])} turns, counted as zero)")
+    print(f"whole history: {_usd(total)}")
     return 0
 
 
@@ -464,44 +463,44 @@ def _stats(project: str | None, period: str) -> int:
         off_transcript = otel_usage(conn, since, project=project)
         permissions = otel_permissions(conn, since, project=project)
     if not usage["turns"]:
-        print("за период ходов нет", file=sys.stderr)
+        print("no turns in the period", file=sys.stderr)
         return 1
 
-    where = f", проект ~ {project}" if project else ""
-    print(f"период       : {period}{where}")
-    print(f"ходов        : {_thousands(usage['turns'])} в {usage['sessions']} сессиях")
-    print(f"вход         : {_thousands(usage['input_tokens'])}")
-    print(f"выход        : {_thousands(usage['output_tokens'])}")
-    print(f"кэш чтение   : {_thousands(usage['cache_read'])}")
+    where = f", project ~ {project}" if project else ""
+    print(f"period       : {period}{where}")
+    print(f"turns        : {_thousands(usage['turns'])} in {usage['sessions']} sessions")
+    print(f"input        : {_thousands(usage['input_tokens'])}")
+    print(f"output       : {_thousands(usage['output_tokens'])}")
+    print(f"cache read   : {_thousands(usage['cache_read'])}")
     print(
-        f"кэш запись   : {_thousands(usage['cache_write'])}"
+        f"cache write  : {_thousands(usage['cache_write'])}"
         f" (5m {_thousands(usage['cache_write_5m'])},"
         f" 1h {_thousands(usage['cache_write_1h'])})"
     )
-    print(f"стоимость    : {_usd(usage['cost_usd'])}")
+    print(f"cost         : {_usd(usage['cost_usd'])}")
     if models:
         parts = [f"{_model_label(row['model'])} {row['turns']}" for row in models]
-        print(f"модели       : {', '.join(parts)}")
+        print(f"models       : {', '.join(parts)}")
     if profile["tools"]:
         parts = [f"{_tool_label(row['tool'])} {row['calls']}" for row in profile["tools"][:6]]
-        print(f"инструменты  : {', '.join(parts)} (всего {profile['tools_total']})")
+        print(f"tools        : {', '.join(parts)} (total {profile['tools_total']})")
     if profile["bash_commands"]:
         parts = [f"{row['command']} {row['calls']}" for row in profile["bash_commands"][:5]]
-        print(f"внутри Bash  : {', '.join(parts)}")
+        print(f"inside Bash  : {', '.join(parts)}")
     print(
-        f"холостые     : {idle['turns']} ходов ({idle['share'] * 100:.0f}%),"
-        f" прочитано из кэша {_thousands(idle['cache_read'])}"
+        f"idle         : {idle['turns']} turns ({idle['share'] * 100:.0f}%),"
+        f" read from cache {_thousands(idle['cache_read'])}"
     )
     if off_transcript["tokens"]:
         print(
-            f"мимо истории : {_thousands(int(off_transcript['tokens']))} токенов,"
+            f"off history  : {_thousands(int(off_transcript['tokens']))} tokens,"
             f" {_usd(off_transcript['cost_usd'])}"
-            f" ({off_transcript['share'] * 100:.1f}% расхода) — служебные запросы"
+            f" ({off_transcript['share'] * 100:.1f}% of spend) - service requests"
         )
     if permissions["decisions"]:
         print(
-            f"разрешения   : {permissions['manual']} подтверждено руками,"
-            f" {permissions['auto']} автоматически"
+            f"permissions  : {permissions['manual']} confirmed by hand,"
+            f" {permissions['auto']} automatically"
         )
     return 0
 
@@ -528,16 +527,16 @@ def _sessions(limit: int, project: str | None = None, period: str = "all") -> in
     with connect() as conn:
         rows = recent_sessions(conn, limit, project=project, since=_since(period))
     if not rows:
-        print("сессий нет — выполните `cburn reindex`", file=sys.stderr)
+        print("no sessions - run `cburn reindex`", file=sys.stderr)
         return 1
     for row in rows:
-        prompt = (row["first_prompt"] or "—").replace("\n", " ")[:48]
+        prompt = (row["first_prompt"] or "-").replace("\n", " ")[:48]
         last_at = (row["last_at"] or "")[:16].replace("T", " ")
         print(
-            f"{row['id'][:8]}  {last_at}  ходов {row['turns']:>5}"
-            f"  выход {_thousands(row['tokens_out']):>10}"
-            f"  контекст {_thousands(row['last_context']):>9}"
-            f"  {row['project'] or '—'}  {prompt}"
+            f"{row['id'][:8]}  {last_at}  turns {row['turns']:>5}"
+            f"  output {_thousands(row['tokens_out']):>10}"
+            f"  context {_thousands(row['last_context']):>9}"
+            f"  {row['project'] or '-'}  {prompt}"
         )
     return 0
 
@@ -553,7 +552,7 @@ def _resolve_session_id(conn: object, prefix: str) -> str | None:
         return str(rows[0]["id"])
     if not rows:
         return None
-    print(f"под «{prefix}» подходит {len(rows)} сессий, уточните:", file=sys.stderr)
+    print(f"{prefix!r} matches {len(rows)} sessions, be more specific:", file=sys.stderr)
     for row in rows[:10]:
         print(f"  {row['id']}", file=sys.stderr)
     return None
@@ -563,7 +562,7 @@ def _session(prefix: str) -> int:
     with connect() as conn:
         session_id = _resolve_session_id(conn, prefix)
         if session_id is None:
-            print(f"сессия «{prefix}» не найдена", file=sys.stderr)
+            print(f"session {prefix!r} not found", file=sys.stderr)
             return 1
         summary = session_summary(conn, session_id)
         models = session_models(conn, session_id)
@@ -572,44 +571,44 @@ def _session(prefix: str) -> int:
     if summary is None:
         return 1
 
-    period = f"{(summary.started_at or '')[:19]} → {(summary.last_at or '')[:19]}"
-    print(f"сессия       : {summary.session_id}")
-    print(f"проект       : {summary.project or '—'} ({summary.root_path or '—'})")
-    print(f"период       : {period.replace('T', ' ')}")
-    print(f"первый промпт: {(summary.first_prompt or '—')[:70]}")
-    print(f"ходов        : {summary.turns}")
+    period = f"{(summary.started_at or '')[:19]} - {(summary.last_at or '')[:19]}"
+    print(f"session      : {summary.session_id}")
+    print(f"project      : {summary.project or '-'} ({summary.root_path or '-'})")
+    print(f"period       : {period.replace('T', ' ')}")
+    print(f"first prompt : {(summary.first_prompt or '-')[:70]}")
+    print(f"turns        : {summary.turns}")
     if summary.sidechain_turns:
         print(
-            f"сабагенты    : ходов {summary.sidechain_turns},"
-            f" токенов {_thousands(summary.sidechain_tokens)},"
+            f"subagents    : turns {summary.sidechain_turns},"
+            f" tokens {_thousands(summary.sidechain_tokens)},"
             f" {_usd(summary.sidechain_cost_usd)}"
         )
-    print(f"вход         : {_thousands(summary.input_tokens)}")
-    print(f"выход        : {_thousands(summary.output_tokens)}")
-    print(f"кэш чтение   : {_thousands(summary.cache_read)}")
+    print(f"input        : {_thousands(summary.input_tokens)}")
+    print(f"output       : {_thousands(summary.output_tokens)}")
+    print(f"cache read   : {_thousands(summary.cache_read)}")
     print(
-        f"кэш запись   : {_thousands(summary.cache_write)}"
+        f"cache write  : {_thousands(summary.cache_write)}"
         f" (5m {_thousands(summary.cache_write_5m)}, 1h {_thousands(summary.cache_write_1h)})"
     )
-    print(f"стоимость    : {_usd(summary.cost_usd)}")
-    print(f"контекст     : {_thousands(summary.last_context)} на последнем ходе")
+    print(f"cost         : {_usd(summary.cost_usd)}")
+    print(f"context      : {_thousands(summary.last_context)} on the last turn")
     if summary.parent_session_id:
-        print(f"продолжает   : {summary.parent_session_id[:8]}")
+        print(f"continues    : {summary.parent_session_id[:8]}")
     if len(chain["sessions"]) > 1:
         print(
-            f"линия работы : сессий {len(chain['sessions'])},"
-            f" ходов {_thousands(chain['turns'])},"
+            f"work line    : sessions {len(chain['sessions'])},"
+            f" turns {_thousands(chain['turns'])},"
             f" {_usd(chain['cost_usd'])}"
         )
     if models:
         parts = [
-            f"{_model_label(model)} {turns} ходов / {_thousands(out)}"
+            f"{_model_label(model)} {turns} turns / {_thousands(out)}"
             for model, turns, out in models
         ]
-        print(f"модели       : {'; '.join(parts)}")
+        print(f"models       : {'; '.join(parts)}")
     if tools:
         parts = [f"{_tool_label(tool)} {calls}" for tool, calls in tools]
-        print(f"инструменты  : {', '.join(parts)}")
+        print(f"tools        : {', '.join(parts)}")
     return 0
 
 

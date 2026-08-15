@@ -1,13 +1,13 @@
 ---
 name: commit
-description: Commit the current changes with a Conventional Commits message written in Russian. Use it when asked to make a commit, record changes or suggest a commit message.
+description: Commit the current changes with a Conventional Commits message. Use it when asked to make a commit, record changes or suggest a commit message.
 ---
 
 # Commits by Conventional Commits
 
-Messages follow [conventionalcommits.org](https://www.conventionalcommits.org), but the
-**description is written in Russian**. Only the type, the scope and the service words
-(`BREAKING CHANGE`) stay English.
+Messages follow [conventionalcommits.org](https://www.conventionalcommits.org) and are
+written **in English**: the repository - code, comments, documentation and the whole
+rewritten history - is English, and the commit log must not be the exception.
 
 ## Format
 
@@ -20,8 +20,8 @@ Messages follow [conventionalcommits.org](https://www.conventionalcommits.org), 
 ```
 
 - the header is <= 72 characters, without a full stop at the end;
-- the description is imperative and present tense: "добавить", "починить", "убрать",
-  not "добавил" / "добавлено";
+- the description is imperative and present tense: "add", "fix", "remove",
+  not "added" / "fixed";
 - the body appears only when it explains **why**; retelling the diff is not needed;
 - the body is written in **theses**: one or two lines or short bullet points.
   Not paragraphs of prose, not a story of how the work went, not "it used to be like
@@ -54,32 +54,32 @@ capability (`admin`) rather than the layers.
 ## Examples
 
 ```
-feat(admin): добавить режим «Смотреть как» для проверки прав
-fix(sync): ссылаться на worklogs через алиас Bun в ON CONFLICT
-refactor(team): убрать выбор сотрудников — сетка показывает всех доступных
-docs(deploy): описать развёртывание на Synology через Gitea Actions
-ci: не монтировать docker.sock повторно в job-контейнере
-test(api): покрыть скоуп видимости для трёх ролей
-build(backend): обновить golang до 1.25
+feat(admin): add a "view as" mode for checking permissions
+fix(sync): reference worklogs through the Bun alias in ON CONFLICT
+refactor(team): drop the employee picker - the grid shows everyone available
+docs(deploy): describe the Synology deployment through Gitea Actions
+ci: stop mounting docker.sock twice in the job container
+test(api): cover the visibility scope for three roles
+build(backend): update golang to 1.25
 ```
 
 With a body and a breaking change:
 
 ```
-feat(auth)!: перевести сессии с JWT на серверные
+feat(auth)!: move sessions from JWT to server-side ones
 
-JWT нельзя отозвать, а админу нужны «когда заходил» и сброс сессий.
+A JWT cannot be revoked, and the admin needs "last seen" and a session reset.
 
-BREAKING CHANGE: все текущие сессии инвалидируются, потребуется повторный вход
+BREAKING CHANGE: every current session is invalidated, a new login is required
 ```
 
 In theses, when there are several reasons:
 
 ```
-fix(sync): не терять worklogs при повторной выгрузке
+fix(sync): stop losing worklogs on a repeated export
 
-- ON CONFLICT смотрел на id, а он меняется при пересоздании
-- ключ уникальности — пара (issue, started_at)
+- ON CONFLICT looked at the id, and it changes on recreation
+- the uniqueness key is the (issue, started_at) pair
 ```
 
 ## The working order
@@ -95,7 +95,7 @@ fix(sync): не терять worklogs при повторной выгрузке
 
 ```bash
 git commit -m "$(cat <<'EOF'
-feat(admin): добавить поиск людей в карточке проекта
+feat(admin): add people search to the project card
 EOF
 )"
 ```
@@ -106,7 +106,7 @@ Push only when asked separately.
 
 ## What not to do
 
-- do not write "обновление", "правки", "мелкие изменения" - such a header explains nothing;
+- do not write "update", "fixes", "minor changes" - such a header explains nothing;
 - do not use `chore` as a dumping ground when `fix` or `feat` fits;
 - do not mix functionality and a full-file reformat in one commit;
 - do not invent types outside the table above;

@@ -29,6 +29,9 @@ DEFAULTS: dict[str, Any] = {
         "model": "haiku",
         "weekly_deep_model": "sonnet",
         "allow_snippets": False,
+        # In which language the advisor answers. The prompt itself is English; the tips are
+        # read by a human, so the language of the answer is their choice.
+        "language": "en",
     },
     "telegram": {
         "mode": "bridge",
@@ -85,6 +88,10 @@ NUMERIC_LIMITS: dict[tuple[str, str], tuple[float, float]] = {
 }
 
 ANALYZER_MODELS = {"haiku", "sonnet", "opus"}
+
+#: Languages the advisor may answer in; the prompt itself is always English.
+ANALYZER_LANGUAGES = {"en", "ru"}
+
 TELEGRAM_MODES = {"bridge", "bot", "off"}
 
 #: Price columns: the same four parts of the spend as in `model_prices`.
@@ -99,43 +106,45 @@ def validate(config: dict[str, Any]) -> list[str]:
         if value is None:
             continue
         if not isinstance(value, int | float) or isinstance(value, bool):
-            errors.append(f"{section}.{key}: ждём число")
+            errors.append(f"{section}.{key}: expected a number")
         elif not low <= value <= high:
-            errors.append(f"{section}.{key}: ждём число от {low:g} до {high:g}")
+            errors.append(f"{section}.{key}: expected a number from {low:g} to {high:g}")
 
     thresholds = config.get("thresholds") or {}
     warn, crit = thresholds.get("context_warn"), thresholds.get("context_crit")
     if isinstance(warn, int | float) and isinstance(crit, int | float) and warn >= crit:
-        errors.append("thresholds: жёлтая зона должна начинаться раньше красной")
+        errors.append("thresholds: the yellow zone must start before the red one")
 
     analyzer = config.get("analyzer") or {}
     if analyzer.get("model") not in ANALYZER_MODELS | {None}:
-        errors.append(f"analyzer.model: ждём одно из {', '.join(sorted(ANALYZER_MODELS))}")
+        errors.append(f"analyzer.model: expected one of {', '.join(sorted(ANALYZER_MODELS))}")
     if analyzer.get("weekly_deep_model") not in ANALYZER_MODELS | {None}:
         errors.append(
-            "analyzer.weekly_deep_model: " + f"ждём одно из {', '.join(sorted(ANALYZER_MODELS))}"
+            "analyzer.weekly_deep_model: " + f"expected one of {', '.join(sorted(ANALYZER_MODELS))}"
         )
+    if analyzer.get("language") not in ANALYZER_LANGUAGES | {None}:
+        errors.append(f"analyzer.language: expected one of {', '.join(sorted(ANALYZER_LANGUAGES))}")
 
     telegram = config.get("telegram") or {}
     if telegram.get("mode") not in TELEGRAM_MODES | {None}:
-        errors.append(f"telegram.mode: ждём одно из {', '.join(sorted(TELEGRAM_MODES))}")
+        errors.append(f"telegram.mode: expected one of {', '.join(sorted(TELEGRAM_MODES))}")
     daily = telegram.get("daily_summary_at")
     if daily is not None and not _is_time(daily):
-        errors.append("telegram.daily_summary_at: ждём время вида 21:00")
+        errors.append("telegram.daily_summary_at: expected a time like 21:00")
 
     enabled = (config.get("otel") or {}).get("enabled")
     if enabled is not None and not isinstance(enabled, bool):
-        errors.append("otel.enabled: ждём true или false")
+        errors.append("otel.enabled: expected true or false")
 
     for model, price in (config.get("prices") or {}).items():
         if not isinstance(price, dict):
-            errors.append(f"prices.{model}: ждём таблицу с ценами")
+            errors.append(f"prices.{model}: expected a table of prices")
             continue
         for key, value in price.items():
             if key not in PRICE_KEYS:
-                errors.append(f"prices.{model}: незнакомая колонка {key}")
+                errors.append(f"prices.{model}: unknown column {key}")
             elif not isinstance(value, int | float) or isinstance(value, bool) or value < 0:
-                errors.append(f"prices.{model}.{key}: ждём неотрицательное число")
+                errors.append(f"prices.{model}.{key}: expected a non-negative number")
     return errors
 
 

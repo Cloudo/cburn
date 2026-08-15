@@ -246,7 +246,7 @@ def _permissions(
     """
     stats = metrics.otel_permissions(conn, since, until, project)
     if not stats["decisions"]:
-        return {"available": False, "note": "телеметрия OTel не включена — данных нет"}
+        return {"available": False, "note": "OTel telemetry is not switched on - there is no data"}
     return {"available": True, **stats}
 
 
@@ -272,7 +272,7 @@ def _off_transcript(
             hooks["seconds"],
         )
     ):
-        return {"available": False, "note": "телеметрия OTel не включена — данных нет"}
+        return {"available": False, "note": "OTel telemetry is not switched on - there is no data"}
     return {
         "available": True,
         "tokens": usage["tokens"],

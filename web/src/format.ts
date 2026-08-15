@@ -1,6 +1,8 @@
 // Numbers on the instrument are read on the run, so large ones are rounded to three
 // significant digits, and the exact values stay in the captions.
 
+import { translate } from "./dict";
+
 const SPACE = " "; // a thin space: 2 439 123 does not sprawl in a monospace font
 
 //: The formatting language. Numbers and dates are drawn outside React, so the language
@@ -13,9 +15,9 @@ export function setFormatLang(next: "ru" | "en"): void {
   locale = next === "ru" ? "ru-RU" : "en-US";
 }
 
-/** A word in the current language - for short units inside a format. */
-function word(ru: string, en: string): string {
-  return lang === "ru" ? ru : en;
+/** A word from the dictionary - for short units inside a format. */
+function word(key: string): string {
+  return translate(lang, key);
 }
 
 export function grouped(value: number): string {
@@ -34,9 +36,9 @@ export function compact(value: number): string {
 
 function trim(value: number): string {
   const digits = value >= 100 ? 0 : value >= 10 ? 1 : 2;
-  const text = value.toFixed(digits).replace(".", word(",", "."));
+  const text = value.toFixed(digits).replace(".", word("format.decimal"));
   // Trailing zeros are cut only in the fractional part: otherwise "100" would become "1".
-  const point = word(",", ".");
+  const point = word("format.decimal");
   return text.includes(point) ? text.replace(/[.,]?0+$/, "") : text;
 }
 
@@ -70,16 +72,16 @@ export function timestamp(iso: string | null): number | null {
 /** The tooltip on the mark in a widget header: when the last event happened
  *  and when the overview was last recomputed. */
 export function freshnessLabel(at: number | null, checkedAt: number, now: number): string {
-  const checked = `${word("пересчитано", "recomputed")} ${clockTime(checkedAt)}`;
-  if (at === null) return `${word("данных за период нет", "no data for the period")}, ${checked}`;
+  const checked = `${word("format.recomputed")} ${clockTime(checkedAt)}`;
+  if (at === null) return `${word("format.noData")}, ${checked}`;
   const ago = agoLabel(Math.max(now - at, 0) / 1000);
-  return `${word("последние данные", "last data")} ${clockTime(at)}, ${ago}; ${checked}`;
+  return `${word("format.lastData")} ${clockTime(at)}, ${ago}; ${checked}`;
 }
 
 export function agoLabel(seconds: number): string {
-  if (seconds < 5) return word("только что", "just now");
-  if (seconds < 60) return `${Math.round(seconds)} ${word("с назад", "s ago")}`;
-  return `${Math.round(seconds / 60)} ${word("мин назад", "min ago")}`;
+  if (seconds < 5) return word("format.justNow");
+  if (seconds < 60) return `${Math.round(seconds)} ${word("format.secondsAgo")}`;
+  return `${Math.round(seconds / 60)} ${word("format.minutesAgo")}`;
 }
 
 export function modelLabel(model: string | null): string {
@@ -93,11 +95,11 @@ export function duration(fromIso: string | null, toIso: string | null): string {
   if (!fromIso || !toIso) return "—";
   const ms = new Date(stamp(toIso)).getTime() - new Date(stamp(fromIso)).getTime();
   const minutes = Math.max(Math.round(ms / 60000), 0);
-  if (minutes < 60) return `${minutes} ${word("мин", "m")}`;
+  if (minutes < 60) return `${minutes} ${word("format.minutes")}`;
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
-  const h = `${hours} ${word("ч", "h")}`;
-  return rest ? `${h} ${rest} ${word("мин", "m")}` : h;
+  const h = `${hours} ${word("format.hours")}`;
+  return rest ? `${h} ${rest} ${word("format.minutes")}` : h;
 }
 
 /** A share in percent with tenths: "1.7", "12.0". The percent sign comes from the translation. */
@@ -115,21 +117,21 @@ export function spent(seconds: number): string {
       seconds < 10
         ? seconds.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
         : String(Math.round(seconds));
-    return `${value} ${word("с", "s")}`;
+    return `${value} ${word("format.seconds")}`;
   }
   const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes} ${word("мин", "m")}`;
+  if (minutes < 60) return `${minutes} ${word("format.minutes")}`;
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
-  const h = `${hours} ${word("ч", "h")}`;
-  return rest ? `${h} ${rest} ${word("мин", "m")}` : h;
+  const h = `${hours} ${word("format.hours")}`;
+  return rest ? `${h} ${rest} ${word("format.minutes")}` : h;
 }
 
 /** How long ago that was, counting from "now". */
 export function sinceLabel(iso: string | null): string {
   if (!iso) return "—";
   const seconds = (Date.now() - new Date(stamp(iso)).getTime()) / 1000;
-  if (seconds < 45) return word("только что", "just now");
+  if (seconds < 45) return word("format.justNow");
   return agoLabel(seconds);
 }
 

@@ -303,9 +303,15 @@ Claude Code 2.1.222 on 14 August 2026:
   otherwise a file name leaks into the database disguised as a subcommand.
 - Claude Code hooks are not used for collecting data - only the file watcher.
 - Commits follow Conventional Commits (the `conventional-commits` skill), with messages in
-  Russian.
-- Comments and docstrings are in English; the interface texts (the CLI output, the UI, the
-  notifications and the advisor prompt) stay in Russian.
+  English.
+- **Russian lives in exactly one file: `web/src/dict.ts`.** That is the interface dictionary,
+  where both languages sit as pairs and the reader picks one. Everything else - the code, the
+  comments, the CLI output, the HTTP answers, the telegram notifications, the tray menu and
+  the documentation - is English. The advisor prompt is English too, and the language of its
+  answers is a setting (`analyzer.language`), not a hardcoded phrase.
+- **Texts the frontend shows never come from the server.** The server sends data (a limit
+  window `kind`, a dictionary key for a failed request), and the words around it are built
+  by `dict.ts`: the interface has two languages, and the backend has none.
 - External facts that change (the OTel metric specification, model names for
   `--model`, the telegram bridge contract) are checked against the documentation at
   implementation time rather than taken from memory.
