@@ -13,7 +13,7 @@ import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from . import __version__, autostart, config, paths, pricing
+from . import __version__, autostart, config, instance, paths, pricing
 from .analyzer import advisor, digest
 from .collector import otlp
 from .collector.indexer import ingest_tree
@@ -266,22 +266,34 @@ def _otel(show_env: bool, show_settings: bool, port: int | None, prune: bool = F
 
 
 def _serve(host: str, port: int | None, reload: bool) -> int:
-    """Bring up the API together with the watcher in one process."""
+    """Bring up the API together with the watcher in one process.
+
+    A single copy: a second server would read the transcripts a second time and send
+    the notifications a second time, whatever port it is given (`instance.only_one`).
+    """
     import uvicorn
 
     from .api.server import create_app
 
     cfg = config.load()
     bind_port = port or int(cfg["server"]["port"])
-    print(f"cburn: http://{host}:{bind_port}  (Ctrl+C to stop)")
-    uvicorn.run(
-        "cburn.api.server:create_app" if reload else create_app(),
-        host=host,
-        port=bind_port,
-        factory=reload,
-        reload=reload,
-        log_level="warning",
-    )
+    try:
+        with instance.only_one():
+            print(f"cburn: http://{host}:{bind_port}  (Ctrl+C to stop)")
+            uvicorn.run(
+                "cburn.api.server:create_app" if reload else create_app(),
+                host=host,
+                port=bind_port,
+                factory=reload,
+                reload=reload,
+                log_level="warning",
+            )
+    except instance.AlreadyRunning as exc:
+        print(
+            f"{exc} - one watcher per machine, a second one would count everything twice",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 

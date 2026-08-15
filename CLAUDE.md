@@ -268,6 +268,14 @@ Claude Code 2.1.222 on 14 August 2026:
 
 ## The desktop (milestone F)
 
+- **One copy of the instrument, and the guard is doubled.** Two trays over one server show
+  one number twice, and two `cburn serve` read the transcripts twice and send the telegram
+  alert twice. The window is held by `tauri-plugin-single-instance` (registered first of
+  all the plugins): a second launch calls `tray::show_dashboard` in the first one and exits.
+  The server is held by a `flock` on `~/.local/share/cburn/serve.lock`
+  (`instance.only_one`) - the port does not do it, `--port 8800` would start a second
+  watcher happily. The lock dies with the process, so a crash leaves nothing stale behind.
+
 - **The window loads the page from the server, not from files.** The frontend calls the API
   with relative paths (`api/overview`); from `tauri://` they would go nowhere,
   so `frontendDist` points at `http://127.0.0.1:8799`. Thanks to that the

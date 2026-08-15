@@ -9,6 +9,13 @@
 //! The menu-bar tray (TZ §5) is the second way to look at the instrument: the spend figure
 //! is always in sight, and the menu answers the question "what is happening now" without
 //! requiring the window to be opened.
+//!
+//! The application runs in a single copy. A second one would raise a second tray icon next
+//! to the first and a second window over the same server - two instruments showing one
+//! number. Launch Services keeps a bundle from starting twice only when it is started the
+//! usual way; `open -n`, a build from the sources next to an installed copy and the
+//! autostart agent get past that, so the guard lives here: the second process hands the
+//! launch over to the first and exits.
 
 mod server;
 mod tray;
@@ -16,6 +23,12 @@ mod tray;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // The single-instance plugin is registered first, as the documentation requires:
+        // the callback must be in place before any other plugin has started anything.
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            log::info!("a second launch: raising the window of the one already running");
+            tray::show_dashboard(app, "");
+        }))
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,

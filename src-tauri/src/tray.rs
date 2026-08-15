@@ -201,7 +201,8 @@ fn on_menu<R: Runtime>(
 }
 
 /// Show the dashboard: an open window is raised, otherwise it is created anew.
-fn show_dashboard<R: Runtime>(app: &AppHandle<R>, hash: &str) {
+/// A second launch of the application ends up here as well - instead of its own window.
+pub fn show_dashboard<R: Runtime>(app: &AppHandle<R>, hash: &str) {
     let url = format!("{DASHBOARD}/{hash}");
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();

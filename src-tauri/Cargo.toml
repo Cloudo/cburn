@@ -28,3 +28,5 @@ tauri-plugin-log = "2"
 # an async runtime for one request every five seconds is not.
 ureq = { version = "2", features = ["json"] }
 tauri-plugin-autostart = "2.5.1"
+# One window and one tray per machine: a second launch wakes the first one instead.
+tauri-plugin-single-instance = "2.4.3"
