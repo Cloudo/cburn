@@ -111,7 +111,7 @@ pub fn setup<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 
     let handler_state = Arc::clone(&state);
     let handler_items = Arc::clone(&items);
-    let tray = TrayIconBuilder::with_id("cloudo-dash")
+    let tray = TrayIconBuilder::with_id("cburn")
         .icon(app.default_window_icon().unwrap().clone())
         .icon_as_template(true)
         .menu(&menu)
@@ -131,7 +131,7 @@ pub fn setup<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
             Ok(overview) => apply(&tray, &poll_state, &poll_items, &overview),
             Err(error) => {
                 let _ = tray.set_title(Some("—"));
-                let _ = poll_items.burn.set_text(format!("нет связи с cdash serve: {error}"));
+                let _ = poll_items.burn.set_text(format!("нет связи с cburn serve: {error}"));
             }
         }
         let _ = &poll_app;
@@ -215,7 +215,7 @@ fn show_dashboard<R: Runtime>(app: &AppHandle<R>, hash: &str) {
     }
     if let Ok(parsed) = url.parse() {
         let _ = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(parsed))
-            .title("cloudo-dash")
+            .title("cburn")
             .inner_size(1180.0, 860.0)
             .build();
     }

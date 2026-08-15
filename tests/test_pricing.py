@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from cloudo_dash import pricing
-from cloudo_dash.collector.indexer import ingest_file
-from cloudo_dash.db import connect
+from cburn import pricing
+from cburn.collector.indexer import ingest_file
+from cburn.db import connect
 
 PRICES = {
     "prices": {
@@ -148,7 +148,7 @@ def test_empty_prices_keep_table(conn: sqlite3.Connection) -> None:
 
 
 def test_sample_prices_are_readable() -> None:
-    """Заготовка для `cdash prices --init` разбирается и покрывает все колонки."""
+    """Заготовка для `cburn prices --init` разбирается и покрывает все колонки."""
     sample = pricing.sample_prices()
 
     assert "claude-opus-5" in sample

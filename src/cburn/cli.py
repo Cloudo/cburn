@@ -1,4 +1,4 @@
-"""CLI `cdash` (TZ §10).
+"""CLI `cburn` (TZ §10).
 
 Реализовано: `paths`, `initdb`, `reindex`, `prices`, `sessions`, `session`, `serve`, `otel`.
 Фильтры по проекту и периоду и команда `stats` — задача B7.
@@ -36,7 +36,7 @@ from .metrics import (
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="cdash", description="Спидометр Claude")
+    parser = argparse.ArgumentParser(prog="cburn", description="Спидометр Claude")
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -92,7 +92,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _add_filters(parser: argparse.ArgumentParser, *, period: str = "7d") -> None:
     """Общие фильтры: проект подстрокой пути, период — `today`, `24h`, `7d`, `all`."""
-    parser.add_argument("--project", help="часть имени или пути проекта, например cloudo-dash")
+    parser.add_argument("--project", help="часть имени или пути проекта, например cburn")
     parser.add_argument(
         "--period",
         default=period,
@@ -235,7 +235,7 @@ def _otel(show_env: bool, show_settings: bool, port: int | None, prune: bool = F
     if state["signals"] and not any(row["stored"] for row in state["signals"].values()):
         print(
             "посылки приходят, но не разобраны — проверьте"
-            " OTEL_EXPORTER_OTLP_PROTOCOL=http/json (`cdash otel --env`)"
+            " OTEL_EXPORTER_OTLP_PROTOCOL=http/json (`cburn otel --env`)"
         )
     for row in state["metrics"]:
         print(f"  {row['name']:34} точек {row['points']:6}  сумма {row['total']:,.2f}")
@@ -261,8 +261,8 @@ def _otel(show_env: bool, show_settings: bool, port: int | None, prune: bool = F
     if not state["signals"]:
         print()
         print("включить (в профиль шелла или в env-секцию ~/.claude/settings.json):")
-        print("  cdash otel --env        # строки export")
-        print("  cdash otel --settings   # фрагмент для settings.json")
+        print("  cburn otel --env        # строки export")
+        print("  cburn otel --settings   # фрагмент для settings.json")
         print("после правки Claude Code надо перезапустить — окружение читается на старте")
     return 0
 
@@ -275,9 +275,9 @@ def _serve(host: str, port: int | None, reload: bool) -> int:
 
     cfg = config.load()
     bind_port = port or int(cfg["server"]["port"])
-    print(f"cloudo-dash: http://{host}:{bind_port}  (Ctrl+C — остановить)")
+    print(f"cburn: http://{host}:{bind_port}  (Ctrl+C — остановить)")
     uvicorn.run(
-        "cloudo_dash.api.server:create_app" if reload else create_app(),
+        "cburn.api.server:create_app" if reload else create_app(),
         host=host,
         port=bind_port,
         factory=reload,
@@ -411,7 +411,7 @@ def _events(show: str | None) -> int:
             "SELECT type, version, seen, first_at, last_at FROM raw_event_counts ORDER BY seen DESC"
         ).fetchall()
     if not counts:
-        print("незнакомых записей нет — выполните `cdash reindex`", file=sys.stderr)
+        print("незнакомых записей нет — выполните `cburn reindex`", file=sys.stderr)
         return 1
     print("тип                       версия     сколько  впервые")
     for row in counts:
@@ -419,7 +419,7 @@ def _events(show: str | None) -> int:
         print(
             f"{row['type']:<25} {row['version'] or '—':<10} {_thousands(row['seen']):>8}  {first}"
         )
-    print("примеры: cdash events --show <тип>")
+    print("примеры: cburn events --show <тип>")
     return 0
 
 
@@ -436,7 +436,7 @@ def _prices(init: bool) -> int:
         unknown = pricing.unknown_models(conn)
         total = conn.execute("SELECT COALESCE(SUM(cost_usd), 0) FROM turns").fetchone()[0]
     if not models:
-        print("цен нет: заполните секцию [prices] в конфиге или запустите `cdash prices --init`")
+        print("цен нет: заполните секцию [prices] в конфиге или запустите `cburn prices --init`")
         return 1
     print("модель                вход   выход   кэш 5m   кэш 1h   чтение  (за млн токенов)")
     for row in rows:
@@ -528,7 +528,7 @@ def _sessions(limit: int, project: str | None = None, period: str = "all") -> in
     with connect() as conn:
         rows = recent_sessions(conn, limit, project=project, since=_since(period))
     if not rows:
-        print("сессий нет — выполните `cdash reindex`", file=sys.stderr)
+        print("сессий нет — выполните `cburn reindex`", file=sys.stderr)
         return 1
     for row in rows:
         prompt = (row["first_prompt"] or "—").replace("\n", " ")[:48]

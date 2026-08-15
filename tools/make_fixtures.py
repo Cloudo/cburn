@@ -19,8 +19,8 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from cloudo_dash.collector.parser import normalize_command  # noqa: E402
-from cloudo_dash.paths import CLAUDE_PROJECTS_DIR  # noqa: E402
+from cburn.collector.parser import normalize_command  # noqa: E402
+from cburn.paths import CLAUDE_PROJECTS_DIR  # noqa: E402
 
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "transcripts"
 

@@ -11,12 +11,12 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from cloudo_dash import metrics as metrics_module
-from cloudo_dash import paths
-from cloudo_dash.api.server import create_app
-from cloudo_dash.collector.indexer import ingest_tree
-from cloudo_dash.db import connect
-from cloudo_dash.metrics import TS_FORMAT
+from cburn import metrics as metrics_module
+from cburn import paths
+from cburn.api.server import create_app
+from cburn.collector.indexer import ingest_tree
+from cburn.db import connect
+from cburn.metrics import TS_FORMAT
 
 
 def assistant(
@@ -238,7 +238,7 @@ def test_root_reports_missing_frontend(
     db_path: Path, transcripts: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Пока фронт не собран, корень подсказывает, как это сделать."""
-    from cloudo_dash.api import server
+    from cburn.api import server
 
     monkeypatch.setattr(server, "WEB_DIST", tmp_path / "нет-сборки")
     with client(db_path, transcripts) as api:
@@ -307,28 +307,28 @@ def test_watcher_stops_with_app(transcripts: Path, db_path: Path) -> None:
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline:
         alive = {thread.name for thread in threading.enumerate()} - before
-        if "cdash-watcher" not in alive:
+        if "cburn-watcher" not in alive:
             break
         time.sleep(0.05)
 
     after = {thread.name for thread in threading.enumerate()}
-    assert "cdash-watcher" not in after - before
+    assert "cburn-watcher" not in after - before
 
 
 def test_built_frontend_is_served(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Собранный фронт раздаётся статикой с того же порта, что и API."""
-    from cloudo_dash.api import server
+    from cburn.api import server
 
     dist = tmp_path / "dist"
     dist.mkdir()
-    (dist / "index.html").write_text("<!doctype html><title>cloudo-dash</title>")
+    (dist / "index.html").write_text("<!doctype html><title>cburn</title>")
     monkeypatch.setattr(server, "WEB_DIST", dist)
 
     app = server.create_app(db_path=tmp_path / "api.db", watch=False)
     with TestClient(app) as api:
         page = api.get("/")
         assert page.status_code == 200
-        assert "cloudo-dash" in page.text
+        assert "cburn" in page.text
         assert api.get("/api/health").json()["ok"] is True  # API не перекрыт статикой
 
 
@@ -337,11 +337,11 @@ def test_frontend_cache_policy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
 
     Без этого пересобранный фронт грузится в старой оболочке из кеша браузера.
     """
-    from cloudo_dash.api import server
+    from cburn.api import server
 
     dist = tmp_path / "dist"
     (dist / "assets").mkdir(parents=True)
-    (dist / "index.html").write_text("<!doctype html><title>cloudo-dash</title>")
+    (dist / "index.html").write_text("<!doctype html><title>cburn</title>")
     (dist / "assets" / "index-abc123.js").write_text("console.log(1)")
     monkeypatch.setattr(server, "WEB_DIST", dist)
 
@@ -413,7 +413,7 @@ def test_answered_session_is_not_pending(transcripts: Path, db_path: Path) -> No
 
 def test_ws_pushes_without_new_turns(transcripts: Path, db_path: Path) -> None:
     """Тикер шлёт обзор и в тишине: окна burn rate скользят сами по себе."""
-    from cloudo_dash.api import server
+    from cburn.api import server
 
     seed(transcripts, db_path, [assistant("msg_1")])
     with (
@@ -491,8 +491,8 @@ def test_close_terminates_the_session_process(
     transcripts: Path, db_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Процесс берётся по sessionId из списка Claude Code и получает SIGTERM."""
-    from cloudo_dash.api import server
-    from cloudo_dash.processes import ClaudeSession
+    from cburn.api import server
+    from cburn.processes import ClaudeSession
 
     seed(transcripts, db_path, [assistant("msg_1")])
     killed: list[int] = []
@@ -513,7 +513,7 @@ def test_close_of_finished_session_only_hides(
     transcripts: Path, db_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Сессии уже нет среди запущенных — просто убираем карточку."""
-    from cloudo_dash.api import server
+    from cburn.api import server
 
     seed(transcripts, db_path, [assistant("msg_1")])
     monkeypatch.setattr(server, "process_for_session", lambda sid: None)

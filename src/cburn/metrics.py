@@ -486,7 +486,7 @@ def project_filter(project: str | None, column: str = "session_id") -> tuple[str
     """Условие «сессия из этого проекта» и его параметры (задача B7).
 
     Ищется подстрокой в slug — имени каталога транскриптов: оно содержит весь
-    путь, поэтому `cloudo-dash` находит `-Users-cloudo-code-cloudo-dash`.
+    путь, поэтому `myapp` находит `-Users-me-code-myapp`.
     """
     if not project:
         return "", []

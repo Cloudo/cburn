@@ -1,7 +1,7 @@
 """Тесты CLI и сверка цифр по сессии (задача A3, критерий приёмки M1).
 
 Главный тест — `test_session_output_matches_independent_count`: суммы, которые
-печатает `cdash session`, сверяются с независимым подсчётом по сырому JSON,
+печатает `cburn session`, сверяются с независимым подсчётом по сырому JSON,
 сделанным так же, как это делается вручную через `jq`. Расхождение должно быть
 нулевым.
 """
@@ -16,8 +16,8 @@ from pathlib import Path
 
 import pytest
 
-from cloudo_dash import cli, paths
-from cloudo_dash.db import connect
+from cburn import cli, paths
+from cburn.db import connect
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "transcripts"
 FIXTURES = sorted(FIXTURES_DIR.glob("*.jsonl"))
@@ -78,7 +78,7 @@ def jq_style_totals(path: Path) -> dict[str, dict[str, int]]:
 
 
 def parse_output(text: str) -> dict[str, int]:
-    """Вытащить числа из вывода `cdash session`."""
+    """Вытащить числа из вывода `cburn session`."""
     numbers: dict[str, int] = {}
     for label, pattern in (
         ("ходов", r"^ходов\s+: (\d+)"),
@@ -98,7 +98,7 @@ def parse_output(text: str) -> dict[str, int]:
 def test_session_output_matches_independent_count(
     project: Path, path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Расхождение между `cdash session` и ручным подсчётом — ноль."""
+    """Расхождение между `cburn session` и ручным подсчётом — ноль."""
     target = project / path.name
     target.write_text(path.read_text())
     assert cli.main(["reindex"]) == 0
@@ -154,7 +154,7 @@ def test_sessions_lists_indexed(project: Path, capsys: pytest.CaptureFixture[str
 
 def test_sessions_on_empty_db(project: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert cli.main(["sessions"]) == 1
-    assert "cdash reindex" in capsys.readouterr().err
+    assert "cburn reindex" in capsys.readouterr().err
 
 
 def test_paths_and_initdb(project: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -245,11 +245,11 @@ def test_otel_status_explains_silence(project: Path, capsys: pytest.CaptureFixtu
     assert cli.main(["otel"]) == 0
     out = capsys.readouterr().out
     assert "посылок не было" in out
-    assert "cdash otel --env" in out
+    assert "cburn otel --env" in out
 
 
 def test_otel_status_counts_what_arrived(project: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    from cloudo_dash.collector import otlp
+    from cburn.collector import otlp
 
     with connect() as conn:
         otlp.ingest(
@@ -297,7 +297,7 @@ def test_stats_shows_spending_off_the_transcript(
     project: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Без этой строки сводка молча занижала бы расход на служебные запросы."""
-    from cloudo_dash.collector import otlp
+    from cburn.collector import otlp
 
     (project / FIXTURES[0].name).write_text(FIXTURES[0].read_text())
     cli.main(["reindex"])
@@ -354,7 +354,7 @@ def test_otel_status_hints_at_wrong_protocol(
     project: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Посылки идут, записей нет — почти всегда это `http/protobuf`."""
-    from cloudo_dash.collector import otlp
+    from cburn.collector import otlp
 
     with connect() as conn:
         otlp.note_ingest(conn, "metrics", stored=0, dropped=1)
@@ -366,7 +366,7 @@ def test_otel_status_hints_at_wrong_protocol(
 
 def test_otel_prune_removes_old_records(project: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """Срок хранения применяется и руками: события копятся быстрее ходов."""
-    from cloudo_dash.collector import otlp
+    from cburn.collector import otlp
 
     with connect() as conn:
         otlp.store_events(

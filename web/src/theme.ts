@@ -6,14 +6,15 @@ import { useEffect, useState } from "react";
 
 export type Theme = "dark" | "light";
 
-const STORAGE_KEY = "cloudo-dash.theme";
+const STORAGE_KEY = "cburn.theme";
+const RENAMED_KEY = "cloudo-dash.theme"; // ключ прежнего имени проекта
 
 function system(): Theme {
   return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
 }
 
 function stored(): Theme | null {
-  const saved = localStorage.getItem(STORAGE_KEY);
+  const saved = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(RENAMED_KEY);
   return saved === "dark" || saved === "light" ? saved : null;
 }
 

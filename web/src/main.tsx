@@ -23,7 +23,7 @@ class Boundary extends Component<{ children: ReactNode }, { error: Error | null 
         <p className="empty-note">
           дашборд не отрисовался: {error.message}
           <br />
-          если сервер запущен давно, а фронт пересобран — перезапустите cdash serve
+          если сервер запущен давно, а фронт пересобран — перезапустите cburn serve
         </p>
       </main>
     );

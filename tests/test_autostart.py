@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from cloudo_dash import autostart, paths
+from cburn import autostart, paths
 
 
 class FakeLaunchctl:
@@ -39,14 +39,14 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def test_plist_runs_module_not_console_script(home: Path) -> None:
-    """Запускается `python -m cloudo_dash`: путь до интерпретатора точен."""
+    """Запускается `python -m cburn`: путь до интерпретатора точен."""
     document = plistlib.loads(autostart.build_plist(8799, executable=Path("/opt/py/bin/python")))
 
-    assert document["Label"] == "com.cloudo.cloudo-dash"
+    assert document["Label"] == "com.cloudo.cburn"
     assert document["ProgramArguments"] == [
         "/opt/py/bin/python",
         "-m",
-        "cloudo_dash",
+        "cburn",
         "serve",
         "--port",
         "8799",

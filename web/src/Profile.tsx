@@ -106,7 +106,7 @@ export function Telemetry({ otel }: { otel?: Otel }) {
     return (
       <div className="telemetry-off">
         <p className="hint">{t("otel.off")}</p>
-        <code>cdash otel --env</code>
+        <code>cburn otel --env</code>
       </div>
     );
   }

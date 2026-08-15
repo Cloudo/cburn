@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "cloudo-dash",
+  "productName": "cburn",
   "version": "0.1.0",
-  "identifier": "com.cloudo.cloudo-dash",
+  "identifier": "com.cloudo.cburn",
   "build": {
     "frontendDist": "http://127.0.0.1:8799",
     "devUrl": "http://127.0.0.1:8799"
@@ -10,7 +10,7 @@
   "app": {
     "windows": [
       {
-        "title": "cloudo-dash",
+        "title": "cburn",
         "width": 1180,
         "height": 860,
         "minWidth": 720,

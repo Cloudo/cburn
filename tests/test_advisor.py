@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from cloudo_dash.analyzer import advisor
-from cloudo_dash.db import connect
+from cburn.analyzer import advisor
+from cburn.db import connect
 
 DIGEST = {"period": {"since": "2026-08-13T00:00:00+00:00", "until": "2026-08-13T12:00:00+00:00"}}
 

@@ -65,7 +65,7 @@ class TranscriptWatcher:
         """Запустить слежение. `initial_scan` дочитывает то, что накопилось офлайн."""
         if initial_scan:
             self.enqueue(self.root.rglob(f"*{TRANSCRIPT_SUFFIX}"), delay=0)
-        self._worker = threading.Thread(target=self._run, name="cdash-watcher", daemon=True)
+        self._worker = threading.Thread(target=self._run, name="cburn-watcher", daemon=True)
         self._worker.start()
         self._observer = Observer()
         self._observer.schedule(_Handler(self), str(self.root), recursive=True)

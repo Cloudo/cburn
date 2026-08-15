@@ -13,9 +13,9 @@ import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from cloudo_dash import metrics
-from cloudo_dash.collector import otlp
-from cloudo_dash.db import connect
+from cburn import metrics
+from cburn.collector import otlp
+from cburn.db import connect
 
 sessions = int(sys.argv[1]) if len(sys.argv) > 1 else 200
 per_session = int(sys.argv[2]) if len(sys.argv) > 2 else 500

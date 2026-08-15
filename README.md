@@ -1,4 +1,4 @@
-# cloudo-dash
+# cburn
 
 Локальный «спидометр» для Claude Code: следит за всеми сессиями на машине,
 показывает расход токенов в реальном времени и раз в час предлагает конкретные
@@ -9,7 +9,7 @@
 
 ## Статус
 
-Этап M1 (CLI-прототип: парсер JSONL, SQLite, `cdash stats/sessions/session`) — в работе.
+Этап M1 (CLI-прототип: парсер JSONL, SQLite, `cburn stats/sessions/session`) — в работе.
 Сейчас в репозитории каркас: схема БД, конфиг, CLI, дымовые тесты.
 
 ## Установка для разработки
@@ -22,17 +22,17 @@ python3 -m venv .venv
 ## Команды
 
 ```bash
-cdash paths      # где лежат конфиг, БД и транскрипты
-cdash initdb     # создать БД и применить схему
-cdash reindex    # дочитать транскрипты; --full перечитывает целиком, --project сужает
-cdash prices     # применить цены из конфига; --init положит туда заготовку тарифов
-cdash events     # незнакомые типы записей; --show <тип> покажет примеры
-cdash stats      # сводка расхода; --period 7d|today|24h|30d|all|дата, --project часть slug
-cdash sessions   # список сессий, те же фильтры плюс -n
-cdash session ID # детали сессии: суммы, сабагенты, линия работы, инструменты
-cdash serve      # дашборд на http://localhost:8799
-cdash install    # автозапуск при логине (launchd), uninstall снимает, status покажет
-cdash otel       # телеметрия Claude Code: что дошло; --env и --settings включают её
+cburn paths      # где лежат конфиг, БД и транскрипты
+cburn initdb     # создать БД и применить схему
+cburn reindex    # дочитать транскрипты; --full перечитывает целиком, --project сужает
+cburn prices     # применить цены из конфига; --init положит туда заготовку тарифов
+cburn events     # незнакомые типы записей; --show <тип> покажет примеры
+cburn stats      # сводка расхода; --period 7d|today|24h|30d|all|дата, --project часть slug
+cburn sessions   # список сессий, те же фильтры плюс -n
+cburn session ID # детали сессии: суммы, сабагенты, линия работы, инструменты
+cburn serve      # дашборд на http://localhost:8799
+cburn install    # автозапуск при логине (launchd), uninstall снимает, status покажет
+cburn otel       # телеметрия Claude Code: что дошло; --env и --settings включают её
 ```
 
 ## Телеметрия Claude Code
@@ -45,10 +45,10 @@ OTLP. Приёмник живёт в самом дашборде (`POST /otlp/v1
 приложение не может, `~/.claude` оно открывает только на чтение:
 
 ```bash
-cdash otel --env       # строки export для профиля шелла
-cdash otel --settings  # тот же набор фрагментом для ~/.claude/settings.json
-cdash otel             # что дошло: посылки, метрики, события, объём, сверка сессий
-cdash otel --prune     # убрать данные старше otel.keep_days
+cburn otel --env       # строки export для профиля шелла
+cburn otel --settings  # тот же набор фрагментом для ~/.claude/settings.json
+cburn otel             # что дошло: посылки, метрики, события, объём, сверка сессий
+cburn otel --prune     # убрать данные старше otel.keep_days
 ```
 
 Событий приходит по несколько на каждый ход и каждый вызов инструмента, поэтому
@@ -56,7 +56,7 @@ cdash otel --prune     # убрать данные старше otel.keep_days
 всё). Чистка идёт сама при старте дашборда и раз в сутки; данные парсера она не
 трогает. Файл базы после чистки не уменьшается — SQLite оставляет освободившееся
 место себе и заполняет его новыми записями; чтобы вернуть место системе, нужен
-`sqlite3 ~/.local/share/cloudo-dash/cloudo-dash.db 'VACUUM;'` при остановленном
+`sqlite3 ~/.local/share/cburn/cburn.db 'VACUUM;'` при остановленном
 дашборде.
 
 После правки Claude Code нужно перезапустить: окружение он читает на старте.
@@ -103,7 +103,7 @@ cdash otel --prune     # убрать данные старше otel.keep_days
 ```bash
 npm install                          # Tauri CLI (нужен Rust: rustup.rs)
 PATH=$HOME/.cargo/bin:$PATH npm run desktop:build
-open src-tauri/target/release/bundle/macos/cloudo-dash.app
+open src-tauri/target/release/bundle/macos/cburn.app
 ```
 
 `npm run desktop` — то же самое, но с горячей перезагрузкой при правках Rust.
@@ -112,14 +112,14 @@ open src-tauri/target/release/bundle/macos/cloudo-dash.app
 
 Окно грузит `http://127.0.0.1:8799` — тот же фронт, что и в браузере, поэтому
 сервер должен работать. Если он молчит, приложение поднимает его само:
-команду берёт из `CLOUDO_DASH_SERVE`, а без неё ищет `cdash` в `~/.local/bin`,
+команду берёт из `CBURN_SERVE`, а без неё ищет `cburn` в `~/.local/bin`,
 homebrew и каталоге разработки. Python-часть при этом ставится как обычно —
 интерпретатор внутрь `.app` не упакован.
 
 В меню-баре видно burn rate (переключается на $/ч), красная точка загорается
 при расходе выше порога из «Настроек», а в меню — итог за сегодня, три живые
 сессии со статусами, «пауза на 2 часа» и «запускать при входе». Последний
-пункт заменяет launchd-агент: если пользуетесь приложением, `cdash install`
+пункт заменяет launchd-агент: если пользуетесь приложением, `cburn install`
 не нужен.
 
 ## Уведомления в telegram
@@ -140,25 +140,38 @@ homebrew и каталоге разработки. Python-часть при эт
 
 ## Автозапуск
 
-`cdash install` кладёт агент пользователя в
-`~/Library/LaunchAgents/com.cloudo.cloudo-dash.plist` и сразу его запускает:
+`cburn install` кладёт агент пользователя в
+`~/Library/LaunchAgents/com.cloudo.cburn.plist` и сразу его запускает:
 дашборд поднимается при логине и переживает перезагрузку. Логи — в
-`~/.local/share/cloudo-dash/serve.log`, рядом с базой. `cdash status` покажет,
-что про агент думает launchd, `cdash uninstall` снимет его и удалит plist.
+`~/.local/share/cburn/serve.log`, рядом с базой. `cburn status` покажет,
+что про агент думает launchd, `cburn uninstall` снимет его и удалит plist.
 
 Агент пользователя, а не демон системы: дашборд читает `~/.claude` и пишет
 в свой каталог, root ему не нужен.
+
+## Переезд с прежнего имени
+
+Проект назывался `cloudo-dash`, команда - `cdash`. Состояние переезжает само при
+первом запуске: `~/.local/share/cloudo-dash` становится `~/.local/share/cburn`
+(база вместе с `-wal` и `-shm` переименовывается в `cburn.db`), а
+`~/.config/cloudo-dash` - `~/.config/cburn`. Раскладка, тема и язык дашборда
+читаются из прежних ключей `localStorage` и сохраняются уже под новыми.
+
+Автозапуск переставляется руками: ярлык агента сменился на `com.cloudo.cburn`,
+поэтому старый снимается `launchctl bootout gui/$UID/com.cloudo.cloudo-dash` и
+удалением `~/Library/LaunchAgents/com.cloudo.cloudo-dash.plist`, а новый ставится
+`cburn install`.
 
 ## Сколько занимает первая индексация
 
 Замер на MacBook (Apple Silicon, SSD), 13 августа 2026: **639 МБ транскриптов,
 459 файлов, 185 799 строк, 17 186 ходов — 5,4 секунды** с нуля. Дальше читается
-только хвост по сохранённому offset, так что повторный `cdash reindex` укладывается
+только хвост по сохранённому offset, так что повторный `cburn reindex` укладывается
 в десятые доли секунды.
 
 Отсюда решение: фоновая задача с прогрессом в API, батчевые вставки и пул
 воркеров не нужны — порог «дольше нескольких минут» из плана не достигнут даже
-близко. `cdash reindex` показывает живую строку обхода в терминале, и этого хватает.
+близко. `cburn reindex` показывает живую строку обхода в терминале, и этого хватает.
 
 ## Проверки
 

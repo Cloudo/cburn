@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from cloudo_dash.collector.parser import (
+from cburn.collector.parser import (
     ParsedRecord,
     RecordKind,
     normalize_command,
@@ -411,7 +411,7 @@ def test_fixture_records_outnumber_turns(path: Path) -> None:
 
 def test_usage_merge_takes_elementwise_max() -> None:
     """Записи одного хода несут расход неравномерно: часть из них нулевая."""
-    from cloudo_dash.collector.parser import Usage
+    from cburn.collector.parser import Usage
 
     empty = Usage()
     full = Usage(
@@ -423,7 +423,7 @@ def test_usage_merge_takes_elementwise_max() -> None:
 
 
 def test_usage_merge_combines_partial_records() -> None:
-    from cloudo_dash.collector.parser import Usage
+    from cburn.collector.parser import Usage
 
     merged = Usage(output_tokens=10, cache_read=5).merge(Usage(input_tokens=3, cache_write_1h=7))
     assert merged == Usage(input_tokens=3, output_tokens=10, cache_read=5, cache_write_1h=7)

@@ -1,4 +1,4 @@
-"""Конфиг ~/.config/cloudo-dash/config.toml (TZ §8).
+"""Конфиг ~/.config/cburn/config.toml (TZ §8).
 
 Файла может не быть — тогда работают дефолты. Пользовательские значения
 накладываются поверх дефолтов посекционно, незнакомые ключи сохраняются.
@@ -39,7 +39,7 @@ DEFAULTS: dict[str, Any] = {
     },
     "server": {"port": 8799},
     # Приём официальной телеметрии Claude Code (веха E). Сам по себе флаг
-    # ничего не включает: телеметрию задаёт окружение Claude Code, см. `cdash otel`.
+    # ничего не включает: телеметрию задаёт окружение Claude Code, см. `cburn otel`.
     # События идут пачкой на каждый ход и каждый вызов инструмента — около
     # 400 байт на событие, поэтому у них свой срок хранения; 0 — хранить всё.
     "otel": {"enabled": True, "keep_days": 30},
@@ -55,6 +55,8 @@ def load(path: Path | None = None) -> dict[str, Any]:
     `db.connect`.
     """
     path = path or paths.CONFIG_PATH
+    if path == paths.CONFIG_PATH and not path.exists():
+        paths.migrate_legacy()  # конфиг мог остаться под прежним именем проекта
     config = deepcopy(DEFAULTS)
     if not path.exists():
         return config

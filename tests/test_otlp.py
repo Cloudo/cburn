@@ -20,12 +20,12 @@ import orjson
 import pytest
 from fastapi.testclient import TestClient
 
-from cloudo_dash import config, metrics, paths
-from cloudo_dash.analyzer import digest
-from cloudo_dash.api import server
-from cloudo_dash.api.server import create_app
-from cloudo_dash.collector import otlp
-from cloudo_dash.db import connect
+from cburn import config, metrics, paths
+from cburn.analyzer import digest
+from cburn.api import server
+from cburn.api.server import create_app
+from cburn.collector import otlp
+from cburn.db import connect
 
 # Наносекунды: 2026-08-14T07:00:00Z и минутой позже. Фиксированные — там, где
 # проверяется сам разбор: формат времени, дедупликация, границы окна точки.

@@ -1,4 +1,4 @@
--- Схема БД cloudo-dash (см. TZ.md §3 «SQLite: модель данных»).
+-- Схема БД cburn (см. TZ.md §3 «SQLite: модель данных»).
 -- Применяется идемпотентно при старте; версия фиксируется в user_version.
 
 PRAGMA journal_mode = WAL;
@@ -204,7 +204,7 @@ CREATE INDEX IF NOT EXISTS idx_otel_events_session ON otel_events(session_id, ts
 CREATE INDEX IF NOT EXISTS idx_otel_events_name    ON otel_events(name, ts);
 
 -- Учёт самого приёма: по нему видно, доходит ли телеметрия вообще и сколько
--- кусков посылки приёмник не понял (`cdash otel`, сверка E3).
+-- кусков посылки приёмник не понял (`cburn otel`, сверка E3).
 CREATE TABLE IF NOT EXISTS otel_ingest (
     signal  TEXT PRIMARY KEY,   -- metrics | logs | traces
     last_at TEXT,

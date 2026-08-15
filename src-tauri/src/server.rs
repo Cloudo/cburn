@@ -6,7 +6,7 @@
 //! незачем, а вот найти уже установленную команду и запустить её — можно.
 //!
 //! Где ищется команда, по порядку:
-//! 1. `CLOUDO_DASH_SERVE` — если задана, выполняется как есть;
+//! 1. `CBURN_SERVE` — если задана, выполняется как есть;
 //! 2. привычные места установки (`~/.local/bin`, homebrew, каталог разработки).
 //!
 //! Ничего не найдено — окно всё равно откроется и честно покажет «нет связи»:
@@ -34,7 +34,7 @@ pub fn start_if_needed() -> Option<PathBuf> {
     if is_running() {
         return None;
     }
-    if let Ok(custom) = std::env::var("CLOUDO_DASH_SERVE") {
+    if let Ok(custom) = std::env::var("CBURN_SERVE") {
         let mut parts = custom.split_whitespace();
         let program = parts.next()?;
         let args: Vec<&str> = parts.collect();
@@ -42,10 +42,11 @@ pub fn start_if_needed() -> Option<PathBuf> {
     }
     let home = std::env::var("HOME").ok()?;
     let candidates = [
-        format!("{home}/.local/bin/cdash"),
-        "/opt/homebrew/bin/cdash".to_string(),
-        "/usr/local/bin/cdash".to_string(),
-        format!("{home}/code/cloudo-dash/.venv/bin/cdash"),
+        format!("{home}/.local/bin/cburn"),
+        "/opt/homebrew/bin/cburn".to_string(),
+        "/usr/local/bin/cburn".to_string(),
+        format!("{home}/code/cburn/.venv/bin/cburn"),
+        format!("{home}/code/cloudo-dash/.venv/bin/cburn"), // каталог прежнего имени
     ];
     candidates
         .iter()

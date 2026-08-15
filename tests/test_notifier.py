@@ -13,9 +13,9 @@ from unittest import mock
 
 import pytest
 
-from cloudo_dash import notifier
-from cloudo_dash.db import connect
-from cloudo_dash.notifier import rules
+from cburn import notifier
+from cburn.db import connect
+from cburn.notifier import rules
 
 NOW = datetime(2026, 8, 14, 18, 0, tzinfo=UTC)
 
@@ -178,7 +178,7 @@ def test_pause_endpoint_holds_and_releases(tmp_path: Path) -> None:
     """Кнопка в трее и в окне зовёт один и тот же эндпоинт (задача D5)."""
     from fastapi.testclient import TestClient
 
-    from cloudo_dash.api.server import create_app
+    from cburn.api.server import create_app
 
     db_path = tmp_path / "api.db"
     connect(db_path).close()
@@ -198,7 +198,7 @@ def test_pause_endpoint_holds_and_releases(tmp_path: Path) -> None:
 def test_notify_state_shows_what_was_sent(tmp_path: Path) -> None:
     from fastapi.testclient import TestClient
 
-    from cloudo_dash.api.server import create_app
+    from cburn.api.server import create_app
 
     db_path = tmp_path / "api.db"
     conn = connect(db_path)

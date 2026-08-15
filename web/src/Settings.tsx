@@ -1,4 +1,4 @@
-// Экран «Настройки» (задача C3): форма над ~/.config/cloudo-dash/config.toml.
+// Экран «Настройки» (задача C3): форма над ~/.config/cburn/config.toml.
 // Правится то, что человек меняет руками: пороги зон, советчик, telegram, порт
 // и цены моделей. Проверяет введённое бэкенд — он же владеет файлом.
 
@@ -213,7 +213,7 @@ export function Settings() {
         ))}
         {!Object.keys(config.prices).length && (
           <p className="hint">
-            {t("settings.noPrices")} <code>cdash prices --init</code>
+            {t("settings.noPrices")} <code>cburn prices --init</code>
           </p>
         )}
       </div>

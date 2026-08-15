@@ -3,7 +3,10 @@
 
 import type { Layout } from "react-grid-layout";
 
-export const STORAGE_KEY = "cloudo-dash.layout.v3";
+export const STORAGE_KEY = "cburn.layout.v3";
+
+/** Ключи прежнего имени проекта: сетка та же, читается как есть. */
+const RENAMED_KEY = "cloudo-dash.layout.v3";
 
 /** Ключ прежней, вдвое более крупной сетки — из него переносятся раскладки. */
 const LEGACY_KEY = "cloudo-dash.layout.v2";
@@ -82,7 +85,7 @@ function upscale(layout: Layout[]): Layout[] {
 /** Прочитать сохранённую раскладку; на любой мусор — вернуться к умолчанию. */
 export function loadState(): DashboardState {
   try {
-    const current = localStorage.getItem(STORAGE_KEY);
+    const current = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(RENAMED_KEY);
     // Настроенную раскладку не теряем при смене шага — переносим со старого ключа.
     const legacy = current ? null : localStorage.getItem(LEGACY_KEY);
     const raw = current ?? legacy;

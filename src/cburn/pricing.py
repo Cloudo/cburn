@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 #: Цены задаются за миллион токенов.
 MTOK = 1_000_000
 
-#: Заготовка тарифов для `cdash prices --init`. В расчёте не участвует —
+#: Заготовка тарифов для `cburn prices --init`. В расчёте не участвует —
 #: копируется в пользовательский конфиг, дальше цены редактирует человек.
 SAMPLE_PATH = Path(__file__).with_name("prices.sample.toml")
 
@@ -135,7 +135,7 @@ def unknown_models(conn: sqlite3.Connection) -> list[dict]:
 
 
 def sample_prices() -> dict[str, Any]:
-    """Прочитать заготовку тарифов (`cdash prices --init`)."""
+    """Прочитать заготовку тарифов (`cburn prices --init`)."""
     with SAMPLE_PATH.open("rb") as fh:
         return tomllib.load(fh).get("prices", {})
 

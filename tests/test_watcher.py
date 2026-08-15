@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from cloudo_dash.collector.indexer import IngestStats
-from cloudo_dash.collector.watcher import TranscriptWatcher
+from cburn.collector.indexer import IngestStats
+from cburn.collector.watcher import TranscriptWatcher
 
 DEBOUNCE = 0.05
 TIMEOUT = 10.0

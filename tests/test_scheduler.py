@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from cloudo_dash.analyzer import scheduler
-from cloudo_dash.db import connect
+from cburn.analyzer import scheduler
+from cburn.db import connect
 
 CONFIG = {
     "analyzer": {

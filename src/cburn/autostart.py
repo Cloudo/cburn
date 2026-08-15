@@ -2,11 +2,11 @@
 
 Агент пользователя, а не демон системы: дашборд читает `~/.claude` и пишет в
 `~/.local/share`, root ему не нужен и вреден. Ставится в
-`~/Library/LaunchAgents/com.cloudo.cloudo-dash.plist`, логи ложатся рядом с
+`~/Library/LaunchAgents/com.cloudo.cburn.plist`, логи ложатся рядом с
 базой — туда же, куда пишет `tools/restart-serve.sh`.
 
-Запускается не консольный скрипт `cdash`, а `python -m cloudo_dash`: путь до
-интерпретатора известен точно, а `cdash` может оказаться не тем — например,
+Запускается не консольный скрипт `cburn`, а `python -m cburn`: путь до
+интерпретатора известен точно, а `cburn` может оказаться не тем — например,
 из другого окружения в PATH.
 """
 
@@ -21,7 +21,7 @@ from pathlib import Path
 
 from . import paths
 
-LABEL = "com.cloudo.cloudo-dash"
+LABEL = "com.cloudo.cburn"
 
 #: Запуск внешней команды вынесен в тип, чтобы тесты не трогали launchd машины.
 Runner = Callable[..., tuple[int, str]]
@@ -43,7 +43,7 @@ def build_plist(port: int, executable: Path | None = None) -> bytes:
     """Собрать plist агента.
 
     `KeepAlive` только на неудачный выход: иначе launchd будет поднимать
-    дашборд после каждой остановки руками, в том числе при `cdash uninstall`.
+    дашборд после каждой остановки руками, в том числе при `cburn uninstall`.
     """
     log = str(log_path())
     document = {
@@ -51,7 +51,7 @@ def build_plist(port: int, executable: Path | None = None) -> bytes:
         "ProgramArguments": [
             str(executable or Path(sys.executable)),
             "-m",
-            "cloudo_dash",
+            "cburn",
             "serve",
             "--port",
             str(port),
@@ -101,11 +101,11 @@ def uninstall(run: Runner | None = None) -> str:
 def status(run: Runner | None = None) -> str:
     """Что launchd думает про агент прямо сейчас."""
     if not plist_path().exists():
-        return "агент не поставлен — `cdash install`"
+        return "агент не поставлен — `cburn install`"
     runner = run or _run
     code, out = runner([LAUNCHCTL, "print", f"gui/{_uid()}/{LABEL}"], check=False)
     if code != 0:
-        return f"plist на месте, но launchd агента не знает — попробуйте `cdash install`\n{out}"
+        return f"plist на месте, но launchd агента не знает — попробуйте `cburn install`\n{out}"
     state = next((line.strip() for line in out.splitlines() if "state =" in line), "загружен")
     pid = next((line.strip() for line in out.splitlines() if line.strip().startswith("pid =")), "")
     return f"агент {LABEL}: {state} {pid}".strip()

@@ -24,11 +24,11 @@ from pathlib import Path
 
 import pytest
 
-from cloudo_dash import config, paths, pricing
-from cloudo_dash.analyzer import digest
-from cloudo_dash.collector.indexer import ingest_tree
-from cloudo_dash.collector.parser import RecordKind, parse_line
-from cloudo_dash.db import connect
+from cburn import config, paths, pricing
+from cburn.analyzer import digest
+from cburn.collector.indexer import ingest_tree
+from cburn.collector.parser import RecordKind, parse_line
+from cburn.db import connect
 
 pytestmark = pytest.mark.real_history
 

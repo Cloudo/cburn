@@ -8,10 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from cloudo_dash import paths as indexer_paths
-from cloudo_dash.collector.indexer import RAW_SAMPLE_LIMIT, ingest_file, ingest_tree
-from cloudo_dash.db import connect
-from cloudo_dash.metrics import session_chain
+from cburn import paths as indexer_paths
+from cburn.collector.indexer import RAW_SAMPLE_LIMIT, ingest_file, ingest_tree
+from cburn.db import connect
+from cburn.metrics import session_chain
 
 FIXTURES = sorted((Path(__file__).parent / "fixtures" / "transcripts").glob("*.jsonl"))
 

@@ -293,7 +293,7 @@ def project_name(root_path: str | None) -> str | None:
     """Человеческое имя проекта — последний сегмент рабочего пути.
 
     Slug остаётся ключом каталога в `~/.claude/projects`, но на экране от него
-    толку нет: `-Users-cloudo-code-cloudo-dash` читается хуже, чем `cloudo-dash`.
+    толку нет: `-Users-me-code-myapp` читается хуже, чем `myapp`.
     """
     return PurePosixPath(root_path).name or None if root_path else None
 

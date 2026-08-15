@@ -8,7 +8,8 @@ import { setFormatLang } from "./format";
 
 export type Lang = "ru" | "en";
 
-const STORAGE_KEY = "cloudo-dash.lang";
+const STORAGE_KEY = "cburn.lang";
+const RENAMED_KEY = "cloudo-dash.lang"; // ключ прежнего имени проекта
 
 /** Пары «русский, английский». Ключ — путь через точку, не сам текст: иначе
  *  правка формулировки на одном языке молча ломает второй. */
@@ -21,7 +22,7 @@ const DICT: Record<string, [string, string]> = {
   "app.working": ["идёт запрос", "request running"],
   "app.live": ["живые данные", "live data"],
   "app.offline": ["нет связи", "offline"],
-  "app.noConnection": ["нет связи с cdash serve", "no connection to cdash serve"],
+  "app.noConnection": ["нет связи с cburn serve", "no connection to cburn serve"],
   "app.connecting": ["подключаюсь…", "connecting…"],
   "app.lang": ["язык интерфейса", "interface language"],
   "app.theme": ["тема оформления", "colour theme"],
@@ -92,8 +93,8 @@ const DICT: Record<string, [string, string]> = {
   "settings.otel": ["телеметрия", "telemetry"],
   "settings.otelKeepDays": ["хранить дней", "keep days"],
   "settings.otelHint": [
-    "Приём данных от Claude Code. Сама телеметрия включается его переменными окружения — их печатает команда cdash otel --env.",
-    "Receiving data from Claude Code. Telemetry itself is switched on by its environment variables — run cdash otel --env to print them.",
+    "Приём данных от Claude Code. Сама телеметрия включается его переменными окружения — их печатает команда cburn otel --env.",
+    "Receiving data from Claude Code. Telemetry itself is switched on by its environment variables — run cburn otel --env to print them.",
   ],
   "otel.work.time": ["работа {time} без пауз", "worked {time}, idle excluded"],
   "otel.work.why": [
@@ -379,7 +380,7 @@ const DICT: Record<string, [string, string]> = {
 
 /** Язык по умолчанию — язык браузера; всё, кроме русского, считаем английским. */
 function detect(): Lang {
-  const saved = localStorage.getItem(STORAGE_KEY);
+  const saved = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(RENAMED_KEY);
   if (saved === "ru" || saved === "en") return saved;
   return navigator.language.startsWith("ru") ? "ru" : "en";
 }

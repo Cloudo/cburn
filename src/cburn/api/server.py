@@ -176,7 +176,7 @@ def create_app(
                     with suppress(asyncio.CancelledError):
                         await task
 
-    app = FastAPI(title="cloudo-dash", lifespan=lifespan)
+    app = FastAPI(title="cburn", lifespan=lifespan)
 
     #: Готовый срез телеметрии и время его расчёта: обзор уходит подписчикам
     #: каждую секунду, а телеметрия за день считается по десяткам тысяч событий
@@ -414,7 +414,7 @@ def create_app(
         """Приёмник официальной телеметрии Claude Code (веха E, ТЗ §2).
 
         Claude Code шлёт сюда посылки OTLP/JSON, когда в его окружении задан
-        `OTEL_EXPORTER_OTLP_ENDPOINT` на этот адрес (`cdash otel` печатает
+        `OTEL_EXPORTER_OTLP_ENDPOINT` на этот адрес (`cburn otel` печатает
         нужные переменные). Порт свой сервер не занимает: телеметрия приходит
         на тот же localhost:8799, что и дашборд.
 
@@ -432,7 +432,7 @@ def create_app(
         except Exception:
             # Обычно это `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`: посылки
             # идут, а мы их не понимаем. Молча их проглотить нельзя — тогда
-            # `cdash otel` скажет «посылок не было», и человек будет искать
+            # `cburn otel` скажет «посылок не было», и человек будет искать
             # проблему не там. Отметка в счётчике потерь показывает правду.
             log.warning("посылка OTLP (%s) не разобрана: %s байт", signal, len(body))
             await asyncio.to_thread(_note_undecodable, open_db, signal)
@@ -616,7 +616,7 @@ def _mount_frontend(app: FastAPI) -> None:
     @app.get("/")
     async def placeholder() -> dict[str, Any]:
         return {
-            "cloudo-dash": "фронт ещё не собран",
+            "cburn": "фронт ещё не собран",
             "как собрать": "cd web && npm install && npm run build",
             "api": ["/api/overview", "/api/sessions", "/api/plan/refresh", "/api/health", "/ws"],
         }

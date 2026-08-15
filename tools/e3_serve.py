@@ -8,7 +8,7 @@ from pathlib import Path
 
 import uvicorn
 
-from cloudo_dash.api.server import create_app
+from cburn.api.server import create_app
 
 db = Path(sys.argv[1])
 port = int(sys.argv[2]) if len(sys.argv) > 2 else 8801

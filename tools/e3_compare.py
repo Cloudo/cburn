@@ -14,9 +14,9 @@ Claude Code (генерация заголовка сессии и подобн�
 import sys
 from pathlib import Path
 
-from cloudo_dash import config, pricing
-from cloudo_dash.collector.indexer import ingest_tree
-from cloudo_dash.db import connect
+from cburn import config, pricing
+from cburn.collector.indexer import ingest_tree
+from cburn.db import connect
 
 db_path = Path(sys.argv[1])
 project_dir = Path(sys.argv[2])

@@ -8,8 +8,8 @@ from typing import Any
 
 import pytest
 
-from cloudo_dash import limits as limits_module
-from cloudo_dash.limits import LimitsWatcher, PlanLimits, RateLimited, _normalize, read_from_cache
+from cburn import limits as limits_module
+from cburn.limits import LimitsWatcher, PlanLimits, RateLimited, _normalize, read_from_cache
 
 USAGE_RESPONSE: dict[str, Any] = {
     "five_hour": {"utilization": 48.0, "resets_at": "2026-08-13T16:10:00Z"},

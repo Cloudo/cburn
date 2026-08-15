@@ -99,7 +99,7 @@ export default function App() {
     <main>
       <header className="masthead">
         <div className="brand">
-          <span className="brand-name">cloudo-dash</span>
+          <span className="brand-name">cburn</span>
           <nav className="screens">
             {SCREENS.map((key) => (
               <a
