@@ -2643,6 +2643,32 @@ main.empty {
   border-color: var(--steel);
 }
 
+/* Two opposite decisions must not look alike: the colour is the difference,
+   the neutral "back" button stays grey. */
+.advice-buttons .advice-accept {
+  color: var(--mint);
+  border-color: color-mix(in srgb, var(--mint) 50%, transparent);
+  background: color-mix(in srgb, var(--mint) 12%, transparent);
+}
+
+.advice-buttons .advice-accept:hover:not(:disabled) {
+  color: var(--mint);
+  border-color: var(--mint);
+  background: color-mix(in srgb, var(--mint) 22%, transparent);
+}
+
+.advice-buttons .advice-reject {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 50%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.advice-buttons .advice-reject:hover:not(:disabled) {
+  color: var(--danger-strong);
+  border-color: var(--danger-strong);
+  background: color-mix(in srgb, var(--danger) 22%, transparent);
+}
+
 /* Sessions a tip refers to: a short id tells a human nothing, so we expand it
    into a name and a project - and make it a link to the session screen. */
 .advice-sessions {

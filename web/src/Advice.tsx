@@ -157,12 +157,12 @@ function Item({
       </p>
       <div className="advice-buttons">
         {item.status !== "accepted" && (
-          <button disabled={busy} onClick={() => change("accepted")}>
+          <button className="advice-accept" disabled={busy} onClick={() => change("accepted")}>
             {t("advice.accept")}
           </button>
         )}
         {item.status !== "rejected" && (
-          <button disabled={busy} onClick={() => change("rejected")}>
+          <button className="advice-reject" disabled={busy} onClick={() => change("rejected")}>
             {t("advice.reject")}
           </button>
         )}
