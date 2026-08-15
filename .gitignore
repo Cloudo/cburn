@@ -28,6 +28,10 @@ web/dist/
 .idea/
 .vscode/
 
+# Working documents in Russian. The repository stays English apart from the
+# interface dictionary (web/src/dict.ts), so these live outside git.
+.local/
+
 # Local Claude Code settings
 .claude/settings.local.json
 

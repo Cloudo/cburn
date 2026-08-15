@@ -4,8 +4,8 @@ A local "speedometer" service for Claude Code token spend: it watches every
 session on the machine, shows the burn rate in real time and once an hour
 suggests optimisations. The full specification is @TZ.md, and it is the source of truth for
 requirements; this file holds the working rules on top of it. The decomposition into tasks
-and their status live in [docs/ROADMAP.md](docs/ROADMAP.md); when closing a task, tick it
-there.
+and their status live in `.local/ROADMAP.md`; when closing a task, tick it there. That file
+is written in Russian and stays out of git - see the rule about `.local/` below.
 
 ## Stack and startup
 
@@ -309,6 +309,11 @@ Claude Code 2.1.222 on 14 August 2026:
   comments, the CLI output, the HTTP answers, the telegram notifications, the tray menu and
   the documentation - is English. The advisor prompt is English too, and the language of its
   answers is a setting (`analyzer.language`), not a hardcoded phrase.
+- **`.local/` is the Russian half, and it never reaches git.** Working documents the author
+  reads rather than ships - the roadmap first of all - live there in Russian; the directory is
+  in `.gitignore`. That is what keeps the two rules from colliding: the repository stays
+  English, and the plan is still readable in the native language. A file asked for in Russian
+  goes into `.local/`, never next to the code.
 - **Texts the frontend shows never come from the server.** The server sends data (a limit
   window `kind`, a dictionary key for a failed request), and the words around it are built
   by `dict.ts`: the interface has two languages, and the backend has none.
