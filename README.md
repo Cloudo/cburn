@@ -97,11 +97,18 @@ cdash otel --prune     # убрать данные старше otel.keep_days
 
 Тот же дашборд, но обычным окном macOS и с цифрой расхода в меню-баре:
 
+Команды запускаются **из корня репозитория**, а не из `web/`: там лежит только
+фронт, а Tauri ищет рядом с собой каталог `src-tauri/`.
+
 ```bash
-npm install                     # Tauri CLI (нужен Rust: rustup.rs)
-npx tauri build                 # собирает src-tauri/target/release/bundle/macos/cloudo-dash.app
+npm install                          # Tauri CLI (нужен Rust: rustup.rs)
+PATH=$HOME/.cargo/bin:$PATH npm run desktop:build
 open src-tauri/target/release/bundle/macos/cloudo-dash.app
 ```
+
+`npm run desktop` — то же самое, но с горячей перезагрузкой при правках Rust.
+Путь к `cargo` в команде нужен, если Rust ставился с `--no-modify-path` и в
+профиле шелла его нет.
 
 Окно грузит `http://127.0.0.1:8799` — тот же фронт, что и в браузере, поэтому
 сервер должен работать. Если он молчит, приложение поднимает его само:

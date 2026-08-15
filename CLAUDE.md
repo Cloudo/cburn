@@ -281,7 +281,11 @@ Claude Code 2.1.222 14 августа 2026:
 - **`dmg` не собирается:** `bundle_dmg.sh` падает на этой машине, а для «одного
   устанавливаемого `.app`» образ не нужен. В `bundle.targets` осталось `app`.
 - **Rust ставился с `--no-modify-path`** — тулчейн лежит в `~/.cargo`, профиль
-  шелла не тронут; сборка зовётся как `PATH=$HOME/.cargo/bin:$PATH npx tauri build`.
+  шелла не тронут; сборка зовётся как
+  `PATH=$HOME/.cargo/bin:$PATH npm run desktop:build`.
+- **Сборка десктопа идёт из корня репозитория, не из `web/`.** Tauri ищет
+  `src-tauri/` рядом с собой, а в `web/` лежит только фронт — оттуда команда
+  падает с «Couldn't recognize the current folder as a Tauri project».
 
 ## Принятые решения
 

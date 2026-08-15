@@ -1,5 +1,10 @@
 {
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4"
+  },
+  "private": true,
+  "scripts": {
+    "desktop": "tauri dev",
+    "desktop:build": "tauri build"
   }
 }
