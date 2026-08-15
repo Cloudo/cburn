@@ -951,6 +951,39 @@ def test_advice_mentions_are_expanded(transcripts: Path, db_path: Path) -> None:
     assert [s["title"] for s in item["sessions"]] == ["project structure review"]
     assert item["sessions"][0]["project"] == "project"
     assert item["sessions"][0]["id"].startswith("b2ae5a8a"), "the link leads to the full id"
+    assert item["projects"] == ["project"], "the session brings its project along"
+
+
+def test_advice_projects_are_read_from_the_text(transcripts: Path, db_path: Path) -> None:
+    """A tip names a project without naming a session - the cut by project needs it too."""
+    now = datetime.now(UTC)
+    seed(transcripts, db_path, [assistant("msg_1", ts=now)])
+    conn = connect(db_path)
+    with conn:
+        cursor = conn.execute(
+            "INSERT INTO advice (ts, kind, digest_json, model, cost_usd) VALUES (?, 'manual',"
+            " '{}', 'haiku', 0.07)",
+            (now.isoformat(),),
+        )
+        conn.executemany(
+            """
+            INSERT INTO advice_items (advice_id, key, title, severity, detail, action, evidence)
+            VALUES (?, ?, ?, 'warn', '', '', ?)
+            """,
+            [
+                (cursor.lastrowid, "k1", "Split the 'project' work", "mechanical_opus = 212"),
+                (cursor.lastrowid, "k2", "A project-wide habit", "cache_read = 0.9"),
+                (cursor.lastrowid, "k3", "Move reading to haiku", "mechanical_opus = 212"),
+            ],
+        )
+    conn.close()
+
+    with client(db_path, transcripts) as api:
+        items = api.get("/api/advice").json()["runs"][0]["items"]
+
+    assert items[0]["projects"] == ["project"]
+    assert items[1]["projects"] == [], "'project-wide' is another word, not the project"
+    assert items[2]["projects"] == [], "a tip about the machine belongs to no project"
 
 
 def test_advice_status_is_saved(transcripts: Path, db_path: Path) -> None:

@@ -295,6 +295,7 @@ def advice_history(conn: sqlite3.Connection, limit: int = 20) -> list[dict]:
     for run in runs:
         run["items"] = items[run["id"]]
         _attach_mentioned_sessions(conn, run["items"])
+        _attach_projects(conn, run["items"])
     return runs
 
 
@@ -341,6 +342,36 @@ def _attach_mentioned_sessions(conn: sqlite3.Connection, items: list[dict]) -> N
                 if session is not None:
                     seen[session["id"]] = session
         item["sessions"] = list(seen.values())
+
+
+def _attach_projects(conn: sqlite3.Connection, items: list[dict]) -> None:
+    """Which projects a tip is about - so the screen can cut the advice by project.
+
+    Two sources, because one is not enough: the projects of the sessions a tip mentions,
+    and the project names written in the text itself. Most tips name no session at all
+    ("close the sprawling session in 'briefly'"), and by sessions alone two thirds of them
+    would end up with no project.
+    """
+    # A name of one character (the root project is called "-") would be found in any text.
+    known = [
+        row["name"]
+        for row in conn.execute(
+            "SELECT DISTINCT COALESCE(display_name, slug) AS name FROM projects"
+            " WHERE length(COALESCE(display_name, slug)) > 1"
+        )
+    ]
+    # A dash is not a word boundary for `\b`, and "cloudo" would then be found inside
+    # "cloudo-dash". The longer name wins because the shorter one is not matched at all.
+    patterns = [
+        (name, re.compile(rf"(?<![\w\-./]){re.escape(name)}(?![\w\-./])", re.IGNORECASE))
+        for name in known
+    ]
+    for item in items:
+        found = {session["project"] for session in item["sessions"] if session["project"]}
+        fields = ("title", "detail", "action", "evidence")
+        text = " ".join(item.get(field) or "" for field in fields)
+        found.update(name for name, pattern in patterns if pattern.search(text))
+        item["projects"] = sorted(found)
 
 
 def set_advice_status(conn: sqlite3.Connection, item_id: int, status: str) -> bool:

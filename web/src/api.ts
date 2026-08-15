@@ -466,6 +466,8 @@ export type AdviceItem = {
   status: "new" | "accepted" | "rejected";
   /** Sessions a tip refers to: expanded from the short ids. */
   sessions: Array<{ id: string; title: string | null; project: string | null }>;
+  /** Projects a tip is about: from the mentioned sessions and from the text itself. */
+  projects: string[];
 };
 
 export type AdviceRun = {

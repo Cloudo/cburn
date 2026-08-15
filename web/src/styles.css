@@ -2699,6 +2699,48 @@ main.empty {
   color: var(--text-faint);
 }
 
+/* Two cuts over one list: the importance tabs above, the project buttons under them -
+   the quieter shape says which of the two is the secondary one. */
+.advice-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.advice-filters .tabs {
+  margin-bottom: 0;
+}
+
+.advice-filters .filter-tabs {
+  flex-wrap: wrap;
+}
+
+.advice-filters .filter-tab {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.advice-filters .filter-tab:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.filter-tab-count {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.tab-count-crit {
+  color: var(--amber);
+}
+
+.tab-count-warn {
+  color: var(--steel);
+}
+
 /* Tip groups by severity: what burns comes first. */
 .advice-group {
   border: 1px solid var(--line);
