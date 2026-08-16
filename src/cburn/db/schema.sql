@@ -129,9 +129,28 @@ CREATE TABLE IF NOT EXISTS advice_items (
     action    TEXT,
     evidence  TEXT NOT NULL,   -- without it a tip is not stored (TZ §6)
     status    TEXT NOT NULL DEFAULT 'new',   -- new | accepted | rejected
+    act_json  TEXT,            -- a typed action from the closed list (task D7), NULL for most tips
     UNIQUE (advice_id, key)
 );
 CREATE INDEX IF NOT EXISTS idx_advice_items ON advice_items(status, key);
+
+-- Tips carried out (task D7): what was changed, by which act and what to restore from.
+-- A write into a foreign config without a way back is not a change but a loss, so the
+-- diff the human confirmed is kept next to the copy of the file.
+CREATE TABLE IF NOT EXISTS applied_patches (
+    id         INTEGER PRIMARY KEY,
+    ts         TEXT NOT NULL,
+    item_id    INTEGER REFERENCES advice_items(id),
+    kind       TEXT NOT NULL,   -- the act type: close_session | allow_permission | ...
+    act_json   TEXT NOT NULL,
+    target     TEXT NOT NULL,   -- the file written or the session to be closed
+    diff       TEXT,            -- exactly what was shown in the confirmation
+    backup     TEXT,            -- the copy to restore; NULL when the file did not exist
+    after_hash TEXT,            -- what we wrote: a later foreign change must not be lost
+    status     TEXT NOT NULL DEFAULT 'applied',  -- pending | applied | rolled_back | failed
+    note       TEXT             -- a dictionary key for the screen, not a sentence
+);
+CREATE INDEX IF NOT EXISTS idx_applied_patches ON applied_patches(item_id, status);
 
 -- Notable moments inside a session: auto-compaction (after it the context
 -- collapses), other milestones later on. They are needed so the context chart

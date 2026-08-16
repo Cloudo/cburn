@@ -468,6 +468,55 @@ export type AdviceItem = {
   sessions: Array<{ id: string; title: string | null; project: string | null }>;
   /** Projects a tip is about: from the mentioned sessions and from the text itself. */
   projects: string[];
+  /** The typed action from the closed list, if the tip has one that can be carried out. */
+  act: AdviceAct | null;
+  /** The patch this tip has already produced: a card shows whether it was carried out. */
+  patch: AppliedPatch | null;
+};
+
+/** What the advisor proposes to do, in a form the machine understands (task D7). */
+export type AdviceAct = {
+  type: "close_session" | "allow_permission" | "disable_hook" | "disable_plugin";
+  session_id?: string;
+  rule?: string;
+  event?: string;
+  matcher?: string;
+  plugin?: string;
+  scope?: string;
+  project?: string;
+};
+
+/** What the action would change. Built before the confirmation; nothing is written yet. */
+export type ActPlan = {
+  kind: AdviceAct["type"];
+  /** The file to be written, or the session to be closed. */
+  target: string;
+  details: {
+    path?: string;
+    rule?: string;
+    event?: string;
+    matcher?: string | null;
+    plugin?: string;
+    session_id?: string;
+    project?: string | null;
+    status?: string;
+    live?: boolean;
+  };
+  /** A unified diff of the file; empty where nothing is written. */
+  diff: string;
+  /** The state the plan was built from: the confirmation goes back with it. */
+  hash: string;
+  /** Dictionary keys for the warnings under the diff - the words are ours. */
+  notes: string[];
+};
+
+export type AppliedPatch = {
+  id: number;
+  item_id: number | null;
+  kind: string;
+  status: "pending" | "applied" | "rolled_back" | "failed";
+  ts: string;
+  note: string | null;
 };
 
 export type AdviceRun = {
@@ -512,6 +561,40 @@ export function useAdvice(): {
 export async function setAdviceStatus(id: number, status: AdviceItem["status"]): Promise<void> {
   const response = await fetch(`api/advice/items/${id}?status=${status}`, { method: "POST" });
   if (!response.ok) throw new Error(fail("error.adviceStatus", response.status));
+}
+
+/** A refusal to carry an action out. The backend sends a reason key, not a sentence:
+ *  the words live in the dictionary, as everywhere else. */
+export class ActFailed extends Error {
+  constructor(readonly reason: string) {
+    super(reason);
+  }
+}
+
+async function act<T>(url: string, body?: unknown): Promise<T> {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: body ? { "content-type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) throw new ActFailed(payload?.detail ?? String(response.status));
+  return payload as T;
+}
+
+/** What the tip's action would change: the diff of the file and its hash (task D7). */
+export function planAct(itemId: number): Promise<ActPlan> {
+  return act<ActPlan>(`api/advice/items/${itemId}/plan`);
+}
+
+/** Carry it out. The hash is the one the diff was built from: a foreign change in
+ *  between comes back as a conflict instead of overwriting it. */
+export function applyAct(itemId: number, hash: string): Promise<AppliedPatch> {
+  return act<AppliedPatch>(`api/advice/items/${itemId}/apply`, { hash });
+}
+
+export function rollbackPatch(patchId: number): Promise<AppliedPatch> {
+  return act<AppliedPatch>(`api/patches/${patchId}/rollback`);
 }
 
 /** Analyse the period now. It costs money - called from the button only. */

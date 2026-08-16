@@ -46,6 +46,10 @@ DEFAULTS: dict[str, Any] = {
     # Events arrive in bunches on every turn and every tool call, around
     # 400 bytes each, so they have their own retention; 0 means keep everything.
     "otel": {"enabled": True, "keep_days": 30},
+    # Carrying tips out (task D7). Switched off, the advisor still returns actions but the
+    # dashboard refuses to apply them: it is the single switch for writes into a foreign
+    # config, and one is easier to trust than a list of exceptions.
+    "actions": {"enabled": True},
     "prices": {},
 }
 
@@ -132,9 +136,10 @@ def validate(config: dict[str, Any]) -> list[str]:
     if daily is not None and not _is_time(daily):
         errors.append("telegram.daily_summary_at: expected a time like 21:00")
 
-    enabled = (config.get("otel") or {}).get("enabled")
-    if enabled is not None and not isinstance(enabled, bool):
-        errors.append("otel.enabled: expected true or false")
+    for section in ("otel", "actions"):
+        enabled = (config.get(section) or {}).get("enabled")
+        if enabled is not None and not isinstance(enabled, bool):
+            errors.append(f"{section}.enabled: expected true or false")
 
     for model, price in (config.get("prices") or {}).items():
         if not isinstance(price, dict):

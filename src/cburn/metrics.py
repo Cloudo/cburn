@@ -6,6 +6,7 @@ the TZ §4 metrics - burn rate per window, model share, idle turns - are task B3
 
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 from collections.abc import Mapping
@@ -285,7 +286,7 @@ def advice_history(conn: sqlite3.Connection, limit: int = 20) -> list[dict]:
     items: dict[int, list[dict]] = {run["id"]: [] for run in runs}
     for row in conn.execute(
         f"""
-        SELECT id, advice_id, key, title, severity, detail, action, evidence, status
+        SELECT id, advice_id, key, title, severity, detail, action, evidence, status, act_json
           FROM advice_items WHERE advice_id IN ({",".join("?" * len(ids))})
          ORDER BY id
         """,  # noqa: S608
@@ -296,7 +297,26 @@ def advice_history(conn: sqlite3.Connection, limit: int = 20) -> list[dict]:
         run["items"] = items[run["id"]]
         _attach_mentioned_sessions(conn, run["items"])
         _attach_projects(conn, run["items"])
+    _attach_acts(conn, [item for run in runs for item in run["items"]])
     return runs
+
+
+def _attach_acts(conn: sqlite3.Connection, items: list[dict]) -> None:
+    """The typed action of a tip and the patch already carried out by it (task D7).
+
+    The import is local: `actions` reads the session state through this module, and at
+    the top of the file the two would import each other.
+    """
+    from . import actions
+
+    patches = actions.patches_for_items(conn, [int(item["id"]) for item in items])
+    for item in items:
+        raw = item.pop("act_json", None)
+        try:
+            item["act"] = json.loads(raw) if raw else None
+        except json.JSONDecodeError:
+            item["act"] = None
+        item["patch"] = patches.get(int(item["id"]))
 
 
 #: How the advisor refers to a session: by the short id from the digest.

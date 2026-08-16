@@ -26,6 +26,8 @@ import subprocess
 from datetime import UTC, datetime
 from typing import Any
 
+from .. import actions
+
 log = logging.getLogger(__name__)
 
 CLAUDE_BINARY = "claude"
@@ -40,7 +42,8 @@ MAX_BUDGET_USD = 0.10
 SEVERITIES = ("info", "warn", "crit")
 
 #: The answer schema. `evidence` is mandatory: a tip without support from the digest
-#: numbers is just general words, and those we throw away (TZ §6).
+#: numbers is just general words, and those we throw away (TZ §6). `act` is optional and
+#: comes from a closed list (task D7): most tips have no action that could be carried out.
 RESPONSE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -54,6 +57,7 @@ RESPONSE_SCHEMA: dict[str, Any] = {
                     "detail": {"type": "string"},
                     "action": {"type": "string"},
                     "evidence": {"type": "string"},
+                    "act": actions.ACT_SCHEMA,
                 },
                 "required": ["title", "severity", "detail", "action", "evidence"],
                 "additionalProperties": False,
@@ -98,6 +102,20 @@ Rules:
    info - worth keeping in mind.
 4. No more than five tips. Do not repeat what is marked as already dismissed.
 5. Answer in {language}, without preambles and without retelling the digest.
+6. If a tip can be carried out by one of the actions below, fill `act`. Nothing runs by
+   itself: the human sees the diff of the file and confirms it, and the change can be
+   rolled back. Where no action fits, leave `act` out rather than inventing one.
+   * `close_session` {{session_id}} - a session whose context has grown too heavy. It is
+     terminated in a pause between steps, not in the middle of one.
+   * `allow_permission` {{rule, scope, project}} - a rule for `permissions.allow` when the
+     same tool is confirmed by hand over and over. `rule` is written in the Claude Code
+     syntax, for example `Bash(npm test:*)` or `Read(//tmp/**)`. `scope` is `user` (the
+     default) or `project`, and then `project` holds the project name from the digest.
+   * `disable_hook` {{event, matcher}} - a hook that eats time between turns. `event` is
+     the name from the digest (`Stop`, `UserPromptSubmit`); without `matcher` the whole
+     event goes.
+   * `disable_plugin` {{plugin}} - a plugin whose MCP server takes seconds at every
+     session start and is never called.
 """.strip()
 
 
@@ -173,6 +191,9 @@ def parse_advice(envelope: dict[str, Any]) -> list[dict[str, Any]]:
             log.info("a tip without support in numbers was dropped: %s", title or "untitled")
             continue
         severity = item.get("severity") if item.get("severity") in SEVERITIES else "info"
+        # An act the machine does not know is dropped, and the tip stays as text: it is
+        # carried out on confirmation, so what gets through is only what we can undo.
+        act = actions.normalise(item.get("act"))
         advice.append(
             {
                 "key": advice_key(title, item.get("action")),
@@ -181,6 +202,7 @@ def parse_advice(envelope: dict[str, Any]) -> list[dict[str, Any]]:
                 "detail": (item.get("detail") or "").strip(),
                 "action": (item.get("action") or "").strip(),
                 "evidence": evidence,
+                "act": act,
             }
         )
     return advice
@@ -254,10 +276,17 @@ def advise(
         conn.executemany(
             """
             INSERT OR IGNORE INTO advice_items
-                (advice_id, key, title, severity, detail, action, evidence)
-            VALUES (:advice_id, :key, :title, :severity, :detail, :action, :evidence)
+                (advice_id, key, title, severity, detail, action, evidence, act_json)
+            VALUES (:advice_id, :key, :title, :severity, :detail, :action, :evidence, :act_json)
             """,
-            [dict(item, advice_id=advice_id) for item in advice],
+            [
+                dict(
+                    item,
+                    advice_id=advice_id,
+                    act_json=json.dumps(item["act"], ensure_ascii=False) if item["act"] else None,
+                )
+                for item in advice
+            ],
         )
     return {
         "advice_id": advice_id,

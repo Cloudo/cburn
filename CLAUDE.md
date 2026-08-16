@@ -41,13 +41,33 @@ src/cburn/
   collector/otlp.py receiving Claude Code telemetry over OTLP/JSON (M4)
   notifier/         the telegram bridge and the Bot API (M3)
   ui_state.py       the browser's choice mirrored for the tray (the interface language)
+  actions.py        carrying a tip out: the act, the diff, the confirmation, the rollback (D7)
 tests/fixtures/transcripts/   anonymised transcripts for the parser tests
 ```
 
 ## Invariants (never to be broken)
 
-- **`~/.claude` is read-only.** No writes, renames or deletions inside the Claude Code
-  directory. Our own state lives in `~/.local/share/cburn/`.
+- **`~/.claude` is read-only apart from one door.** The transcripts
+  (`~/.claude/projects`) and `~/.claude.json` are never written to: the first is the data
+  source, and a write there moves the very offsets we read the tail from; the second is
+  live state Claude Code rewrites every few seconds, so a read-modify-write of ours would
+  silently lose someone else's change. What may be written is `settings.json` (the user
+  one) and a project's `settings.local.json` - and only through `actions.py`. Everything
+  else of ours still lives in `~/.local/share/cburn/`.
+- **A tip is carried out through a plan, not through text.** The advisor returns a typed
+  `act` from a closed list next to the words; anything the machine does not know is
+  dropped and the tip stays text (`actions.normalise`). The endpoint builds the plan and
+  gives back a diff of the file plus the hash of its current state; the confirmation comes
+  back with that hash, and a mismatch is a 409 rather than an overwrite - Claude Code
+  rewrites `settings.json` itself, and a stale plan must not wipe that out.
+- **Every write leaves a way back.** A copy goes into `~/.local/share/cburn/backups/` and
+  a row into `applied_patches` together with the diff the human confirmed. A rollback
+  refuses when the file has changed since we wrote it: restoring the copy would throw
+  away someone else's later edit. The whole door is switched off by `actions.enabled`.
+- **A session is closed in a pause, not in the middle of a step.** An accepted
+  `close_session` lands in `applied_patches` as `pending`, and the liveness pass sends the
+  signal when `session_status` is no longer `working`. SIGTERM stays honest about itself:
+  `SessionEnd` hooks will not run, and the plan says so before the confirmation.
 - **The parser is tolerant.** The transcript format is undocumented and changes between
   versions: ignore unknown fields, stash unknown record types into `raw_events`, and a broken
   line goes to the log without stopping the walk - the offset moves on.
@@ -147,6 +167,10 @@ at the next advisor edit:
 - **The `--output-format json` envelope** carries `total_cost_usd`, `usage`,
   `modelUsage` (the full model name), `num_turns`, `stop_reason`, `is_error`.
 - **The `haiku` alias is alive** and expands into `claude-haiku-4-5-20251001`.
+- **The schema may hold an optional nested object**, and the model fills it. Checked on a
+  live call with the `act` of task D7: haiku returned `close_session`, `allow_permission`
+  (with `scope` and `project`), `disable_plugin` and `disable_hook` for the four sections
+  of the digest, and a tip without a fitting action simply came back without `act`.
 - **A tick costs about $0.08** on haiku with a digest of ~1.5k tokens: almost all of that is
   writing the system prompt into the cache (11k tokens). `--strict-mcp-config` and
   `--exclude-dynamic-system-prompt-sections` trim it but do not zero it out.

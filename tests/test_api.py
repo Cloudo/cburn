@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from cburn import config, paths
 from cburn import metrics as metrics_module
-from cburn import paths
 from cburn.api.server import create_app
 from cburn.collector.indexer import ingest_tree
 from cburn.db import connect
@@ -1002,6 +1002,74 @@ def test_advice_status_is_saved(transcripts: Path, db_path: Path) -> None:
     assert runs[0]["items"][0]["status"] == "rejected"
     assert bad_status.status_code == 400
     assert missing.status_code == 404
+
+
+def test_an_act_is_applied_only_against_the_diff_that_was_shown(
+    transcripts: Path, db_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The whole door in one pass: a plan, a stale confirmation, a write and the way back."""
+    claude = tmp_path / "claude"
+    claude.mkdir()
+    settings = claude / "settings.json"
+    settings.write_text(json.dumps({"permissions": {"allow": ["Bash(ls)"]}}, indent=2) + "\n")
+    monkeypatch.setattr(paths, "CLAUDE_DIR", claude)
+    monkeypatch.setattr(paths, "DATA_DIR", tmp_path / "state")
+
+    conn = connect(db_path)
+    advice_run(conn)
+    item_id = conn.execute("SELECT id FROM advice_items ORDER BY id LIMIT 1").fetchone()["id"]
+    with conn:
+        conn.execute(
+            "UPDATE advice_items SET act_json = ? WHERE id = ?",
+            (json.dumps({"type": "allow_permission", "rule": "Bash(npm test:*)"}), item_id),
+        )
+    conn.close()
+
+    with client(db_path, transcripts) as api:
+        plan = api.post(f"/api/advice/items/{item_id}/plan").json()
+        stale = api.post(f"/api/advice/items/{item_id}/apply", json={"hash": "not-what-was-shown"})
+        applied = api.post(f"/api/advice/items/{item_id}/apply", json={"hash": plan["hash"]})
+        item = api.get("/api/advice").json()["runs"][0]["items"][0]
+        patches = api.get("/api/patches").json()["patches"]
+        undone = api.post(f"/api/patches/{applied.json()['patch_id']}/rollback")
+
+    assert '+      "Bash(npm test:*)"' in plan["diff"], "the diff is of the file, not of the intent"
+    assert stale.status_code == 409, "a foreign change in between is a conflict, not an error"
+    assert applied.status_code == 200
+    assert item["status"] == "accepted", "a carried-out tip does not come round again"
+    assert item["patch"]["status"] == "applied"
+    assert [patch["kind"] for patch in patches] == ["allow_permission"]
+    assert undone.status_code == 200
+    assert json.loads(settings.read_text())["permissions"]["allow"] == ["Bash(ls)"]
+
+
+def test_writes_are_refused_when_the_door_is_shut(
+    transcripts: Path, db_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`actions.enabled = false` is the single switch for writes into a foreign config."""
+    monkeypatch.setattr(paths, "CLAUDE_DIR", tmp_path / "claude")
+    monkeypatch.setattr(
+        config, "load", lambda *args: config.DEFAULTS | {"actions": {"enabled": False}}
+    )
+    conn = connect(db_path)
+    advice_run(conn)
+    item_id = conn.execute("SELECT id FROM advice_items ORDER BY id LIMIT 1").fetchone()["id"]
+    conn.close()
+
+    with client(db_path, transcripts) as api:
+        assert api.post(f"/api/advice/items/{item_id}/plan").status_code == 403
+        assert api.post(f"/api/advice/items/{item_id}/apply", json={"hash": ""}).status_code == 403
+
+
+def test_a_tip_without_an_act_has_nothing_to_apply(transcripts: Path, db_path: Path) -> None:
+    conn = connect(db_path)
+    advice_run(conn)
+    item_id = conn.execute("SELECT id FROM advice_items ORDER BY id LIMIT 1").fetchone()["id"]
+    conn.close()
+
+    with client(db_path, transcripts) as api:
+        assert api.post(f"/api/advice/items/{item_id}/plan").status_code == 400
+        assert api.get("/api/advice").json()["runs"][0]["items"][0]["act"] is None
 
 
 def test_manual_run_is_labelled_manual(transcripts: Path, db_path: Path) -> None:

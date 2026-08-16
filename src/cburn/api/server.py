@@ -12,6 +12,7 @@ subscriber of `/ws`.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import sqlite3
 import time
@@ -26,7 +27,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import JSONResponse, Response
 from starlette.types import Scope
 
-from .. import config, notifier, paths, pricing, ui_state
+from .. import actions, config, notifier, paths, pricing, ui_state
 from ..analyzer import scheduler
 from ..collector import otlp
 from ..collector.indexer import IngestStats
@@ -262,6 +263,88 @@ def create_app(
             return {"item_id": item_id, "status": status}
         finally:
             conn.close()
+
+    @app.post("/api/advice/items/{item_id}/plan")
+    async def api_act_plan(item_id: int) -> dict[str, Any]:
+        """What the tip's action would change: the diff and the hash of the file (D7).
+
+        Nothing is written here. The hash comes back so that the confirmation can be
+        checked against exactly the state the human was shown.
+        """
+        conn = open_db()
+        try:
+            return _act_plan(conn, item_id).public()
+        finally:
+            conn.close()
+
+    @app.post("/api/advice/items/{item_id}/apply")
+    async def api_act_apply(item_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+        """Carry the action out after the confirmation. `hash` is what the preview showed."""
+        if not actions.enabled(config.load()):
+            raise HTTPException(status_code=403, detail="disabled")
+        before_hash = str(payload.get("hash") or "")
+
+        def carry_out() -> dict[str, Any]:
+            # The whole thing runs in one thread with a connection of its own: writing a
+            # file and terminating a process must not hold the event loop.
+            conn = connect(db_path, apply_schema=False)
+            try:
+                result = actions.apply(
+                    conn, _act_of(conn, item_id), before_hash=before_hash, item_id=item_id
+                )
+                # A carried-out tip is an accepted one: left "new" it could come round
+                # again on the next tick.
+                set_advice_status(conn, item_id, "accepted")
+                return result
+            finally:
+                conn.close()
+
+        try:
+            return await asyncio.to_thread(carry_out)
+        except actions.ActError as exc:
+            raise HTTPException(status_code=_act_code(exc), detail=exc.reason) from exc
+
+    @app.get("/api/patches")
+    async def api_patches(limit: int = 50) -> dict[str, Any]:
+        """What has already been carried out, with a way back (task D7)."""
+        conn = open_db()
+        try:
+            return {"patches": actions.history(conn, limit)}
+        finally:
+            conn.close()
+
+    @app.post("/api/patches/{patch_id}/rollback")
+    async def api_patch_rollback(patch_id: int) -> dict[str, Any]:
+        """Put the file back - unless it has been changed since we wrote it."""
+
+        def undo() -> dict[str, Any]:
+            conn = connect(db_path, apply_schema=False)
+            try:
+                return actions.rollback(conn, patch_id)
+            finally:
+                conn.close()
+
+        try:
+            return await asyncio.to_thread(undo)
+        except actions.ActError as exc:
+            raise HTTPException(status_code=_act_code(exc), detail=exc.reason) from exc
+
+    def _act_of(conn: Any, item_id: int) -> dict[str, Any]:
+        row = conn.execute("SELECT act_json FROM advice_items WHERE id = ?", (item_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="not_found")
+        act = actions.normalise(json.loads(row["act_json"]) if row["act_json"] else None)
+        if act is None:
+            raise HTTPException(status_code=400, detail="unknown_act")
+        return act
+
+    def _act_plan(conn: Any, item_id: int) -> actions.Plan:
+        if not actions.enabled(config.load()):
+            raise HTTPException(status_code=403, detail="disabled")
+        try:
+            return actions.plan(conn, _act_of(conn, item_id))
+        except actions.ActError as exc:
+            raise HTTPException(status_code=_act_code(exc), detail=exc.reason) from exc
 
     @app.post("/api/advice/run")
     async def api_advice_run(period: str = "24h") -> dict[str, Any]:
@@ -507,8 +590,29 @@ def create_app(
     return app
 
 
+#: A refusal to carry an act out, by reason. A stale plan and a file changed since are
+#: not errors of the request but a conflict: the file is no longer what the human saw.
+ACT_CODES = {"stale": 409, "changed_since": 409, "already_rolled_back": 409, "no_rollback": 409}
+
+
+def _act_code(exc: actions.ActError) -> int:
+    """The reason goes out as a dictionary key: the words are the frontend's business."""
+    if exc.reason == "not_found":
+        return 404
+    return ACT_CODES.get(exc.reason, 400)
+
+
 def _default_liveness() -> dict[str, datetime | None] | None:
     return live_state(use_cache=True)
+
+
+def _close_pending(open_db: Any, ids: dict[str, datetime | None] | None) -> int:
+    """The pending closes in their own connection (task D7)."""
+    conn = open_db()
+    try:
+        return actions.run_pending(conn, ids)
+    finally:
+        conn.close()
 
 
 async def _refresh_liveness(open_db: Any, probe: LivenessProbe) -> None:
@@ -526,6 +630,14 @@ async def _refresh_liveness(open_db: Any, probe: LivenessProbe) -> None:
             conn.close()
         if changed:
             log.info("session liveness: %s updated", changed)
+        # The same pass carries out the closes the human agreed to: it already knows which
+        # sessions are alive and what their processes are doing, and a session is closed in
+        # a pause between steps rather than in the middle of one (task D7). Into a thread
+        # with a connection of its own: an SQLite object belongs to the thread it was
+        # created in, and terminating goes through the slow `claude agents --json`.
+        closed = await asyncio.to_thread(_close_pending, open_db, ids)
+        if closed:
+            log.info("sessions closed by an accepted tip: %s", closed)
     except asyncio.CancelledError:
         raise
     except Exception:  # a background task must not fail silently

@@ -6,7 +6,18 @@ import { useEffect, useMemo, useState } from "react";
 
 import { clockTime, usd } from "./format";
 import { useLang } from "./i18n";
-import { runAdvice, setAdviceStatus, useAdvice, type AdviceItem, type AdviceRun } from "./api";
+import {
+  ActFailed,
+  applyAct,
+  planAct,
+  rollbackPatch,
+  runAdvice,
+  setAdviceStatus,
+  useAdvice,
+  type ActPlan,
+  type AdviceItem,
+  type AdviceRun,
+} from "./api";
 
 const SEVERITY_ORDER = ["crit", "warn", "info"] as const;
 
@@ -268,6 +279,7 @@ function Item({
       <p className="advice-evidence">
         <span className="advice-label">{t("advice.evidence")}</span> {item.evidence}
       </p>
+      {item.act && <Act item={item} onChange={onChange} />}
       <div className="advice-buttons">
         {item.status !== "accepted" && (
           <button className="advice-accept" disabled={busy} onClick={() => change("accepted")}>
@@ -288,4 +300,124 @@ function Item({
       </div>
     </article>
   );
+}
+
+/** Carrying a tip out (task D7): the plan, the diff, the confirmation, the way back.
+ *  The backend writes nothing until the confirmation comes back with the hash of the
+ *  file the diff was built from - so what is applied is exactly what was seen. */
+function Act({ item, onChange }: { item: AdviceItem; onChange: () => Promise<void> }) {
+  const { t } = useLang();
+  const [plan, setPlan] = useState<ActPlan | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState("");
+  const patch = item.patch;
+  const kind = item.act?.type;
+
+  // The reason comes from the backend as a dictionary key: the words are ours.
+  const reasonOf = (error: unknown) =>
+    error instanceof ActFailed ? t(`advice.act.error.${error.reason}`) : String(error);
+
+  const guard = async (work: () => Promise<unknown>) => {
+    setBusy(true);
+    setProblem("");
+    try {
+      await work();
+    } catch (error) {
+      setProblem(reasonOf(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const preview = () => guard(async () => setPlan(await planAct(item.id)));
+  const confirm = () =>
+    guard(async () => {
+      await applyAct(item.id, plan?.hash ?? "");
+      setPlan(null);
+      await onChange();
+    });
+  const undo = () =>
+    guard(async () => {
+      await rollbackPatch(patch?.id ?? 0);
+      await onChange();
+    });
+
+  const carried = patch && patch.status !== "rolled_back";
+
+  return (
+    <div className="act">
+      <div className="act-line">
+        {carried ? (
+          <>
+            <span className={`act-badge act-badge-${patch.status}`}>
+              {t(`advice.act.status.${patch.status}`)}
+            </span>
+            {patch.status !== "failed" && (
+              <button className="act-undo" disabled={busy} onClick={undo}>
+                {t("advice.act.rollback")}
+              </button>
+            )}
+          </>
+        ) : (
+          <button className="act-apply" disabled={busy} onClick={preview}>
+            {t("advice.apply")}
+            <span className="act-kind">{t(`advice.act.kind.${kind}`)}</span>
+          </button>
+        )}
+        {problem && <span className="act-problem">{problem}</span>}
+      </div>
+
+      {plan && (
+        <div className="act-plan" role="dialog" aria-label={t("advice.act.title")}>
+          <div className="act-plan-head">
+            <span className="act-kind">{t(`advice.act.kind.${plan.kind}`)}</span>
+            <code className="act-target">
+              {plan.details.path ?? plan.details.session_id?.slice(0, 8)}
+            </code>
+            {plan.details.project && <span className="hint">{plan.details.project}</span>}
+            {plan.details.status && (
+              <span className="hint">{t(`status.${plan.details.status}`)}</span>
+            )}
+          </div>
+          {plan.diff && <Diff text={plan.diff} />}
+          {plan.notes.map((note) => (
+            <p key={note} className="act-note">
+              {t(`advice.act.note.${note}`)}
+            </p>
+          ))}
+          <div className="popover-actions">
+            <button className="popover-danger" disabled={busy} onClick={confirm}>
+              {t("advice.act.confirm")}
+            </button>
+            <button disabled={busy} onClick={() => setPlan(null)}>
+              {t("advice.cancel")}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The diff of the file as it came from the backend: we colour it, we do not build it.
+ *  The header lines carry the path, the rest is the change itself. */
+function Diff({ text }: { text: string }) {
+  return (
+    <pre className="act-diff">
+      {text.split("\n").map((line, index) => (
+        <span key={index} className={`act-diff-${lineKind(line)}`}>
+          {line}
+          {"\n"}
+        </span>
+      ))}
+    </pre>
+  );
+}
+
+function lineKind(line: string): string {
+  if (line.startsWith("+++") || line.startsWith("---")) return "file";
+  if (line.startsWith("@@")) return "hunk";
+  if (line.startsWith("+")) return "add";
+  if (line.startsWith("-")) return "del";
+  return "same";
 }

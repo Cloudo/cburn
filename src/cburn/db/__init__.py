@@ -33,6 +33,7 @@ ADDED_COLUMNS = {
     "raw_events": {"version": "TEXT"},
     "sessions": {"busy_since": "TEXT"},
     "advice": {"kind": "TEXT"},
+    "advice_items": {"act_json": "TEXT"},
 }
 
 

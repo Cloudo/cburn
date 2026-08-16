@@ -2699,6 +2699,135 @@ main.empty {
   color: var(--text-faint);
 }
 
+/* Carrying a tip out (task D7). The button only opens the plan: what is written
+   into a foreign config is seen as a diff of the file first, and confirmed after. */
+.act {
+  margin-top: 10px;
+}
+
+.act-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.act-apply,
+.act-undo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+  border: 1px solid color-mix(in srgb, var(--steel) 60%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--steel) 12%, transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.act-apply:hover:not(:disabled),
+.act-undo:hover:not(:disabled) {
+  border-color: var(--steel);
+  background: color-mix(in srgb, var(--steel) 22%, transparent);
+}
+
+.act-kind {
+  color: var(--text-faint);
+}
+
+.act-badge {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--line) 40%, transparent);
+}
+
+.act-badge-applied {
+  color: var(--mint);
+  background: color-mix(in srgb, var(--mint) 14%, transparent);
+}
+
+.act-badge-pending {
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 14%, transparent);
+}
+
+.act-badge-failed {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+.act-problem {
+  font-size: 11px;
+  color: var(--danger);
+}
+
+.act-plan {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-panel);
+}
+
+.act-plan-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 11px;
+}
+
+.act-target {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+
+/* A settings file has long lines (a token, a path), and wrapping them would break
+   the alignment of the change: the diff scrolls sideways inside its own box. */
+.act-diff {
+  margin: 0;
+  padding: 8px;
+  max-height: 320px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--bg-sunken);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.act-diff-file,
+.act-diff-hunk {
+  color: var(--text-faint);
+}
+
+.act-diff-add {
+  color: var(--mint);
+  background: color-mix(in srgb, var(--mint) 12%, transparent);
+}
+
+.act-diff-del {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.act-diff-same {
+  color: var(--text-dim);
+}
+
+.act-note {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
 /* Two cuts over one list: the importance tabs above, the project buttons under them -
    the quieter shape says which of the two is the secondary one. */
 .advice-filters {
