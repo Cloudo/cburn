@@ -323,6 +323,12 @@ const DICT: Record<string, [string, string]> = {
   "advice.severity.crit": ["горит", "critical"],
   "advice.action": ["что сделать:", "what to do:"],
   "advice.evidence": ["на основании:", "based on:"],
+  "advice.prompts.all": ["показать все промты ({count})", "show all prompts ({count})"],
+  "advice.prompts.less": ["свернуть промты", "collapse the prompts"],
+  "advice.prompts.empty": [
+    "лог промтов пуст: сессия проиндексирована до того, как он появился - нужен cburn reindex",
+    "no prompt log: the session was indexed before it existed - run cburn reindex",
+  ],
   "advice.apply": ["применить", "apply"],
   "advice.act.title": ["что изменится", "what changes"],
   "advice.act.confirm": ["применить", "apply"],

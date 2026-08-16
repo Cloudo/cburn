@@ -2699,6 +2699,70 @@ main.empty {
   color: var(--text-faint);
 }
 
+/* What was asked of the session (task C7). Two prompts by default: the first says what
+   it was started for, the last says what it has come to - the middle opens by a click. */
+.advice-session-card {
+  flex: 1 1 320px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-sunken);
+}
+
+.advice-session-card .advice-session {
+  border: 0;
+  padding: 0;
+  font-size: 12px;
+}
+
+.prompt-log {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.prompt-log-row {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.prompt-log-time {
+  flex: none;
+  color: var(--text-faint);
+  font-family: var(--mono);
+}
+
+/* A prompt is read, not scanned: the text wraps and long paths do not stretch the card. */
+.prompt-log-text {
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.prompt-log-more {
+  margin-top: 6px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.prompt-log-more:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--steel);
+}
+
 /* Carrying a tip out (task D7). The button only opens the plan: what is written
    into a foreign config is seen as a diff of the file first, and confirmed after. */
 .act {

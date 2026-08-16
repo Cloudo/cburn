@@ -19,7 +19,7 @@ from pathlib import Path, PurePosixPath
 
 from .. import paths
 from ..pricing import apply_costs
-from .parser import ParsedRecord, RecordKind, Usage, parse_line
+from .parser import PROMPT_LIMIT, ParsedRecord, RecordKind, Usage, parse_line
 
 log = logging.getLogger(__name__)
 
@@ -95,6 +95,7 @@ def ingest_file(conn: sqlite3.Connection, path: Path) -> IngestStats:
     sessions: dict[str, _Session] = {}
     unknown: list[tuple[int, ParsedRecord, str]] = []
     events: list[tuple[str, str, str]] = []
+    prompts: list[tuple[str, str, str, str]] = []
     for line_no, raw in enumerate(chunk, start=1):
         stats.lines += 1
         record = parse_line(raw)
@@ -106,7 +107,7 @@ def ingest_file(conn: sqlite3.Connection, path: Path) -> IngestStats:
         # why (task C2).
         if record.is_compact_summary and record.session_id and record.ts:
             events.append((record.session_id, record.ts, "compact"))
-        _collect(record, turns, sessions, stats)
+        _collect(record, turns, sessions, stats, prompts)
 
     with conn:  # one transaction per file: either the file is counted or the offset stays
         project_id = _upsert_project(conn, path, sessions)
@@ -114,6 +115,7 @@ def ingest_file(conn: sqlite3.Connection, path: Path) -> IngestStats:
         _insert_turns(conn, turns, stats)
         _store_unknown(conn, path, unknown)
         _store_events(conn, events)
+        _store_prompts(conn, prompts)
         _link_parents(conn, turns)
         apply_costs(conn, turns.keys())
         _refresh_session_totals(conn, sessions.keys())
@@ -186,11 +188,12 @@ def _collect(
     turns: dict[str, _Turn],
     sessions: dict[str, _Session],
     stats: IngestStats,
+    prompts: list[tuple[str, str, str, str]],
 ) -> None:
     if record.kind is RecordKind.LAST_PROMPT and record.session_id:
         # The record has no time: it always describes the current session state.
         session = sessions.setdefault(record.session_id, _Session(session_id=record.session_id))
-        session.last_prompt = record.prompt_text
+        session.last_prompt = _caption(record.prompt_text)
         return
     if record.kind is RecordKind.TITLE and record.session_id:
         # Title records have neither time nor uuid - only sessionId.
@@ -204,6 +207,17 @@ def _collect(
 
     if record.kind is RecordKind.PROMPT:
         stats.prompts += 1
+        # The log holds what the human typed, and only that: a subagent prompt is written
+        # by the machine, and an auto-compaction summary is not a prompt at all (task C7).
+        if (
+            record.session_id
+            and record.ts
+            and record.uuid
+            and record.prompt_text
+            and not record.is_sidechain
+            and not record.is_compact_summary
+        ):
+            prompts.append((record.session_id, record.uuid, record.ts, record.prompt_text))
         return
     if record.kind is RecordKind.UNKNOWN:
         stats.unknown += 1  # stashing into raw_events is task B6
@@ -268,7 +282,12 @@ def _touch_session(sessions: dict[str, _Session], record: ParsedRecord) -> None:
         and not record.is_sidechain
         and not record.is_compact_summary
     ):
-        session.first_prompt = record.prompt_text
+        session.first_prompt = _caption(record.prompt_text)
+
+
+def _caption(text: str | None) -> str | None:
+    """A prompt as a session caption: the log keeps the long text, a line is enough here."""
+    return text[:PROMPT_LIMIT] if text else text
 
 
 # --- writing -------------------------------------------------------------
@@ -491,6 +510,16 @@ def _store_unknown(
 #: How many message_ids to ask about at a time: a file can hold thousands, and the
 #: number of parameters in an SQLite query is limited.
 _CHUNK = 500
+
+
+def _store_prompts(conn: sqlite3.Connection, prompts: list[tuple[str, str, str, str]]) -> None:
+    """The prompt log of a session (task C7). `uuid` keeps a re-read tail from doubling it."""
+    if not prompts:
+        return
+    conn.executemany(
+        "INSERT OR IGNORE INTO prompts (session_id, uuid, ts, text) VALUES (?, ?, ?, ?)",
+        prompts,
+    )
 
 
 def _store_events(conn: sqlite3.Connection, events: list[tuple[str, str, str]]) -> None:

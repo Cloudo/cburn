@@ -43,8 +43,13 @@ _TITLE_FIELDS = {"ai-title": "aiTitle", "custom-title": "customTitle"}
 #: to hunt for it by scanning user records.
 _LAST_PROMPT = "last-prompt"
 
-#: Limit on the prompt text: in the database it is only needed as a session caption.
+#: Limit on the prompt as a session caption: on screen a longer one does not fit anyway.
 PROMPT_LIMIT = 200
+
+#: Limit on the prompt in the log (task C7). The caption needs a line, the log is read
+#: by a human, so it keeps more - but still bounded: a pasted file must not settle in
+#: the database in full.
+PROMPT_LOG_LIMIT = 2000
 
 
 class RecordKind(StrEnum):
@@ -248,6 +253,19 @@ _SERVICE_OPEN = re.compile(r"^\s*<[a-z][\w-]*>", re.IGNORECASE)
 _COMMAND_NAME = re.compile(r"<command-name>\s*(.+?)\s*</command-name>", re.DOTALL | re.IGNORECASE)
 
 
+#: A note Claude Code writes on the human's behalf: an interrupt, the geometry of a
+#: pasted image, a nudge after an empty answer. Nobody typed those, so they are not
+#: prompts - and out of 4225 records of the author's own history 405 were exactly this.
+#: A tag a human writes themselves ("[bug] fix this") loses the tag - a fair price for
+#: not having to keep a list of Claude Code's service phrases up to date.
+_SERVICE_NOTE = re.compile(r"^(?:\[[^\]]*\]\s*)+")
+
+#: A slash command leaves only its name in the transcript - the arguments sit in a
+#: separate block - so in the log it is a line with nothing to read. And `/clear` starts
+#: almost every session, so as "the first prompt" it says nothing about any of them.
+_BARE_COMMAND = re.compile(r"^/[\w:.-]+$")
+
+
 def _strip_service_blocks(text: str) -> str:
     """Keep only what the human actually wrote in the prompt.
 
@@ -267,15 +285,22 @@ def _strip_service_blocks(text: str) -> str:
 
 
 def _clean_prompt(text: str) -> str | None:
-    """Trim the prompt and strip the service wrappers."""
+    """Trim the prompt and strip the service wrappers.
+
+    The trim is the log one: the caption is cut down to `PROMPT_LIMIT` where it is
+    stored, and the whole thing is needed to be read by a human (task C7).
+    """
     text = text.strip()
     if _SERVICE_OPEN.match(text):
         text = _strip_service_blocks(text)
-    return text[:PROMPT_LIMIT] or None
+    text = _SERVICE_NOTE.sub("", text).strip()
+    if _BARE_COMMAND.match(text):
+        return None
+    return text[:PROMPT_LOG_LIMIT] or None
 
 
 def _prompt_text(content: Any) -> str | None:
-    """The prompt text, trimmed to `PROMPT_LIMIT`. Attachments are skipped."""
+    """The prompt text, trimmed to `PROMPT_LOG_LIMIT`. Attachments are skipped."""
     if isinstance(content, str):
         text = content
     elif isinstance(content, list):

@@ -373,6 +373,37 @@ def test_first_prompt_ignores_sidechain_and_compact_summary(
     assert rows(conn, "SELECT first_prompt FROM sessions")[0]["first_prompt"] == "a real prompt"
 
 
+def test_the_prompt_log_keeps_what_the_human_typed(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """The log holds human prompts in order; the caption is still a line (task C7)."""
+    path = tmp_path / "proj" / "s1.jsonl"
+    sidechain = json.loads(prompt("a task for the subagent", ts="2026-08-13T08:00:00Z"))
+    sidechain["isSidechain"] = True
+    write_transcript(
+        path,
+        [
+            prompt("first question", ts="2026-08-13T09:00:00Z"),
+            json.dumps(sidechain),
+            prompt("x" * 5000, ts="2026-08-13T09:05:00Z"),
+            prompt("last question", ts="2026-08-13T09:10:00Z"),
+        ],
+    )
+
+    ingest_file(conn, path)
+    ingest_file(conn, path)  # a repeated pass must not double the log
+
+    log = rows(conn, "SELECT ts, text FROM prompts ORDER BY ts")
+    assert [row["ts"] for row in log] == [
+        "2026-08-13T09:00:00Z",
+        "2026-08-13T09:05:00Z",
+        "2026-08-13T09:10:00Z",
+    ], "the subagent prompt is written by the machine and does not belong in the log"
+    assert len(log[1]["text"]) == 2000, "a pasted file does not settle in the database in full"
+    caption = rows(conn, "SELECT first_prompt, last_prompt FROM sessions")[0]
+    assert caption["first_prompt"] == "first question"
+
+
 def test_several_sessions_in_one_file(conn: sqlite3.Connection, tmp_path: Path) -> None:
     """A file is not a session: the grouping follows the record field."""
     path = tmp_path / "proj" / "mixed.jsonl"

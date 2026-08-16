@@ -152,6 +152,23 @@ CREATE TABLE IF NOT EXISTS applied_patches (
 );
 CREATE INDEX IF NOT EXISTS idx_applied_patches ON applied_patches(item_id, status);
 
+-- What the human actually typed, in order (task C7). The session captions
+-- (`first_prompt`, `last_prompt`) are only the ends of this log, and the screen shows
+-- them by default - the rest opens on demand. `uuid` comes from the record, so a
+-- re-read tail does not double a prompt; the same prompt copied by a resume into
+-- another session is a prompt of that session too, hence the key of the pair.
+-- This text never leaves the machine: the advisor digest is built from aggregates
+-- and knows nothing about this table (TZ §7).
+CREATE TABLE IF NOT EXISTS prompts (
+    id         INTEGER PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    uuid       TEXT NOT NULL,
+    ts         TEXT NOT NULL,
+    text       TEXT NOT NULL,
+    UNIQUE (session_id, uuid)
+);
+CREATE INDEX IF NOT EXISTS idx_prompts_session ON prompts(session_id, ts);
+
 -- Notable moments inside a session: auto-compaction (after it the context
 -- collapses), other milestones later on. They are needed so the context chart
 -- shows why it dropped (TZ §5, task C2).

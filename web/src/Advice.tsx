@@ -9,6 +9,7 @@ import { useLang } from "./i18n";
 import {
   ActFailed,
   applyAct,
+  loadPrompts,
   planAct,
   rollbackPatch,
   runAdvice,
@@ -17,6 +18,8 @@ import {
   type ActPlan,
   type AdviceItem,
   type AdviceRun,
+  type AdviceSession,
+  type Prompt,
 } from "./api";
 
 const SEVERITY_ORDER = ["crit", "warn", "info"] as const;
@@ -260,14 +263,11 @@ function Item({
         </span>
       </div>
       {item.sessions.length > 0 && (
-        <p className="advice-sessions">
+        <div className="advice-sessions">
           {item.sessions.map((session) => (
-            <a key={session.id} className="advice-session" href={`#/session/${session.id}`}>
-              {session.title ?? session.id.slice(0, 8)}
-              <span className="advice-session-project">{session.project ?? "—"}</span>
-            </a>
+            <Session key={session.id} session={session} />
           ))}
-        </p>
+        </div>
       )}
       {item.detail && <p className="advice-detail">{item.detail}</p>}
       {item.action && (
@@ -299,6 +299,65 @@ function Item({
         {item.status === "rejected" && <span className="hint">{t("advice.rejectedNote")}</span>}
       </div>
     </article>
+  );
+}
+
+/** A session a tip names, with the log of what was asked of it (task C7).
+ *  Two prompts are shown by default - the first says what the session was started for,
+ *  the last says what it has come to. The middle is loaded by a click. */
+function Session({ session }: { session: AdviceSession }) {
+  const { t } = useLang();
+  const [whole, setWhole] = useState<Prompt[] | null>(null);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const shown = open && whole ? whole : session.prompts;
+  const hidden = session.prompt_count - session.prompts.length;
+
+  const expand = async () => {
+    if (whole) {
+      setOpen(true);
+      return;
+    }
+    setBusy(true);
+    try {
+      setWhole(await loadPrompts(session.id));
+      setOpen(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="advice-session-card">
+      <a className="advice-session" href={`#/session/${session.id}`}>
+        {session.title ?? session.id.slice(0, 8)}
+        <span className="advice-session-project">{session.project ?? "-"}</span>
+      </a>
+      {shown.length > 0 && (
+        <ol className="prompt-log">
+          {shown.map((entry, index) => (
+            <li key={`${entry.ts}-${index}`} className="prompt-log-row">
+              <span className="prompt-log-time">{clockTime(entry.ts)}</span>
+              <span className="prompt-log-text">{entry.text}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+      {/* The log fills up as transcripts are read: for sessions indexed before it
+          existed there is nothing to show until a reindex. */}
+      {session.prompt_count === 0 && <p className="hint">{t("advice.prompts.empty")}</p>}
+      {hidden > 0 && !open && (
+        <button className="prompt-log-more" disabled={busy} onClick={expand}>
+          {t("advice.prompts.all", { count: session.prompt_count })}
+        </button>
+      )}
+      {open && (
+        <button className="prompt-log-more" onClick={() => setOpen(false)}>
+          {t("advice.prompts.less")}
+        </button>
+      )}
+    </div>
   );
 }
 

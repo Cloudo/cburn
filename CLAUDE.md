@@ -72,10 +72,15 @@ tests/fixtures/transcripts/   anonymised transcripts for the parser tests
   versions: ignore unknown fields, stash unknown record types into `raw_events`, and a broken
   line goes to the log without stopping the walk - the offset moves on.
 - **Incrementality.** Only the file tail is read from the stored offset; truncation and
-  recreation are caught by the inode + size pair.
+  recreation are caught by the inode + size pair. `reindex --full` is therefore run with
+  the server stopped: the watcher writes an offset for the file being appended to right
+  now, and the walk started next to it reads that file from the end - checked live, the
+  prompts of the current session went missing exactly like that.
 - **Privacy.** The conversation text never leaves the machine. Only tool names, normalised
   commands, paths and numbers go into the advisor digest; including command fragments happens
-  exclusively under the `allow_snippets` flag.
+  exclusively under the `allow_snippets` flag. The prompt log (`prompts`) is stored locally
+  and shown on screen, and the digest knows nothing about it - what a human typed is for
+  the human, not for the model.
 - **Room for Tauri (M5).** The frontend talks to the backend over HTTP/WebSocket on localhost
   only - no direct filesystem access; no browser APIs missing from the system webview. The
   wrapper in M5 must not require reworking the frontend.

@@ -465,7 +465,7 @@ export type AdviceItem = {
   evidence: string;
   status: "new" | "accepted" | "rejected";
   /** Sessions a tip refers to: expanded from the short ids. */
-  sessions: Array<{ id: string; title: string | null; project: string | null }>;
+  sessions: AdviceSession[];
   /** Projects a tip is about: from the mentioned sessions and from the text itself. */
   projects: string[];
   /** The typed action from the closed list, if the tip has one that can be carried out. */
@@ -473,6 +473,26 @@ export type AdviceItem = {
   /** The patch this tip has already produced: a card shows whether it was carried out. */
   patch: AppliedPatch | null;
 };
+
+/** What the human typed, with the moment it was typed at (task C7). */
+export type Prompt = { ts: string; text: string };
+
+export type AdviceSession = {
+  id: string;
+  title: string | null;
+  project: string | null;
+  /** The ends of the prompt log: the first and the last one. The middle is asked for
+   *  by a click - twenty tips must not drag every prompt of every session along. */
+  prompts: Prompt[];
+  prompt_count: number;
+};
+
+/** The whole prompt log of a session, in order. */
+export async function loadPrompts(sessionId: string): Promise<Prompt[]> {
+  const response = await fetch(`api/sessions/${encodeURIComponent(sessionId)}/prompts`);
+  if (!response.ok) throw new Error(fail("error.request", response.status));
+  return (await response.json()).prompts as Prompt[];
+}
 
 /** What the advisor proposes to do, in a form the machine understands (task D7). */
 export type AdviceAct = {

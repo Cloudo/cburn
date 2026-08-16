@@ -954,6 +954,44 @@ def test_advice_mentions_are_expanded(transcripts: Path, db_path: Path) -> None:
     assert item["projects"] == ["project"], "the session brings its project along"
 
 
+def test_a_tip_carries_the_ends_of_the_prompt_log(transcripts: Path, db_path: Path) -> None:
+    """The card shows the first and the last prompt; the middle is asked for separately."""
+    now = datetime.now(UTC)
+    seed(
+        transcripts,
+        db_path,
+        [
+            prompt("start the dashboard", session="59d68098", ts=now - timedelta(hours=2)),
+            prompt("now the tray", session="59d68098", ts=now - timedelta(hours=1)),
+            prompt("and the diff", session="59d68098", ts=now),
+            assistant("msg_1", session="59d68098", ts=now),
+        ],
+    )
+    conn = connect(db_path)
+    with conn:
+        cursor = conn.execute(
+            "INSERT INTO advice (ts, kind, digest_json, model, cost_usd) VALUES (?, 'manual',"
+            " '{}', 'haiku', 0.05)",
+            (now.isoformat(),),
+        )
+        conn.execute(
+            """
+            INSERT INTO advice_items (advice_id, key, title, severity, detail, action, evidence)
+            VALUES (?, 'k1', 'Close the session', 'crit', '', '', 'session 59d68098 context 190k')
+            """,
+            (cursor.lastrowid,),
+        )
+    conn.close()
+
+    with client(db_path, transcripts) as api:
+        session = api.get("/api/advice").json()["runs"][0]["items"][0]["sessions"][0]
+        whole = api.get("/api/sessions/59d68098/prompts").json()["prompts"]
+
+    assert session["prompt_count"] == 3
+    assert [row["text"] for row in session["prompts"]] == ["start the dashboard", "and the diff"]
+    assert [row["text"] for row in whole] == ["start the dashboard", "now the tray", "and the diff"]
+
+
 def test_advice_projects_are_read_from_the_text(transcripts: Path, db_path: Path) -> None:
     """A tip names a project without naming a session - the cut by project needs it too."""
     now = datetime.now(UTC)

@@ -45,6 +45,7 @@ from ..metrics import (
     session_chain,
     session_events,
     session_models,
+    session_prompts,
     session_summary,
     session_tool_times,
     session_tools,
@@ -473,6 +474,19 @@ def create_app(
                 "turns": session_turns(conn, session_id),
                 "events": session_events(conn, session_id),
             }
+        finally:
+            conn.close()
+
+    @app.get("/api/sessions/{session_id}/prompts")
+    async def api_prompts(session_id: str, limit: int = 500) -> dict[str, Any]:
+        """The whole prompt log of a session (task C7).
+
+        The card shows the ends of it; the rest is asked for by a click, so a screen
+        with twenty tips does not carry every prompt of every session along.
+        """
+        conn = open_db()
+        try:
+            return {"session_id": session_id, "prompts": session_prompts(conn, session_id, limit)}
         finally:
             conn.close()
 

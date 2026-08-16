@@ -354,6 +354,13 @@ def _attach_mentioned_sessions(conn: sqlite3.Connection, items: list[dict]) -> N
             tuple(prefixes),
         )
     }
+    # The prompt log of the mentioned sessions: on the card it is the shortest answer to
+    # "what was this session about" - shorter than a title and honest (task C7).
+    ends = prompt_ends(conn, [session["id"] for session in known.values()])
+    for row in known.values():
+        log = ends.get(row["id"]) or {}
+        row["prompts"] = log.get("prompts") or []
+        row["prompt_count"] = log.get("total") or 0
     for item in items:
         seen: dict[str, dict] = {}
         for field in ("title", "detail", "action", "evidence"):
@@ -362,6 +369,49 @@ def _attach_mentioned_sessions(conn: sqlite3.Connection, items: list[dict]) -> N
                 if session is not None:
                     seen[session["id"]] = session
         item["sessions"] = list(seen.values())
+
+
+def session_prompts(conn: sqlite3.Connection, session_id: str, limit: int = 500) -> list[dict]:
+    """The whole prompt log of a session in order (task C7).
+
+    The text never leaves the machine: it is read by the screen, and the advisor digest
+    is built from aggregates and knows nothing about this table (TZ §7).
+    """
+    return [
+        dict(row)
+        for row in conn.execute(
+            "SELECT ts, text FROM prompts WHERE session_id = ? ORDER BY ts, id LIMIT ?",
+            (session_id, limit),
+        )
+    ]
+
+
+def prompt_ends(conn: sqlite3.Connection, session_ids: list[str]) -> dict[str, dict]:
+    """The first and the last prompt of every session, plus how many there are in all.
+
+    The ends are what the card shows by default: the beginning says what the session was
+    started for, the end says what it has come to. Everything in between opens on demand,
+    so a screen with twenty tips does not drag the whole log along.
+    """
+    if not session_ids:
+        return {}
+    holes = ",".join("?" * len(session_ids))
+    ends: dict[str, dict] = {}
+    for row in conn.execute(
+        f"""
+        SELECT session_id, ts, text, total FROM (
+            SELECT session_id, ts, text,
+                   ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY ts, id) AS rn,
+                   COUNT(*) OVER (PARTITION BY session_id) AS total
+              FROM prompts WHERE session_id IN ({holes})
+        ) WHERE rn = 1 OR rn = total
+         ORDER BY session_id, ts, rn
+        """,  # noqa: S608
+        tuple(session_ids),
+    ):
+        found = ends.setdefault(row["session_id"], {"total": row["total"], "prompts": []})
+        found["prompts"].append({"ts": row["ts"], "text": row["text"]})
+    return ends
 
 
 def _attach_projects(conn: sqlite3.Connection, items: list[dict]) -> None:
