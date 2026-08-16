@@ -311,11 +311,9 @@ Claude Code 2.1.222 on 14 August 2026:
 
 ## Decisions taken
 
-- The order of work is a vertical slice: first the end-to-end path "parser => SQLite => API =>
-  a dashboard with a needle", then depth on M1 and M2.
-- Telegram: the main channel is the `/notify` endpoint added to the neighbouring
-  `~/code/cc-tg-bridge` project (the bridge currently has only `/hook` and `/health`).
-  The direct Bot API stays as the fallback channel in the config.
+They live in `DECISIONS.md` in the repository root - the option taken, the ones rejected
+and the reason. A new decision is written down there, not here: this file keeps the rules
+and the invariants.
 
 ## Conventions
 
