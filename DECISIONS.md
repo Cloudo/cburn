@@ -4,6 +4,24 @@ Why things are the way they are: the option taken, the options rejected and the
 reason. Newest first. Things visible from the code and the git history do not
 belong here; neither do the invariants, which live in `CLAUDE.md`.
 
+## 2026-08-18 - the needle turns around a zero, not around a pixel
+
+The instrument needle rotated about `transform-origin: 200px 190px`, the hub in
+viewBox units. WebKit multiplies that length by the interface zoom, so at the 1.25
+rung the pivot moved to (250, 237.5) and the needle went flying off the dial with
+the arc left empty; Chromium resolves the same declaration correctly, which is why
+the fault only showed in the desktop window and in Safari. Now a `<g>` carries the
+hub to the local origin with an SVG `transform` attribute - user units, no CSS
+lengths involved - and the needle turns about `0 0`, the one length no zoom can
+spoil.
+
+Rejected: the SVG attribute `transform="rotate(a cx cy)"` on the needle itself
+(equally immune, but the CSS transition then interpolates a matrix rather than an
+angle, and the tip would leave the arc mid-swing - checked, a `<g>` plus a CSS
+rotation keeps the radius at exactly 130 units through the whole 0.9 s);
+percentages in `transform-origin` (they land on the right point, but a reader has
+to divide 190 by 232 to see the hub in `81.9%`).
+
 ## 2026-08-18 - CLAUDE.md keeps the core, the area knowledge moves to path-scoped rules
 
 `CLAUDE.md` had grown to 410 lines and, together with the imported `TZ.md`,

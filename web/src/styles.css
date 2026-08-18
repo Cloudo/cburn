@@ -456,6 +456,10 @@ main.empty {
 }
 
 .gauge-needle {
+  /* The pivot is the hub, and the group has already put it at the local zero. A zero is the
+     one length the interface zoom cannot spoil. */
+  transform-origin: 0 0;
+  transform-box: view-box;
   stroke: var(--amber);
   stroke-width: 3;
   stroke-linecap: round;

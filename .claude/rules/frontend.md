@@ -23,6 +23,13 @@ paths:
   remembered dark and light theme, which is what "follow the system" switches between. A
   colour written into the code instead of a token would stay at the old theme - that is why
   the chart slices read `var(--steel)` rather than a hex.
+- **A pixel inside an SVG is not safe: the interface zoom multiplies it.** The scale is set
+  through the CSS `zoom` of the root element, and WebKit (the desktop window and Safari)
+  multiplies a CSS length by it while the viewBox coordinate system stays as it is - a
+  `transform-origin: 200px 190px` on the instrument needle turned into (250, 237.5) at the
+  1.25 rung and sent the needle off the dial, invisibly to Chromium. So a pivot is either a
+  bare `0 0`, with the point carried there by an SVG `transform` attribute (user units,
+  outside CSS lengths), or it is not written in pixels at all.
 - **Texts the frontend shows never come from the server.** The server sends data (a limit
   window `kind`, a dictionary key for a failed request), and the words around it are built
   by `dict.ts`: the interface has two languages, and the backend has none.
