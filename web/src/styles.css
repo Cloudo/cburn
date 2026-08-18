@@ -1131,7 +1131,11 @@ main.empty {
   gap: 6px;
 }
 
-.popover button {
+/* The row of buttons is used outside a popover too (the plan of an act), and the look
+   must not depend on that: without the second selector those buttons stayed the browser's
+   own - a white block next to a barely readable red one. */
+.popover button,
+.popover-actions button {
   border: 1px solid var(--line);
   background: var(--bg-sunken);
   color: var(--text-dim);
@@ -1143,19 +1147,32 @@ main.empty {
   transition: color 0.15s, border-color 0.15s;
 }
 
-.popover button:hover {
+.popover button:hover:not(:disabled),
+.popover-actions button:hover:not(:disabled) {
   color: var(--text);
   border-color: var(--text-faint);
 }
 
-.popover-danger {
-  color: var(--danger);
-  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+.popover button:disabled,
+.popover-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
-.popover-danger:hover {
+/* The two class names are here for the specificity: with a bare `.popover-danger` the
+   colour of the row above wins and the confirmation looks like the cancellation. */
+.popover .popover-danger,
+.popover-actions .popover-danger {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.popover .popover-danger:hover:not(:disabled),
+.popover-actions .popover-danger:hover:not(:disabled) {
   color: var(--danger);
   border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 20%, transparent);
 }
 
 /* --- status tabs --- */
@@ -3076,10 +3093,16 @@ main.empty {
 
 .act-plan {
   margin-top: 8px;
-  padding: 10px;
+  padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--bg-panel);
+}
+
+/* The row of buttons is the end of the block, and it needs air of its own: pressed
+   against the warnings it reads as one more line of them. */
+.act-plan .popover-actions {
+  margin-top: 12px;
 }
 
 .act-plan-head {
