@@ -16,9 +16,47 @@ the CLI and smoke tests.
 ## Installing for development
 
 ```bash
+make install     # .venv + pip install -e ".[dev]" + the npm dependencies
+```
+
+Or by hand:
+
+```bash
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 ```
+
+## Make
+
+The commands below are collected in a `Makefile`; `make` on its own prints the list. Every
+target is a wrapper over what the sections further down describe, and the raw commands keep
+working - the Makefile only saves the typing of `.venv/bin/` and of the `cd web`.
+
+```bash
+make install       # .venv and the npm dependencies
+make check         # the three checks before a commit: test, lint, types
+make test          # pytest
+make test-real     # the smoke test over the real ~/.claude history
+make lint          # ruff check and ruff format --check
+make format        # ruff: fix and reformat
+make types         # mypy
+make web           # build the frontend into web/dist
+make dev           # the frontend with hot reload, the API proxied to a running serve
+make serve         # the dashboard on http://127.0.0.1:8799
+make restart       # restart the running dashboard from the current code
+make reindex       # read the transcripts into the database
+make paths         # where the config, the database and the transcripts live
+make stats         # the spend summary
+make otel          # what the telemetry receiver got
+make desktop       # the desktop window with hot reload on Rust edits
+make desktop-build # build the .app
+make clean         # the build output and the tool caches
+```
+
+`make restart` is the one worth knowing after a backend edit: a running server holds the old
+code and knows nothing about new endpoints. It stops the process, brings it up again on the
+port from the config and waits until `/api/health` answers - and where the autostart agent is
+installed, it lets launchd do the restart instead of fighting it for the lock.
 
 ## Commands
 
@@ -186,6 +224,8 @@ pool are not needed - the "longer than a few minutes" threshold from the plan is
 close. `cburn reindex` shows a live walk line in the terminal, and that is enough.
 
 ## Checks
+
+All three must pass before a commit - `make check` runs them in a row:
 
 ```bash
 .venv/bin/python -m pytest -q

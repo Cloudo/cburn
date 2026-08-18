@@ -13,6 +13,9 @@ Python 3.11+ (FastAPI + uvicorn, watchdog, orjson, httpx) and SQLite. The fronte
 React + Vite (the `web/` directory). The package manager is pip inside `.venv`,
 there is no `uv` on the system.
 
+The same commands are collected in the `Makefile` (`make` prints the list): `make check`
+is the three checks in a row, `make web` is the frontend, `make serve` is the dashboard.
+
 ```bash
 .venv/bin/python -m pytest -q                                  # tests
 .venv/bin/ruff check . && .venv/bin/ruff format --check .      # lint and format
