@@ -347,6 +347,13 @@ Claude Code 2.1.222 on 14 August 2026:
 - **Rust was installed with `--no-modify-path`** - the toolchain lives in `~/.cargo`, the
   shell profile was left alone; the build is called as
   `PATH=$HOME/.cargo/bin:$PATH npm run desktop:build`.
+- **In dev mode the window is fed by vite, in the build by the server.** `devUrl` points
+  at `http://localhost:5173` and `beforeDevCommand` starts vite, so `make desktop` gives
+  the same hot reload inside the window as in a browser; the API and the WebSocket are
+  proxied by vite onto the running `cburn serve`, which still has to be up. The port is
+  fixed with `strictPort`: `tauri dev` waits for exactly that address, and a silent hop to
+  5174 would leave it waiting forever. `frontendDist` is left pointing at the server - the
+  built `.app` loads the page from `http://127.0.0.1:8799` as before.
 - **The desktop build runs from the repository root, not from `web/`.** Tauri looks for
   `src-tauri/` next to itself, while `web/` holds only the frontend - from there the command
   fails with "Couldn't recognize the current folder as a Tauri project".

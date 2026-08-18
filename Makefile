@@ -70,7 +70,7 @@ stats: ## the spend summary for the last week
 otel: ## what the telemetry receiver got
 	$(CBURN) otel
 
-desktop: ## the desktop window with hot reload on Rust edits
+desktop: ## the desktop window with hot reload: vite for the page, cargo for the Rust
 	PATH="$(CARGO):$$PATH" npm run desktop
 
 desktop-build: ## build the .app into src-tauri/target/release/bundle/macos
