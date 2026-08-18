@@ -103,6 +103,15 @@ export function Advice() {
     : items;
   const groups = chosenSeverity === "all" ? SEVERITY_ORDER : [chosenSeverity];
 
+  // A card is a tip, and on screen that was only implied - a heading in bold looks like
+  // any other panel. The number runs through the whole shown list, across the groups: it
+  // is a name for a tip ("the third one"), not a place inside its severity.
+  const numbers = new Map(
+    groups
+      .flatMap((key) => shown.filter((item) => item.severity === key))
+      .map((item, index) => [item.id, index + 1]),
+  );
+
   return (
     <section className="screen">
       <div className="session-head-line">
@@ -208,7 +217,7 @@ export function Advice() {
               {t(`advice.group.${key}`)} <span className="hint">{group.length}</span>
             </h3>
             {group.map((item) => (
-              <Item key={item.id} item={item} onChange={reload} />
+              <Item key={item.id} item={item} number={numbers.get(item.id)} onChange={reload} />
             ))}
           </div>
         );
@@ -229,13 +238,16 @@ function flatten(runs: AdviceRun[]): Array<AdviceItem & { run: AdviceRun }> {
 
 function Item({
   item,
+  number,
   onChange,
 }: {
   item: AdviceItem & { run: AdviceRun };
+  number: number | undefined;
   onChange: () => Promise<void>;
 }) {
   const { t } = useLang();
   const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(true);
 
   const change = async (status: AdviceItem["status"]) => {
     setBusy(true);
@@ -247,11 +259,23 @@ function Item({
     }
   };
 
+  // Selecting the title with the mouse ends in a click on the head as well, and folding
+  // the card away in the middle of a copy would be the opposite of what was asked.
+  const toggle = () => {
+    if (window.getSelection()?.toString()) return;
+    setOpen(!open);
+  };
+
   return (
     <article
-      className={`advice-item advice-item-${item.severity} advice-item-${item.status}`}
+      className={`advice-item advice-item-${item.severity} advice-item-${item.status}${
+        open ? "" : " advice-item-folded"
+      }`}
     >
-      <div className="advice-item-head">
+      <div className="advice-item-head" onClick={toggle}>
+        <span className={`advice-number advice-number-${item.severity}`}>
+          {t("advice.number", { number: number ?? 0 })}
+        </span>
         <h4>{item.title}</h4>
         {item.status !== "new" && (
           <span className={`advice-status advice-status-${item.status}`}>
@@ -261,43 +285,73 @@ function Item({
         <span className="advice-origin">
           {clockTime(item.run.ts)} · {t(`advice.kind.${item.run.kind}`)} · {usd(item.run.cost_usd)}
         </span>
+        {/* The whole head folds the card, and the chevron is the same thing for the
+            keyboard: a click target of one's own, with a state to announce. */}
+        <button
+          className="advice-fold"
+          aria-expanded={open}
+          aria-label={t(open ? "advice.collapse" : "advice.expand")}
+          onClick={(event) => {
+            event.stopPropagation();
+            setOpen(!open);
+          }}
+        >
+          <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+            <path
+              d="M4 6l4 4 4-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
       </div>
-      {item.sessions.length > 0 && (
-        <div className="advice-sessions">
-          {item.sessions.map((session) => (
-            <Session key={session.id} session={session} />
-          ))}
-        </div>
+      {/* Folded, the card keeps one line: what the tip proposes to do. The title says
+          what is wrong, and that alone is not enough to pick a card out of seventeen. */}
+      {!open && item.action && <p className="advice-folded-line">{item.action}</p>}
+      {open && (
+        <>
+          {item.sessions.length > 0 && (
+            <div className="advice-sessions">
+              {item.sessions.map((session) => (
+                <Session key={session.id} session={session} />
+              ))}
+            </div>
+          )}
+          {item.detail && <p className="advice-detail">{item.detail}</p>}
+          {item.action && (
+            <p className="advice-action">
+              <span className="advice-label">{t("advice.action")}</span> {item.action}
+            </p>
+          )}
+          {/* A tip without support in numbers never reaches the screen - the advisor
+              drops it. */}
+          <p className="advice-evidence">
+            <span className="advice-label">{t("advice.evidence")}</span> {item.evidence}
+          </p>
+          {item.act && <Act item={item} onChange={onChange} />}
+          <div className="advice-buttons">
+            {item.status !== "accepted" && (
+              <button className="advice-accept" disabled={busy} onClick={() => change("accepted")}>
+                {t("advice.accept")}
+              </button>
+            )}
+            {item.status !== "rejected" && (
+              <button className="advice-reject" disabled={busy} onClick={() => change("rejected")}>
+                {t("advice.reject")}
+              </button>
+            )}
+            {item.status !== "new" && (
+              <button disabled={busy} onClick={() => change("new")}>
+                {t("advice.back")}
+              </button>
+            )}
+            {item.status === "rejected" && <span className="hint">{t("advice.rejectedNote")}</span>}
+          </div>
+        </>
       )}
-      {item.detail && <p className="advice-detail">{item.detail}</p>}
-      {item.action && (
-        <p className="advice-action">
-          <span className="advice-label">{t("advice.action")}</span> {item.action}
-        </p>
-      )}
-      {/* A tip without support in numbers never reaches the screen - the advisor drops it. */}
-      <p className="advice-evidence">
-        <span className="advice-label">{t("advice.evidence")}</span> {item.evidence}
-      </p>
-      {item.act && <Act item={item} onChange={onChange} />}
-      <div className="advice-buttons">
-        {item.status !== "accepted" && (
-          <button className="advice-accept" disabled={busy} onClick={() => change("accepted")}>
-            {t("advice.accept")}
-          </button>
-        )}
-        {item.status !== "rejected" && (
-          <button className="advice-reject" disabled={busy} onClick={() => change("rejected")}>
-            {t("advice.reject")}
-          </button>
-        )}
-        {item.status !== "new" && (
-          <button disabled={busy} onClick={() => change("new")}>
-            {t("advice.back")}
-          </button>
-        )}
-        {item.status === "rejected" && <span className="hint">{t("advice.rejectedNote")}</span>}
-      </div>
     </article>
   );
 }

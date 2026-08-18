@@ -2664,6 +2664,69 @@ main.empty {
   display: flex;
   align-items: baseline;
   gap: 10px;
+  cursor: pointer;
+}
+
+/* The chevron is the head's own control: the whole row folds the card, and this one
+   does the same for the keyboard and says out loud which way the card is. */
+.advice-fold {
+  margin-left: auto;
+  align-self: center;
+  flex: none;
+  display: flex;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.advice-fold:hover {
+  color: var(--text);
+}
+
+.advice-fold svg {
+  transition: transform 0.15s ease;
+}
+
+.advice-item-folded .advice-fold svg {
+  transform: rotate(-90deg);
+}
+
+/* Folded, the card keeps the head and one line of "what to do". */
+.advice-folded-line {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A card is a tip, and a bold heading alone did not say so: the number names it and
+   carries the severity colour, so a glance is enough to tell what one is looking at. */
+.advice-number {
+  flex: none;
+  padding: 1px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.advice-number-crit {
+  color: var(--amber);
+  border-color: color-mix(in srgb, var(--amber) 45%, transparent);
+  background: color-mix(in srgb, var(--amber) 10%, transparent);
+}
+
+.advice-number-warn {
+  color: var(--steel);
+  border-color: color-mix(in srgb, var(--steel) 45%, transparent);
+  background: color-mix(in srgb, var(--steel) 10%, transparent);
 }
 
 .advice-item h3 {

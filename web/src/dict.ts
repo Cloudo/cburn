@@ -326,6 +326,9 @@ const DICT: Record<string, [string, string]> = {
   "advice.severity.crit": ["горит", "critical"],
   "advice.action": ["что сделать:", "what to do:"],
   "advice.evidence": ["на основании:", "based on:"],
+  "advice.number": ["совет {number}", "tip {number}"],
+  "advice.collapse": ["свернуть совет", "collapse the tip"],
+  "advice.expand": ["развернуть совет", "expand the tip"],
   "advice.prompts.all": ["показать все промты ({count})", "show all prompts ({count})"],
   "advice.prompts.less": ["свернуть промты", "collapse the prompts"],
   "advice.prompts.empty": [
