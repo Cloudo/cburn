@@ -9,6 +9,7 @@ import { Sessions } from "./Sessions";
 import { Settings } from "./Settings";
 import { useLang } from "./i18n";
 import { ThemePicker } from "./ThemePicker";
+import { STATUSES, StatusHelp, statusTitle } from "./StatusHelp";
 import { useZoom } from "./zoom";
 import {
   agoLabel,
@@ -37,9 +38,6 @@ import {
 } from "./api";
 
 const WINDOWS = ["10s", "1m", "5m", "60m"] as const;
-
-//: Statuses in order of importance: the tab that opens first is the one where something happens.
-const STATUSES: SessionStatus[] = ["permission", "working", "answered", "idle", "done"];
 
 // The slices take the accents from the theme rather than from a copy of their values: the
 // palette is switched by the picker, and a duplicated hex would stay at the old theme.
@@ -487,20 +485,24 @@ function SessionBoard({
 
   return (
     <>
-      <div className="tabs" role="tablist" aria-label={t("live.tabs")}>
-        {counts.map((status) => (
-          <button
-            key={status.key}
-            role="tab"
-            aria-selected={status.key === active}
-            disabled={status.items.length === 0}
-            className={status.key === active ? "tab tab-on" : "tab"}
-            onClick={() => setChosen(status.key)}
-          >
-            {t(`status.${status.key}`)}
-            <span className={`tab-count tab-count-${status.key}`}>{status.items.length}</span>
-          </button>
-        ))}
+      <div className="tabs-line">
+        <div className="tabs" role="tablist" aria-label={t("live.tabs")}>
+          {counts.map((status) => (
+            <button
+              key={status.key}
+              role="tab"
+              aria-selected={status.key === active}
+              disabled={status.items.length === 0}
+              className={status.key === active ? "tab tab-on" : "tab"}
+              title={statusTitle(t, status.key)}
+              onClick={() => setChosen(status.key)}
+            >
+              {t(`status.${status.key}`)}
+              <span className={`tab-count tab-count-${status.key}`}>{status.items.length}</span>
+            </button>
+          ))}
+        </div>
+        <StatusHelp />
       </div>
 
       {shown.length === 0 ? (
@@ -547,7 +549,10 @@ function SessionCard({ session, now }: { session: LiveSession; now: string }) {
     <li className={`session-${session.status}`}>
       <div className="session-head">
         <span className="session-name">{session.title ?? session.id.slice(0, 8)}</span>
-        <span className={`session-badge session-badge-${session.status}`}>
+        <span
+          className={`session-badge session-badge-${session.status}`}
+          title={statusTitle(t, session.status)}
+        >
           {t(`status.${session.status}`)}
         </span>
         <div className="session-close">

@@ -7,9 +7,9 @@ import { useEffect, useMemo, useState } from "react";
 import { compact, duration, grouped, sinceLabel, usd } from "./format";
 import { useSessions, type SessionRow } from "./api";
 import { useLang } from "./i18n";
+import { STATUSES, StatusHelp, statusTitle } from "./StatusHelp";
 
-//: Status and period keys; the captions come from the dictionary.
-const STATUSES = ["permission", "working", "answered", "idle", "done"];
+//: Period keys; the captions come from the dictionary, the statuses from `StatusHelp`.
 const PERIODS = ["today", "24h", "7d", "30d", "all"];
 
 /** A list row: either a chain root with its continuations, or a loner. */
@@ -68,26 +68,30 @@ export function Sessions() {
           ))}
         </select>
 
-        <div className="filter-tabs" role="tablist" aria-label={t("sessions.status")}>
-          <button
-            role="tab"
-            aria-selected={status === ""}
-            className={status === "" ? "filter-tab filter-tab-on" : "filter-tab"}
-            onClick={() => setStatus("")}
-          >
-            {t("sessions.any")}
-          </button>
-          {STATUSES.map((key) => (
+        <div className="tabs-line">
+          <div className="filter-tabs" role="tablist" aria-label={t("sessions.status")}>
             <button
-              key={key}
               role="tab"
-              aria-selected={status === key}
-              className={status === key ? "filter-tab filter-tab-on" : "filter-tab"}
-              onClick={() => setStatus(key)}
+              aria-selected={status === ""}
+              className={status === "" ? "filter-tab filter-tab-on" : "filter-tab"}
+              onClick={() => setStatus("")}
             >
-              {t(`status.${key}`)}
+              {t("sessions.any")}
             </button>
-          ))}
+            {STATUSES.map((key) => (
+              <button
+                key={key}
+                role="tab"
+                aria-selected={status === key}
+                className={status === key ? "filter-tab filter-tab-on" : "filter-tab"}
+                title={statusTitle(t, key)}
+                onClick={() => setStatus(key)}
+              >
+                {t(`status.${key}`)}
+              </button>
+            ))}
+          </div>
+          <StatusHelp />
         </div>
 
         <div className="filter-tabs" role="tablist" aria-label={t("sessions.period")}>
@@ -176,7 +180,7 @@ function SessionLine({
         )}
         <span
           className={`sessions-dot sessions-dot-${row.status}`}
-          title={t(`status.${row.status}`)}
+          title={statusTitle(t, row.status)}
         />
         <a
           className="sessions-title"

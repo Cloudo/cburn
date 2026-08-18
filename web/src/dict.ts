@@ -53,6 +53,34 @@ const DICT: Record<string, [string, string]> = {
   "status.idle": ["простаивает", "idle"],
   "status.done": ["закончилась", "finished"],
 
+  // Расшифровка статусов: подсказка "?" рядом с вкладками и тултип каждой точки.
+  "status.hint.permission": [
+    "запрошен инструмент, ответа нет: на экране висит вопрос о разрешении",
+    "a tool was requested and no answer came: an allow-this question hangs on the screen",
+  ],
+  "status.hint.working": [
+    "ход не закончен: модель думает или гоняет инструменты",
+    "the turn is unfinished: the model is thinking or driving tools",
+  ],
+  "status.hint.answered": [
+    "модель ответила, слово за вами",
+    "the model has answered, the move is yours",
+  ],
+  "status.hint.idle": [
+    "тишина дольше нескольких минут, но процесс сессии жив",
+    "silence for more than a few minutes, but the session process is alive",
+  ],
+  "status.hint.done": [
+    "процесса нет: в эту сессию больше ничего не запишется",
+    "no process left: nothing more will be written into this session",
+  ],
+  "status.help.open": ["что значат статусы", "what the statuses mean"],
+  "status.help.title": ["кого сессия ждёт прямо сейчас", "whom the session is waiting for"],
+  "status.help.note": [
+    "Долгий инструмент и висящий вопрос выглядят в транскрипте одинаково: их разводят по процессам сессии, а где включена телеметрия - по событию о решении.",
+    "A long tool and a hanging question look the same in the transcript: they are told apart by the session processes, and where telemetry is on, by the decision event.",
+  ],
+
   "slice.cache_read": ["чтение кэша", "cache read"],
   "slice.cache_write": ["запись кэша", "cache write"],
   "slice.output": ["выход", "output"],

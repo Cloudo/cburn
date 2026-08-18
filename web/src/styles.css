@@ -1160,11 +1160,98 @@ main.empty {
 
 /* --- status tabs --- */
 
+/* The tabs and the "?" stand on one line, and the mark keeps its place when the tabs wrap. */
+.tabs-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+/* In the filter row the tabs have no bottom margin, so the mark lines up by the centre. */
+.filters .tabs-line {
+  align-items: center;
+}
+
 .tabs {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   margin-bottom: 14px;
+}
+
+/* The statuses cheat sheet: a mark next to the tabs, the list drops out under it. */
+.status-help {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.status-help-button {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--bg-sunken);
+  color: var(--text-faint);
+  font-family: var(--sans);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.status-help-button:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+
+.status-help-button:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 1px;
+}
+
+/* The mark stands at the right end of a tab row, so the list drops out leftwards. */
+.popover.status-help-menu {
+  width: 280px;
+}
+
+.status-help-title {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.status-help-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.status-help-list li {
+  display: grid;
+  grid-template-columns: 6px minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: 8px;
+  row-gap: 2px;
+  font-size: 11px;
+}
+
+/* The dot is a baseline-less square, so it is nudged onto the line of the name by hand. */
+.status-help-list .sessions-dot {
+  position: relative;
+  top: -2px;
+}
+
+.status-help-name {
+  color: var(--text);
+}
+
+.status-help-text {
+  grid-column: 2;
+  color: var(--text-dim);
+  line-height: 1.4;
 }
 
 .tab {
