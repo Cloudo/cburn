@@ -192,9 +192,35 @@ def _plan_close(conn: sqlite3.Connection, act: Mapping[str, Any]) -> Plan:
             "project": row["project"],
             "status": status,
             "live": row.get("is_live") == 1,
+            # What exactly is being interrupted: "a step is running" says nothing on its
+            # own, and the decision is made by the task and by the tool it stands on.
+            "title": row.get("title"),
+            "prompt": row.get("last_prompt") or row.get("first_prompt"),
+            "since": row.get("last_record_at") or row.get("last_at"),
+            "tool": _running_tool(conn, row),
         },
         notes=tuple(notes),
     )
+
+
+def _running_tool(conn: sqlite3.Connection, row: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The tool whose answer has not come yet - the step itself, not the previous one.
+
+    Once the answer is there the turn moves on, and the last tool of the transcript says
+    nothing about what is happening now: that is why the state of the session is read first.
+    """
+    if row.get("last_record_kind") != "assistant" or row.get("last_stop_reason") != "tool_use":
+        return None
+    found = conn.execute(
+        """
+        SELECT c.tool, c.detail
+          FROM tool_calls AS c JOIN turns AS t ON t.id = c.turn_id
+         WHERE t.session_id = ?
+         ORDER BY t.ts DESC, c.id DESC LIMIT 1
+        """,
+        (row["id"],),
+    ).fetchone()
+    return {"name": found["tool"], "detail": found["detail"]} if found is not None else None
 
 
 def _plan_settings(conn: sqlite3.Connection, act: Mapping[str, Any]) -> Plan:
@@ -470,6 +496,7 @@ def _session_row(conn: sqlite3.Connection, session_id: str) -> dict[str, Any] | 
     row = conn.execute(
         f"""
         SELECT s.id, COALESCE(p.display_name, p.slug) AS project, s.is_live, s.busy_since,
+               s.title, s.first_prompt, s.last_prompt,
                s.last_at, s.last_record_kind, s.last_record_at, s.last_stop_reason,
                {metrics.OTEL_SESSION_COLUMNS}
                s.hidden

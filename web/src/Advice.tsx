@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { clockTime, usd } from "./format";
+import { clockTime, sinceLabel, toolLabel, usd } from "./format";
 import { useLang } from "./i18n";
 import {
   ActFailed,
@@ -487,11 +487,13 @@ function Act({ item, onChange }: { item: AdviceItem; onChange: () => Promise<voi
             <code className="act-target">
               {plan.details.path ?? plan.details.session_id?.slice(0, 8)}
             </code>
+            {plan.details.title && <span className="act-session">{plan.details.title}</span>}
             {plan.details.project && <span className="hint">{plan.details.project}</span>}
             {plan.details.status && (
               <span className="hint">{t(`status.${plan.details.status}`)}</span>
             )}
           </div>
+          {plan.kind === "close_session" && <What details={plan.details} />}
           {plan.diff && <Diff text={plan.diff} />}
           {plan.notes.map((note) => (
             <p key={note} className="act-note">
@@ -509,6 +511,35 @@ function Act({ item, onChange }: { item: AdviceItem; onChange: () => Promise<voi
         </div>
       )}
     </div>
+  );
+}
+
+/** What a close would interrupt. A closing session has no diff to look at, and the
+ *  status word alone ("a step is running") does not say which step: the answer is the
+ *  last prompt and the tool the session stands on. */
+function What({ details }: { details: ActPlan["details"] }) {
+  const { t } = useLang();
+  const { prompt, tool, since } = details;
+  if (!prompt && !tool) return null;
+  return (
+    <dl className="act-what">
+      {prompt && (
+        <>
+          <dt>{t("advice.act.prompt")}</dt>
+          <dd className="act-prompt">{prompt}</dd>
+        </>
+      )}
+      {tool && (
+        <>
+          <dt>{t("advice.act.step")}</dt>
+          <dd>
+            <code>{toolLabel(tool.name)}</code>
+            {tool.detail && <span className="act-detail">{tool.detail}</span>}
+            <span className="act-since">{sinceLabel(since ?? null)}</span>
+          </dd>
+        </>
+      )}
+    </dl>
   );
 }
 

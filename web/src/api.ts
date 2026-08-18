@@ -521,6 +521,11 @@ export type ActPlan = {
     project?: string | null;
     status?: string;
     live?: boolean;
+    /** What is being interrupted: the session name, its last prompt and the step it stands on. */
+    title?: string | null;
+    prompt?: string | null;
+    since?: string | null;
+    tool?: { name: string; detail: string | null } | null;
   };
   /** A unified diff of the file; empty where nothing is written. */
   diff: string;

@@ -365,6 +365,8 @@ const DICT: Record<string, [string, string]> = {
   ],
   "advice.apply": ["применить", "apply"],
   "advice.act.title": ["что изменится", "what changes"],
+  "advice.act.prompt": ["последний запрос", "the last prompt"],
+  "advice.act.step": ["на чём стоит", "the step it stands on"],
   "advice.act.confirm": ["применить", "apply"],
   "advice.act.rollback": ["откатить", "roll back"],
   "advice.act.session": ["сессия", "session"],

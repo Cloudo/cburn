@@ -72,6 +72,21 @@ def add_session(conn: sqlite3.Connection, session_id: str, **row: object) -> Non
         )
 
 
+def add_tool(
+    conn: sqlite3.Connection, session_id: str, at: datetime, tool: str, detail: str | None
+) -> None:
+    """A tool call inside its own turn: the plan reads the step from the last of them."""
+    with conn:
+        cursor = conn.execute(
+            "INSERT INTO turns (message_id, session_id, ts) VALUES (?, ?, ?)",
+            (f"msg-{tool}-{at.isoformat()}", session_id, at.isoformat()),
+        )
+        conn.execute(
+            "INSERT INTO tool_calls (turn_id, tool_use_id, tool, detail) VALUES (?, ?, ?, ?)",
+            (cursor.lastrowid, f"use-{tool}-{at.isoformat()}", tool, detail),
+        )
+
+
 # --- what comes back from the model -------------------------------------------
 
 
@@ -265,6 +280,37 @@ def test_a_working_session_is_closed_in_the_pause_not_at_once(
     assert killed == [777]
     row = conn.execute("SELECT status, note FROM applied_patches").fetchone()
     assert (row["status"], row["note"]) == (actions.APPLIED, "terminated")
+
+
+def test_the_plan_names_the_step_that_would_be_interrupted(
+    conn: sqlite3.Connection, home: Path
+) -> None:
+    """A status word is not an answer: the plan says which task and which tool."""
+    now = datetime.now(UTC)
+    session = "d4d4d4d4-1111-2222-3333-444455556666"
+    add_session(
+        conn,
+        session,
+        title="the parser tail",
+        last_prompt="reindex the transcripts and check the offsets",
+        last_stop_reason="tool_use",
+        last_record_at=now.isoformat(),
+        busy_since=now.isoformat(),
+    )
+    add_tool(conn, session, now - timedelta(minutes=2), "Read", None)
+    add_tool(conn, session, now, "Bash", "pytest")
+
+    details = actions.plan(conn, {"type": "close_session", "session_id": "d4d4d4d4"}).details
+
+    assert details["title"] == "the parser tail"
+    assert details["prompt"] == "reindex the transcripts and check the offsets"
+    assert details["tool"] == {"name": "Bash", "detail": "pytest"}, "the last tool, not the first"
+
+    # The answer has come: the turn has moved on and the old tool is no longer the step.
+    with conn:
+        conn.execute("UPDATE sessions SET last_stop_reason = 'end_turn'")
+    after = actions.plan(conn, {"type": "close_session", "session_id": "d4d4d4d4"}).details
+    assert after["tool"] is None
 
 
 def test_a_pending_close_can_be_cancelled(conn: sqlite3.Connection, home: Path) -> None:

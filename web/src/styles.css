@@ -3121,6 +3121,63 @@ main.empty {
   overflow-wrap: anywhere;
 }
 
+.act-session {
+  color: var(--text);
+}
+
+/* What a close would interrupt: the label on the left, the answer on the right. */
+.act-what {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  margin: 0 0 8px;
+  font-size: 11px;
+}
+
+.act-what dt {
+  color: var(--text-faint);
+}
+
+/* The mono words sit next to the sans ones, and their baselines do not match: aligning
+   by the middle keeps the label and its answer on one line. */
+.act-what dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-dim);
+}
+
+.act-what code {
+  font-family: var(--mono);
+  color: var(--text);
+}
+
+/* The prompt is trimmed to 200 characters on the way in, and three lines are enough
+   to recognise the task: the plan must not turn into a reading screen. */
+.act-what dd.act-prompt {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.act-detail {
+  font-family: var(--mono);
+  color: var(--text-dim);
+}
+
+.act-since {
+  color: var(--text-faint);
+}
+
+/* `.hint` is a paragraph class and carries a top margin of its own: inside a row of
+   words it would push the line apart. */
+.act-plan-head .hint {
+  margin: 0;
+}
+
 /* A settings file has long lines (a token, a path), and wrapping them would break
    the alignment of the change: the diff scrolls sideways inside its own box. */
 .act-diff {
