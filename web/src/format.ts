@@ -78,10 +78,21 @@ export function freshnessLabel(at: number | null, checkedAt: number, now: number
   return `${word("format.lastData")} ${clockTime(at)}, ${ago}; ${checked}`;
 }
 
+/** How long ago that was: "just now", "42 s ago", "36 min ago", "4 h 10 min ago", "3 d ago". */
 export function agoLabel(seconds: number): string {
   if (seconds < 5) return word("format.justNow");
   if (seconds < 60) return `${Math.round(seconds)} ${word("format.secondsAgo")}`;
-  return `${Math.round(seconds / 60)} ${word("format.minutesAgo")}`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} ${word("format.minutesAgo")}`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    // The minutes matter in the first hours and turn into noise past them.
+    const rest = minutes % 60;
+    return rest && hours < 6
+      ? `${hours} ${word("format.hours")} ${rest} ${word("format.minutesAgo")}`
+      : `${hours} ${word("format.hoursAgo")}`;
+  }
+  return `${Math.floor(hours / 24)} ${word("format.daysAgo")}`;
 }
 
 export function modelLabel(model: string | null): string {
@@ -127,12 +138,22 @@ export function spent(seconds: number): string {
   return rest ? `${h} ${rest} ${word("format.minutes")}` : h;
 }
 
-/** How long ago that was, counting from "now". */
+/** How long ago that was, counting from "now"; past a week a date is read faster. */
 export function sinceLabel(iso: string | null): string {
   if (!iso) return "—";
-  const seconds = (Date.now() - new Date(stamp(iso)).getTime()) / 1000;
+  const at = new Date(stamp(iso)).getTime();
+  const seconds = (Date.now() - at) / 1000;
   if (seconds < 45) return word("format.justNow");
+  if (seconds >= 7 * 86400) return dateLabel(at);
   return agoLabel(seconds);
+}
+
+/** A day of another week: "14 Aug", and the year only when it is not the current one. */
+function dateLabel(at: number): string {
+  const date = new Date(at);
+  const options: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" };
+  if (date.getFullYear() !== new Date().getFullYear()) options.year = "numeric";
+  return date.toLocaleDateString(locale, options);
 }
 
 function stamp(iso: string): string {

@@ -452,6 +452,8 @@ const DICT: Record<string, [string, string]> = {
   "format.justNow": ["только что", "just now"],
   "format.secondsAgo": ["с назад", "s ago"],
   "format.minutesAgo": ["мин назад", "min ago"],
+  "format.hoursAgo": ["ч назад", "h ago"],
+  "format.daysAgo": ["дн назад", "d ago"],
   "format.minutes": ["мин", "m"],
   "format.hours": ["ч", "h"],
   "format.seconds": ["с", "s"],
