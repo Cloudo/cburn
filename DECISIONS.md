@@ -4,6 +4,20 @@ Why things are the way they are: the option taken, the options rejected and the
 reason. Newest first. Things visible from the code and the git history do not
 belong here; neither do the invariants, which live in `CLAUDE.md`.
 
+## 2026-08-18 - CLAUDE.md keeps the core, the area knowledge moves to path-scoped rules
+
+`CLAUDE.md` had grown to 410 lines and, together with the imported `TZ.md`,
+loaded whole into every session. Now it keeps only what applies everywhere -
+the stack, the structure, the global invariants and the conventions - and the
+area knowledge (the transcript format, OTel, the advisor contract, the desktop
+and the rest) lives in `.claude/rules/*.md` with `paths:` frontmatter, so a
+rule enters the context only when the matching files are touched. The `@TZ.md`
+import became a plain mention for the same reason: the spec is read when a
+requirement is in question, not at every start.
+
+Rejected: `@imports` (they expand at launch and save no context); skills
+(these are facts about corners of the code, not workflows to invoke by name).
+
 ## 2026-08-15 - the colour themes are data, and the palettes come from VS Code
 
 The dashboard had one dark palette and one light one, hardcoded in `styles.css`.
