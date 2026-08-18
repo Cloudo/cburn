@@ -106,18 +106,20 @@ export function Gauge({ value, slices, caption }: Props) {
 
         {/* The needle is drawn to the left (the zero position) and rotated: the CSS
             transition works with transform, and it does not animate the x1/y1/x2/y2
-            attributes of a line - the needle jumped because of them. */}
-        <line
-          className="gauge-needle"
-          x1={CX + 16}
-          y1={CY}
-          x2={CX - (R_SCALE - 18)}
-          y2={CY}
-          style={{
-            transform: `rotate(${position * 180}deg)`,
-            transformOrigin: `${CX}px ${CY}px`,
-          }}
-        />
+            attributes of a line - the needle jumped because of them. The hub is put at the
+            local origin by the group, so that the pivot is a bare zero: a transform-origin
+            in pixels is multiplied by the interface zoom in WebKit, and at 1.25 the needle
+            went rotating around a point outside the instrument. */}
+        <g transform={`translate(${CX} ${CY})`}>
+          <line
+            className="gauge-needle"
+            x1={16}
+            y1={0}
+            x2={-(R_SCALE - 18)}
+            y2={0}
+            style={{ transform: `rotate(${position * 180}deg)` }}
+          />
+        </g>
         <circle className="gauge-hub" cx={CX} cy={CY} r={9} />
       </svg>
 

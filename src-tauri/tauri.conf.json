@@ -5,7 +5,8 @@
   "identifier": "com.cloudo.cburn",
   "build": {
     "frontendDist": "http://127.0.0.1:8799",
-    "devUrl": "http://127.0.0.1:8799"
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm --prefix web run dev"
   },
   "app": {
     "windows": [
