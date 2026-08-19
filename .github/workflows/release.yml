@@ -92,7 +92,8 @@ jobs:
           ## Install
 
           ```bash
-          brew install Cloudo/cburn/cburn
+          brew tap cloudo/tap
+          brew install cburn
           ```
 
           The menu-bar application is the zip below. It is not signed: open it from the
@@ -102,7 +103,7 @@ jobs:
           <details><summary>for the formula in the tap</summary>
 
           ```ruby
-          url "https://github.com/Cloudo/cburn/releases/download/TAG/ARCHIVE"
+          url "https://github.com/cloudo/cburn/releases/download/TAG/ARCHIVE"
           sha256 "ARCHIVE_SHA"
           ```
 

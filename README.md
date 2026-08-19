@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img alt="license MIT" src="https://img.shields.io/github/license/Cloudo/cburn?color=4c8eda" /></a>
+  <a href="LICENSE"><img alt="license MIT" src="https://img.shields.io/github/license/cloudo/cburn?color=4c8eda" /></a>
   <img alt="macOS 13+" src="https://img.shields.io/badge/macOS-13%2B-1a1a1a?logo=apple&logoColor=white" />
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776ab?logo=python&logoColor=white" />
 </p>
@@ -37,7 +37,7 @@ There is no packaged build yet - `brew install` and a ready `.app` in the releas
 are the next thing on the list. Today cburn is built from source:
 
 ```bash
-git clone https://github.com/Cloudo/cburn.git && cd cburn
+git clone https://github.com/cloudo/cburn.git && cd cburn
 make install   # .venv, an editable install and the npm dependencies
 make web       # build the frontend into web/dist
 make reindex   # read the transcripts into the database

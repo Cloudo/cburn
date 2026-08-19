@@ -1,4 +1,4 @@
-# The formula for the tap Cloudo/homebrew-cburn. It lives here, next to the code, so the
+# The formula for the tap cloudo/homebrew-tap. It lives here, next to the code, so the
 # release and the formula that installs it cannot drift apart - the tap keeps a copy.
 #
 # After a release, take the url and the sha256 from the notes the release workflow writes,
@@ -7,8 +7,8 @@ class Cburn < Formula
   include Language::Python::Virtualenv
 
   desc "Local speedometer for Claude Code token spend"
-  homepage "https://github.com/Cloudo/cburn"
-  url "https://github.com/Cloudo/cburn/releases/download/v0.1.0/cburn-0.1.0.tar.gz"
+  homepage "https://github.com/cloudo/cburn"
+  url "https://github.com/cloudo/cburn/releases/download/v0.1.0/cburn-0.1.0.tar.gz"
   sha256 "0000000000000000000000000000000000000000000000000000000000000000"
   license "MIT"
 
