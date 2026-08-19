@@ -12,15 +12,37 @@ import { useLang } from "./i18n";
 
 export type Slice = { key: string; label: string; value: number; color: string };
 
-const DECADES = [3, 4, 5, 6, 7]; // 1k ... 10M tokens per minute
-const MIN = 10 ** DECADES[0];
-const MAX = 10 ** DECADES[DECADES.length - 1];
-
 // The decades carry the numbers, and the halves between them are strokes only: a whole
 // decade between the marks leaves too much to the eye, while five more numbers around the
-// arc would crowd it. A number is written at 5 M alone - the stretch the needle lives on.
-const HALVES = DECADES.slice(0, -1).map((decade) => 5 * 10 ** decade);
-const LABELLED_HALF = 5 * 10 ** 6;
+// arc would crowd it. A number is written at the topmost half alone - the stretch the
+// needle lives on.
+//
+// The shape of the scale is a matter of taste, so it is chosen in the widget header rather
+// than settled here. Three things differ: the floor of the range, where inside a decade the
+// halves stand, and whether the curve is a plain logarithm or a gentler power. A five sits
+// at 70% of a decade rather than in its middle, so on a logarithm 5 M crowds against 10 M;
+// the middle of a decade is the root of ten, and a three lands all but exactly there. The
+// power softens the top at the cost of the bottom - it is kept to be looked at, not
+// because it reads better.
+export type ScaleShape = "1k-5" | "1k-3" | "10k-5" | "10k-3" | "power";
+
+const SHAPES: Record<
+  ScaleShape,
+  { label: string; decades: number[]; half: number; power: number | null }
+> = {
+  "1k-5": { label: "1K/5", decades: [3, 4, 5, 6, 7], half: 5, power: null },
+  "1k-3": { label: "1K/3", decades: [3, 4, 5, 6, 7], half: 3, power: null },
+  "10k-5": { label: "10K/5", decades: [4, 5, 6, 7], half: 5, power: null },
+  "10k-3": { label: "10K/3", decades: [4, 5, 6, 7], half: 3, power: null },
+  power: { label: "pow", decades: [3, 4, 5, 6, 7], half: 5, power: 0.15 },
+};
+
+export const SCALE_SHAPES = Object.keys(SHAPES) as ScaleShape[];
+export const DEFAULT_SHAPE: ScaleShape = "1k-5";
+
+export function shapeLabel(shape: ScaleShape): string {
+  return SHAPES[shape].label;
+}
 
 const CX = 200;
 const CY = 190;
@@ -53,19 +75,37 @@ function ringSegment(from: number, to: number): string {
   ].join(" ");
 }
 
-/** The position of a value on the logarithmic scale, 0...1. */
-export function scalePosition(value: number): number {
-  if (value <= MIN) return 0;
-  if (value >= MAX) return 1;
-  const span = Math.log10(MAX) - Math.log10(MIN);
-  return (Math.log10(value) - Math.log10(MIN)) / span;
+type Scale = {
+  decades: number[];
+  halves: number[];
+  /** the only half that carries a number: the one in the topmost decade */
+  labelled: number;
+  /** the position of a value on the scale, 0...1 */
+  position: (value: number) => number;
+};
+
+function scaleOf(shape: ScaleShape): Scale {
+  const { decades, half, power } = SHAPES[shape];
+  const min = 10 ** decades[0];
+  const max = 10 ** decades[decades.length - 1];
+  const position = (value: number) => {
+    if (value <= min) return 0;
+    if (value >= max) return 1;
+    if (power === null) {
+      return (Math.log10(value) - Math.log10(min)) / (Math.log10(max) - Math.log10(min));
+    }
+    return (value ** power - min ** power) / (max ** power - min ** power);
+  };
+  const halves = decades.slice(0, -1).map((decade) => half * 10 ** decade);
+  return { decades, halves, labelled: halves[halves.length - 1], position };
 }
 
-type Props = { value: number; slices: Slice[]; caption: string };
+type Props = { value: number; slices: Slice[]; caption: string; shape: ScaleShape };
 
-export function Gauge({ value, slices, caption }: Props) {
+export function Gauge({ value, slices, caption, shape }: Props) {
   const { t } = useLang();
-  const position = scalePosition(value);
+  const scale = scaleOf(shape);
+  const position = scale.position(value);
   const total = slices.reduce((sum, slice) => sum + slice.value, 0);
 
   let cursor = 0;
@@ -93,12 +133,12 @@ export function Gauge({ value, slices, caption }: Props) {
             </path>
           ))}
 
-        {DECADES.map((decade, index) => {
-          const fraction = index / (DECADES.length - 1);
+        {scale.decades.map((decade, index) => {
+          const fraction = scale.position(10 ** decade);
           const outer = polar(R_SCALE, fraction);
           const inner = polar(R_SCALE - 14, fraction);
           // The outermost labels press against the arc ends, so we push them deeper.
-          const edge = index === 0 || index === DECADES.length - 1;
+          const edge = index === 0 || index === scale.decades.length - 1;
           const label = polar(R_SCALE - (edge ? 52 : 32), fraction);
           return (
             <g key={decade} className="gauge-tick">
@@ -110,13 +150,13 @@ export function Gauge({ value, slices, caption }: Props) {
           );
         })}
 
-        {HALVES.map((value) => {
-          const fraction = scalePosition(value);
+        {scale.halves.map((value) => {
+          const fraction = scale.position(value);
           const outer = polar(R_SCALE, fraction);
           const inner = polar(R_SCALE - 11, fraction);
-          // 5 M stands near the end of the arc, so its number is pushed as deep as the
-          // number of the end itself - otherwise it sticks out of the ring of the others.
-          const label = value === LABELLED_HALF ? polar(R_SCALE - 44, fraction) : null;
+          // The signed half stands near the end of the arc, so its number is pushed as deep
+          // as the number of the end itself - otherwise it sticks out of the ring.
+          const label = value === scale.labelled ? polar(R_SCALE - 44, fraction) : null;
           return (
             <g key={value} className="gauge-tick gauge-tick-half">
               <line x1={outer.x} y1={outer.y} x2={inner.x} y2={inner.y} />

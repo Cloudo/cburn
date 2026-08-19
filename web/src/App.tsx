@@ -1,6 +1,15 @@
 import { useEffect, useState } from "react";
 
-import { Gauge, OutputMeter, Recorder, type Slice } from "./Gauge";
+import {
+  DEFAULT_SHAPE,
+  Gauge,
+  OutputMeter,
+  Recorder,
+  SCALE_SHAPES,
+  shapeLabel,
+  type ScaleShape,
+  type Slice,
+} from "./Gauge";
 import { Idle, Models, PlanLimits, Telemetry, Tools } from "./Profile";
 import { Dashboard, type WidgetContent } from "./Dashboard";
 import { Advice } from "./Advice";
@@ -81,13 +90,35 @@ function useScreen(): string {
 
 const SCREENS = ["", "sessions", "advice", "settings"];
 
+// The shape of the instrument scale is the browser's business, like the layout, the theme
+// and the zoom: the server neither knows it nor needs to.
+const SCALE_KEY = "cburn.gauge.scale";
+
+function storedShape(): ScaleShape {
+  try {
+    const saved = localStorage.getItem(SCALE_KEY) as ScaleShape | null;
+    return saved && SCALE_SHAPES.includes(saved) ? saved : DEFAULT_SHAPE;
+  } catch {
+    return DEFAULT_SHAPE; // private mode - the choice is simply not remembered
+  }
+}
+
 export default function App() {
   const { lang, setLang, t } = useLang();
   const { zoom, zoomIn, zoomOut, reset: resetZoom } = useZoom();
   const { data, connection, updatedAt, refresh } = useOverview();
   const [, tick] = useState(0);
   const [burnWindow, setBurnWindow] = useState<string>("1m");
+  const [scaleShape, setScaleShape] = useState<ScaleShape>(storedShape);
   const screen = useScreen();
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SCALE_KEY, scaleShape);
+    } catch {
+      // private mode - the choice simply will not be remembered
+    }
+  }, [scaleShape]);
 
   useEffect(() => {
     const timer = setInterval(() => tick((value) => value + 1), 1000);
@@ -163,7 +194,17 @@ export default function App() {
       ) : screen === "sessions" ? (
         <Sessions />
       ) : data ? (
-        <Dashboard widgets={buildWidgets(data, refresh, burnWindow, setBurnWindow, t)} />
+        <Dashboard
+          widgets={buildWidgets(
+            data,
+            refresh,
+            burnWindow,
+            setBurnWindow,
+            scaleShape,
+            setScaleShape,
+            t,
+          )}
+        />
       ) : (
         <p className="empty-note">
           {connection === "offline" ? t("app.noConnection") : t("app.connecting")}
@@ -199,6 +240,8 @@ function buildWidgets(
   refresh: () => Promise<void>,
   burnWindow: string,
   setBurnWindow: (key: string) => void,
+  scaleShape: ScaleShape,
+  setScaleShape: (shape: ScaleShape) => void,
   t: (key: string, vars?: Record<string, string | number>) => string,
 ): WidgetContent[] {
   const checkedAt = timestamp(data.now) ?? Date.now();
@@ -215,8 +258,13 @@ function buildWidgets(
     {
       id: "gauge",
       title: t("widget.gauge"),
-      body: <GaugeWidget data={data} window={burnWindow} />,
-      tools: <WindowPicker value={burnWindow} onChange={setBurnWindow} />,
+      body: <GaugeWidget data={data} window={burnWindow} shape={scaleShape} />,
+      tools: (
+        <>
+          <WindowPicker value={burnWindow} onChange={setBurnWindow} />
+          <ScalePicker value={scaleShape} onChange={setScaleShape} />
+        </>
+      ),
       at: lastTurn,
       checkedAt,
       refresh,
@@ -319,7 +367,41 @@ function WindowPicker({ value, onChange }: { value: string; onChange: (key: stri
   );
 }
 
-function GaugeWidget({ data, window }: { data: Overview; window: string }) {
+function ScalePicker({
+  value,
+  onChange,
+}: {
+  value: ScaleShape;
+  onChange: (shape: ScaleShape) => void;
+}) {
+  const { t } = useLang();
+  return (
+    <div className="window-picker scale-picker" role="tablist" aria-label={t("scale.picker")}>
+      {SCALE_SHAPES.map((shape) => (
+        <button
+          key={shape}
+          role="tab"
+          aria-selected={shape === value}
+          title={t(`scale.${shape}`)}
+          className={shape === value ? "window window-on" : "window"}
+          onClick={() => onChange(shape)}
+        >
+          {shapeLabel(shape)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function GaugeWidget({
+  data,
+  window,
+  shape,
+}: {
+  data: Overview;
+  window: string;
+  shape: ScaleShape;
+}) {
   const { t } = useLang();
   const burn = data.burn[window];
   // The breakdown always covers the same window as the needle: two different periods
@@ -333,7 +415,12 @@ function GaugeWidget({ data, window }: { data: Overview; window: string }) {
       {/* The breakdown sits beside the instrument: empty space is left along the sides
           of the semicircle, and a list of four rows fits into it exactly. */}
       <div className="gauge-row">
-        <Gauge value={burn.tokens_per_min} slices={slices} caption={t(`window.caption.${window}`)} />
+        <Gauge
+          value={burn.tokens_per_min}
+          slices={slices}
+          caption={t(`window.caption.${window}`)}
+          shape={shape}
+        />
 
         <div className="breakdown">
           <span className="legend-title">{t("widget.gauge.breakdown")}</span>
