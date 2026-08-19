@@ -2,6 +2,7 @@
 // hidden with the cross. All of that lives in localStorage.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import GridLayout, { type Layout } from "react-grid-layout";
 
 import { clockTime, freshnessLabel } from "./format";
@@ -125,6 +126,10 @@ export function Dashboard({ widgets }: { widgets: WidgetContent[] }) {
     );
   }, []);
 
+  // The masthead is rendered by App, so the node is only there after the first commit.
+  const [tools, setTools] = useState<HTMLElement | null>(null);
+  useEffect(() => setTools(document.getElementById("dash-tools")), []);
+
   const toggle = (id: WidgetId) =>
     setState((current) => ({
       ...current,
@@ -135,31 +140,38 @@ export function Dashboard({ widgets }: { widgets: WidgetContent[] }) {
 
   return (
     <>
-      <div className="dashboard-bar">
-        <button className="tune" onClick={() => setTuning((open) => !open)} aria-expanded={tuning}>
-          {t("dash.widgets")}
-          {state.hidden.length > 0 && <span className="tune-count">−{state.hidden.length}</span>}
-        </button>
-        {tuning && (
-          <div className="tune-panel" role="dialog" aria-label={t("dash.tune")}>
-            <p className="tune-hint">{t("dash.tuneHint")}</p>
-            <ul>
-              {WIDGETS.map((id) => (
-                <li key={id}>
-                  <label>
-                    <input type="checkbox" checked={!hidden.has(id)} onChange={() => toggle(id)} />
-                    <span className="tune-title">{t(`widget.${id}`)}</span>
-                    <span className="tune-note">{t(`widget.${id}.note`)}</span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-            <button className="tune-reset" onClick={() => setState(defaultState())}>
-              {t("dash.reset")}
+      {/* The button lives in the masthead: on a row of its own it cost a whole band of
+          height for one pill. Only the markup travels - the state of the panel stays
+          here, next to the layout it edits. */}
+      {tools &&
+        createPortal(
+          <div className="dashboard-bar">
+            <button className="tune" onClick={() => setTuning((open) => !open)} aria-expanded={tuning}>
+              {t("dash.widgets")}
+              {state.hidden.length > 0 && <span className="tune-count">−{state.hidden.length}</span>}
             </button>
-          </div>
+            {tuning && (
+              <div className="tune-panel" role="dialog" aria-label={t("dash.tune")}>
+                <p className="tune-hint">{t("dash.tuneHint")}</p>
+                <ul>
+                  {WIDGETS.map((id) => (
+                    <li key={id}>
+                      <label>
+                        <input type="checkbox" checked={!hidden.has(id)} onChange={() => toggle(id)} />
+                        <span className="tune-title">{t(`widget.${id}`)}</span>
+                        <span className="tune-note">{t(`widget.${id}.note`)}</span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+                <button className="tune-reset" onClick={() => setState(defaultState())}>
+                  {t("dash.reset")}
+                </button>
+              </div>
+            )}
+          </div>,
+          tools,
         )}
-      </div>
 
       <div className="grid-host" ref={ref}>
         <GridLayout

@@ -1717,11 +1717,14 @@ main.empty {
 
 /* --- widget grid --- */
 
+/* the tune button stands in the masthead, and the panel hangs from it */
+.dash-tools {
+  display: flex;
+}
+
 .dashboard-bar {
   position: relative;
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: -6px;
+  display: inline-flex;
 }
 
 .tune {

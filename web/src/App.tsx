@@ -128,6 +128,8 @@ export default function App() {
           <span className={`dot dot-${connection}`} />
           <span>{connection === "live" ? t("app.live") : t("app.offline")}</span>
           <span className="status-ago">{updatedAt ? agoLabel(ago) : ""}</span>
+          {/* the dashboard puts the widget button here through a portal */}
+          <div id="dash-tools" className="dash-tools" />
           <ThemePicker />
           <div className="lang-picker" role="group" aria-label={t("app.lang")}>
             {(["ru", "en"] as const).map((key) => (
