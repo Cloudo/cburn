@@ -16,9 +16,6 @@
 </p>
 
 <p align="center">
-  <video src="media/demo.mp4" width="920" controls muted playsinline></video>
-</p>
-<p align="center">
   <sub><a href="media/demo.mp4">A tour of the dashboard</a> - a minute and a bit over the
   demo dataset: the gauge, the palettes, the sessions and the advisor.</sub>
 </p>
