@@ -1,0 +1,141 @@
+# A release on a `v*` tag: the source archive that homebrew installs from, and the
+# menu-bar application beside it.
+#
+# The archive is not a bare `git archive`: `web/dist` is not committed, and a formula
+# must not have to install node to get it. So the frontend is built here and packed in,
+# and the archive becomes self-sufficient - python, its dependencies, and a ready page.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "the tag to build; nothing is published, the artefacts are attached to the run"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: the version comes from the tag
+        id: version
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${TAG#v}"
+          # A release candidate carries a suffix the version in pyproject does not:
+          # `v0.1.0-rc1` builds the whole thing without pretending to be 0.1.0.
+          BASE="${VERSION%%-*}"
+          DECLARED=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
+          if [ "$BASE" != "$DECLARED" ]; then
+            echo "the tag says $BASE and pyproject.toml says $DECLARED" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if [ "$VERSION" != "$BASE" ]; then echo "prerelease=--prerelease" >> "$GITHUB_OUTPUT"; fi
+
+      - name: build the frontend
+        run: |
+          cd web
+          npm ci
+          npm run build
+
+      - name: pack the source archive
+        id: archive
+        run: |
+          NAME="cburn-${{ steps.version.outputs.version }}"
+          mkdir -p staging
+          git archive --format=tar --prefix="$NAME/" HEAD | tar -x -C staging
+          cp -R web/dist "staging/$NAME/web/dist"
+          tar -czf "$NAME.tar.gz" -C staging "$NAME"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "sha=$(shasum -a 256 "$NAME.tar.gz" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: build the application
+        run: |
+          npm ci
+          npm run desktop:build
+
+      - name: pack the application
+        id: app
+        run: |
+          APP=src-tauri/target/release/bundle/macos/cburn.app
+          ZIP="cburn-${{ steps.version.outputs.version }}-macos.zip"
+          ditto -c -k --keepParent "$APP" "$ZIP"
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+          echo "sha=$(shasum -a 256 "$ZIP" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      # The formula lives in the tap, but its two moving parts are born here - so they are
+      # printed ready to paste rather than looked up by hand after every release.
+      - name: the release notes
+        run: |
+          cat > notes.md <<'EOF'
+          ## Install
+
+          ```bash
+          brew install Cloudo/cburn/cburn
+          ```
+
+          The menu-bar application is the zip below. It is not signed: open it from the
+          Finder with a right click and "Open", or lift the quarantine flag with
+          `xattr -dr com.apple.quarantine cburn.app`.
+
+          <details><summary>for the formula in the tap</summary>
+
+          ```ruby
+          url "https://github.com/Cloudo/cburn/releases/download/TAG/ARCHIVE"
+          sha256 "ARCHIVE_SHA"
+          ```
+
+          the application zip: `APP_SHA`
+          </details>
+          EOF
+          sed -i '' \
+            -e "s|TAG|${{ steps.version.outputs.tag }}|" \
+            -e "s|ARCHIVE_SHA|${{ steps.archive.outputs.sha }}|" \
+            -e "s|ARCHIVE|${{ steps.archive.outputs.name }}.tar.gz|" \
+            -e "s|APP_SHA|${{ steps.app.outputs.sha }}|" \
+            notes.md
+
+      # A hand-started run publishes nothing: the artefacts hang on the run itself, so the
+      # whole pipeline can be tried before a tag exists.
+      - name: keep the artefacts of a dry run
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cburn-${{ steps.version.outputs.version }}
+          path: |
+            ${{ steps.archive.outputs.name }}.tar.gz
+            ${{ steps.app.outputs.zip }}
+            notes.md
+
+      - name: publish
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --title "${{ steps.version.outputs.tag }}" \
+            --notes-file notes.md \
+            ${{ steps.version.outputs.prerelease }} \
+            "${{ steps.archive.outputs.name }}.tar.gz" \
+            "${{ steps.app.outputs.zip }}"
