@@ -89,4 +89,4 @@ requirement in detail is in the [specification](SPEC.md).
 
 ## License
 
-MIT
+[MIT](LICENSE)
