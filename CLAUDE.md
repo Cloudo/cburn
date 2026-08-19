@@ -101,6 +101,11 @@ and the invariants.
 - Claude Code hooks are not used for collecting data - only the file watcher.
 - Commits follow Conventional Commits (the `conventional-commits` skill), with messages in
   English.
+- **A finished task is committed at once, without being asked.** One task - one commit: the
+  work is not left lying in the working tree, and unrelated changes are not swept into it.
+  Several sessions run in this repository side by side, so before committing check what in
+  the tree is yours: `git add -A` will take in someone else's half-written work, and
+  `git commit -a` will do the same.
 - **Russian lives in the interface dictionaries and nowhere else:** `web/src/lib/dict.ts` for
   the dashboard and `src-tauri/dict.json` for the tray menu. Everything else - the code,
   the comments, the CLI output, the HTTP answers, the telegram notifications and the
