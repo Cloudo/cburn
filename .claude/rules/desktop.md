@@ -57,7 +57,9 @@ paths:
   proxied by vite onto the running `cburn serve`, which still has to be up. The port is
   fixed with `strictPort`: `tauri dev` waits for exactly that address, and a silent hop to
   5174 would leave it waiting forever. `frontendDist` is left pointing at the server - the
-  built `.app` loads the page from `http://127.0.0.1:8799` as before.
+  built `.app` loads the page from `http://127.0.0.1:8799` as before. A killed `tauri dev`
+  can orphan its vite, which keeps holding 5173; `make desktop` detects the holder and
+  offers to kill it before starting.
 - **The desktop build runs from the repository root, not from `web/`.** Tauri looks for
   `src-tauri/` next to itself, while `web/` holds only the frontend - from there the command
   fails with "Couldn't recognize the current folder as a Tauri project".
