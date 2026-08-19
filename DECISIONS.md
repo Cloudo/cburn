@@ -4,6 +4,24 @@ Why things are the way they are: the option taken, the options rejected and the
 reason. Newest first. Things visible from the code and the git history do not
 belong here; neither do the invariants, which live in `CLAUDE.md`.
 
+## 2026-08-19 - the ring compresses its shares: square roots and a floor sliver
+
+Cache reads outrun the other parts by two orders of magnitude, so honest shares
+painted the whole ring one colour, always. The arc widths are now proportional
+to the square roots of the values - "200 times more" turns into "14 times more" -
+and every nonzero part is guaranteed three degrees of the semicircle. The ring
+thereby stops being an exact diagram and becomes a map of the colours; the
+honest percentages stay a centimetre away in the legend and in the tooltips,
+where a lifted sliver introduces itself as "<1%", not "0%".
+
+Rejected: a logarithm (makes the parts look near-equal - a two-hundredfold gap
+reads as none - and log of a handful of tokens jitters near zero); shares of
+cost instead of tokens (the most meaningful cure, but the needle would stay in
+tokens while the ring switched to dollars, and the server would have to price
+the parts per model - too much instrument for one ring); leaving the ring
+honest and always blue (the constant 99% carries no news, and the informative
+ratio between the small parts was invisible).
+
 ## 2026-08-19 - the gauge needle is a decaying integrator, not a window
 
 The picker offered rectangular windows (10 s ... 60 min), and none of them moved

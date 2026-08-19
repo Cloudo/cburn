@@ -63,6 +63,27 @@ export function scalePosition(value: number): number {
   return (value ** CURVE - MIN ** CURVE) / (MAX ** CURVE - MIN ** CURVE);
 }
 
+// every part that exists at all keeps at least three degrees of the semicircle
+const RING_FLOOR = 3 / 180;
+
+/** Arc widths of the ring, 0...1 summing to one.
+ *
+ * Honest shares paint the whole ring one colour: cache reads outrun the rest by two
+ * orders of magnitude. So the widths are compressed - proportional to square roots,
+ * which turns "200 times more" into "14 times more" - and every nonzero part is
+ * guaranteed a floor sliver. The honest percentages stay in the legend and the
+ * tooltips; the ring is a map of the colours, not the diagram of the shares.
+ */
+export function ringShares(values: number[]): number[] {
+  const roots = values.map((value) => Math.sqrt(Math.max(value, 0)));
+  const total = roots.reduce((sum, root) => sum + root, 0);
+  if (total <= 0) return values.map(() => 0);
+  const alive = roots.filter((root) => root > 0).length;
+  // the floor is handed out first, the rest of the arc is split by the roots
+  const budget = 1 - RING_FLOOR * alive;
+  return roots.map((root) => (root > 0 ? RING_FLOOR + (root / total) * budget : 0));
+}
+
 type Props = { value: number; slices: Slice[]; caption: string };
 
 export function Gauge({ value, slices, caption }: Props) {
@@ -70,11 +91,13 @@ export function Gauge({ value, slices, caption }: Props) {
   const position = scalePosition(value);
   const total = slices.reduce((sum, slice) => sum + slice.value, 0);
 
+  const arcs = ringShares(slices.map((slice) => slice.value));
   let cursor = 0;
-  const segments = slices.map((slice) => {
+  const segments = slices.map((slice, index) => {
+    // the tooltip keeps the honest share; the arc width is compressed (see ringShares)
     const share = total > 0 ? slice.value / total : 0;
-    const segment = { ...slice, from: cursor, to: cursor + share, share };
-    cursor += share;
+    const segment = { ...slice, from: cursor, to: cursor + arcs[index], share };
+    cursor += arcs[index];
     return segment;
   });
 
@@ -91,7 +114,12 @@ export function Gauge({ value, slices, caption }: Props) {
               d={ringSegment(segment.from, segment.to)}
               fill={segment.color}
             >
-              <title>{`${segment.label}: ${Math.round(segment.share * 100)}%`}</title>
+              {/* a sliver lifted by the floor would otherwise introduce itself as 0% */}
+              <title>
+                {`${segment.label}: ${
+                  segment.share * 100 < 1 ? "<1" : Math.round(segment.share * 100)
+                }%`}
+              </title>
             </path>
           ))}
 
