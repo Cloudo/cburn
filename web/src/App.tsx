@@ -37,7 +37,9 @@ import {
   type Usage,
 } from "./api";
 
-const WINDOWS = ["10s", "1m", "5m", "60m"] as const;
+// "live" is not a window: the server decays turns exponentially, so the needle
+// climbs while Claude works and glides down in silence instead of teleporting.
+const WINDOWS = ["live", "5s", "10s"] as const;
 
 // The slices take the accents from the theme rather than from a copy of their values: the
 // palette is switched by the picker, and a duplicated hex would stay at the old theme.
@@ -86,7 +88,7 @@ export default function App() {
   const { zoom, zoomIn, zoomOut, reset: resetZoom } = useZoom();
   const { data, connection, updatedAt, refresh } = useOverview();
   const [, tick] = useState(0);
-  const [burnWindow, setBurnWindow] = useState<string>("1m");
+  const [burnWindow, setBurnWindow] = useState<string>("live");
   const screen = useScreen();
 
   useEffect(() => {
@@ -297,7 +299,7 @@ function buildWidgets(
   ];
 }
 
-/** The averaging window sits in the widget header, in the same tone as the clock: it is
+/** The needle mode sits in the widget header, in the same tone as the clock: it is
  *  changed rarely, and in the instrument body it used to take a whole line. */
 function WindowPicker({ value, onChange }: { value: string; onChange: (key: string) => void }) {
   const { t } = useLang();
@@ -321,11 +323,13 @@ function WindowPicker({ value, onChange }: { value: string; onChange: (key: stri
 
 function GaugeWidget({ data, window }: { data: Overview; window: string }) {
   const { t } = useLang();
-  const burn = data.burn[window];
+  // a server built before the live mode has no such key - fall back to any window
+  const burn = data.burn[window] ?? Object.values(data.burn)[0];
+  if (!burn) return null;
   // The breakdown always covers the same window as the needle: two different periods
   // side by side read as one whole and confused.
   const slices = slicesOf(burn.usage, t);
-  const peak = Math.max(...WINDOWS.map((key) => data.burn[key].output_per_min), 500);
+  const peak = Math.max(...WINDOWS.map((key) => data.burn[key]?.output_per_min ?? 0), 500);
   const total = slices.reduce((sum, item) => sum + item.value, 0);
 
   return (

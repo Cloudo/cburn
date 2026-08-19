@@ -4,6 +4,23 @@ Why things are the way they are: the option taken, the options rejected and the
 reason. Newest first. Things visible from the code and the git history do not
 belong here; neither do the invariants, which live in `CLAUDE.md`.
 
+## 2026-08-19 - the gauge needle is a decaying integrator, not a window
+
+The picker offered rectangular windows (10 s ... 60 min), and none of them moved
+like a car needle: the long ones froze it, and in a short one a turn's burst
+either sat whole or dropped out at once, teleporting the needle instead of
+letting it fall. Now the server ships a `live` burn entry - every turn is
+weighted by `exp(-age / 30 s)`, a ~21-second half-life - so active work keeps
+pushing the value up and silence lets it glide down, load-average style. The
+gauge picker shrank to live / 5 s / 10 s with live as the default; the minute
+windows left the picker but are still computed, because the notifier threshold
+and the tray read `burn.1m`.
+
+Rejected: an even shorter rectangular window (twitchy, not car-like); smoothing
+the needle in the frontend only (the caption would lie about what the number
+means); dropping the 1m/5m/60m windows from the API (the notifier and the tray
+consume 1m, and TZ §4 names them).
+
 ## 2026-08-19 - a widget's height follows its content until a hand touches it
 
 The default layout pinned every widget's height, and short content left dead

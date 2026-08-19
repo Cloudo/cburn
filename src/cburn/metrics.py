@@ -7,6 +7,7 @@ the TZ §4 metrics - burn rate per window, model share, idle turns - are task B3
 from __future__ import annotations
 
 import json
+import math
 import re
 import sqlite3
 from collections.abc import Mapping
@@ -569,10 +570,20 @@ def _attach_sparklines(conn: sqlite3.Connection, rows: list[dict]) -> None:
 
 # --- overview (task A5) -------------------------------------------------------
 
-#: Burn rate windows in seconds. The ten-second one is "what is happening right now":
+#: Burn rate windows in seconds. The short ones are "what is happening right now":
 #: a turn drops hundreds of thousands of tokens into the window at once, and in a
-#: one-minute average that shows up as a minute-long step (TZ §4).
-BURN_WINDOWS = (10, 60, 300, 3600)
+#: one-minute average that shows up as a minute-long step (TZ §4). The dashboard
+#: gauge shows only the short ones; the minute stays for the notifier and the tray.
+BURN_WINDOWS = (5, 10, 60, 300, 3600)
+
+#: The live needle is not a window but an exponential decay: a turn kicks the value
+#: up and silence lets it fall with a ~21-second half-life. A rectangular window
+#: cannot behave like that - a burst either sits in it whole or drops out at once,
+#: so the needle teleports instead of gliding.
+LIVE_TAU_SECONDS = 30
+
+#: Beyond six tau a turn weighs under 0.3% of itself - not worth reading.
+LIVE_CUTOFF_SECONDS = LIVE_TAU_SECONDS * 6
 
 #: The time format in transcripts: UTC with Z. String comparison is correct here and
 #: lets us filter by time right in SQL, without parsing dates.
@@ -662,13 +673,64 @@ def window_usage(
 
 
 def window_key(seconds: int) -> str:
-    """The window key in the API answer: 10s, 1m, 5m, 60m."""
+    """The window key in the API answer: 5s, 10s, 1m, 5m, 60m."""
     return f"{seconds}s" if seconds < 60 else f"{seconds // 60}m"
+
+
+def live_rate(conn: sqlite3.Connection, now: datetime) -> dict:
+    """The `live` burn entry: exponentially weighted rates (see LIVE_TAU_SECONDS).
+
+    Unlike the windows, `usage` here holds per-minute rates rather than totals: each
+    component is weighted the same way as the needle, so the breakdown shares stay
+    honest and the legend sums to the needle value.
+    """
+    rows = conn.execute(
+        "SELECT (julianday(?) - julianday(ts)) * 86400.0 AS age,"
+        "       session_id, input_tokens, output_tokens, cache_read,"
+        "       cache_write_5m, cache_write_1h, cost_usd"
+        "  FROM turns WHERE ts >= ?",
+        (_utc_stamp(now), _utc_stamp(now - timedelta(seconds=LIVE_CUTOFF_SECONDS))),
+    ).fetchall()
+    parts = dict.fromkeys(
+        (
+            "input_tokens",
+            "output_tokens",
+            "cache_read",
+            "cache_write_5m",
+            "cache_write_1h",
+            "cost_usd",
+        ),
+        0.0,
+    )
+    sessions = set()
+    tau_minutes = LIVE_TAU_SECONDS / 60
+    for row in rows:
+        # the kernel integrates to one: a steady X tokens/min stream reads as X
+        weight = math.exp(-max(row["age"], 0.0) / LIVE_TAU_SECONDS) / tau_minutes
+        for key in parts:
+            parts[key] += (row[key] or 0) * weight
+        sessions.add(row["session_id"])
+    usage: dict[str, Any] = dict(parts)
+    usage["turns"] = len(rows)
+    usage["sessions"] = len(sessions)
+    usage["cache_write"] = usage["cache_write_5m"] + usage["cache_write_1h"]
+    usage["tokens"] = (
+        usage["input_tokens"] + usage["output_tokens"] + usage["cache_read"] + usage["cache_write"]
+    )
+    return {
+        "tokens_per_min": usage["tokens"],
+        "output_per_min": usage["output_tokens"],
+        "cost_per_hour": usage["cost_usd"] * 60,
+        "turns": len(rows),
+        "sessions": len(sessions),
+        "window_seconds": LIVE_TAU_SECONDS,
+        "usage": usage,
+    }
 
 
 def burn_rates(conn: sqlite3.Connection, now: datetime) -> dict[str, dict]:
     """Burn rate over the TZ §4 windows - always tokens per minute, windows of different lengths."""
-    rates: dict[str, dict] = {}
+    rates: dict[str, dict] = {"live": live_rate(conn, now)}
     for seconds in BURN_WINDOWS:
         usage = window_usage(conn, now - timedelta(seconds=seconds))
         minutes = seconds / 60

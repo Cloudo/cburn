@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -197,6 +198,43 @@ def test_burn_rate_is_per_minute(transcripts: Path, db_path: Path) -> None:
     assert burn["5m"]["output_per_min"] == pytest.approx(100)
     assert burn["60m"]["output_per_min"] == pytest.approx(500 / 60)
     assert burn["5m"]["window_seconds"] == 300
+
+
+def test_live_burn_decays_with_age(transcripts: Path, db_path: Path) -> None:
+    """The live needle weighs a turn by its age: half-worth after ~21 s, not a cliff."""
+    now = datetime.now(UTC)
+    seed(
+        transcripts,
+        db_path,
+        [assistant("msg_1", ts=now - timedelta(seconds=30), output=500, cache_read=0)],
+    )
+    with client(db_path, transcripts) as api:
+        burn = api.get("/api/overview").json()["burn"]
+
+    live = burn["live"]
+    # tokens = 2 input + 500 output + 50 cache write; weight = exp(-30/30) / half a minute
+    weight = 2 * math.exp(-1)
+    assert live["turns"] == 1
+    assert live["tokens_per_min"] == pytest.approx(552 * weight, rel=0.05)
+    assert live["output_per_min"] == pytest.approx(500 * weight, rel=0.05)
+    # the legend is weighted the same way and sums to the needle
+    assert live["usage"]["tokens"] == pytest.approx(live["tokens_per_min"])
+    assert burn["5s"]["window_seconds"] == 5
+
+
+def test_live_burn_forgets_old_turns(transcripts: Path, db_path: Path) -> None:
+    """Beyond the decay cutoff a turn no longer moves the live needle at all."""
+    now = datetime.now(UTC)
+    seed(
+        transcripts,
+        db_path,
+        [assistant("msg_1", ts=now - timedelta(minutes=4), output=500)],
+    )
+    with client(db_path, transcripts) as api:
+        live = api.get("/api/overview").json()["burn"]["live"]
+
+    assert live["turns"] == 0
+    assert live["tokens_per_min"] == 0
 
 
 # --- sessions -----------------------------------------------------------------
