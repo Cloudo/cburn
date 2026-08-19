@@ -85,7 +85,7 @@ function useScreen(): string {
 const SCREENS = ["", "sessions", "advice", "settings"];
 
 export default function App() {
-  const { lang, setLang, t } = useLang();
+  const { t } = useLang();
   const { zoom, zoomIn, zoomOut, reset: resetZoom } = useZoom();
   const { data, connection, updatedAt, refresh } = useOverview();
   const [, tick] = useState(0);
@@ -139,18 +139,6 @@ export default function App() {
           {/* the dashboard puts the widget button here through a portal */}
           <div id="dash-tools" className="dash-tools" />
           <ThemePicker />
-          <div className="lang-picker" role="group" aria-label={t("app.lang")}>
-            {(["ru", "en"] as const).map((key) => (
-              <button
-                key={key}
-                aria-pressed={key === lang}
-                className={key === lang ? "lang lang-on" : "lang"}
-                onClick={() => setLang(key)}
-              >
-                {key.toUpperCase()}
-              </button>
-            ))}
-          </div>
           <div className="zoom-picker" role="group" aria-label={t("app.zoom")}>
             <button className="zoom" title={t("app.zoom.out")} onClick={zoomOut}>
               &minus;

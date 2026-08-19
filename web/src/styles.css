@@ -321,37 +321,8 @@ main.empty {
   font-size: 12px;
 }
 
-/* The language switch lives in the status line and follows its tone. */
-.lang-picker {
-  display: flex;
-  gap: 1px;
-  margin-left: 4px;
-}
-
-.lang {
-  border: 0;
-  background: transparent;
-  color: var(--text-faint);
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  padding: 2px 5px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: color 0.15s, background 0.15s;
-}
-
-.lang:hover {
-  color: var(--text);
-  background: var(--bg-sunken);
-}
-
-.lang-on {
-  color: var(--text);
-}
-
-/* The scale switch stands next to the language and repeats its tone: the same muted
-   monospace, and the percentage in the middle is a button that returns the normal size. */
+/* The scale switch repeats the tone of the status line: the same muted monospace,
+   and the percentage in the middle is a button that returns the normal size. */
 .zoom-picker {
   display: flex;
   align-items: center;

@@ -36,6 +36,12 @@ paths:
   1.25 rung and sent the needle off the dial, invisibly to Chromium. So a pivot is either a
   bare `0 0`, with the point carried there by an SVG `transform` attribute (user units,
   outside CSS lengths), or it is not written in pixels at all.
+- **The language is chosen on the "Settings" screen, and "system" is the default.** The
+  choice (`ru` / `en` / `system`) lies in `localStorage` (`cburn.lang`); `system` follows
+  `navigator.language`, everything except Russian counting as English. The setting acts at
+  once and never reaches `config.toml` - it is the browser's, like the theme and the
+  layout; the resolved language is still mirrored through the server into `ui.json` for
+  the tray.
 - **Texts the frontend shows never come from the server.** The server sends data (a limit
   window `kind`, a dictionary key for a failed request), and the words around it are built
   by `dict.ts`: the interface has two languages, and the backend has none.

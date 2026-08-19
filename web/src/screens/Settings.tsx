@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react";
 
 import { loadConfig, saveConfig, type Config, type ModelPrice } from "../lib/api";
-import { useLang } from "../lib/i18n";
+import { useLang, type LangChoice } from "../lib/i18n";
 
 const PRICE_COLUMNS: Array<keyof ModelPrice> = [
   "input",
@@ -16,7 +16,7 @@ const PRICE_COLUMNS: Array<keyof ModelPrice> = [
 ];
 
 export function Settings() {
-  const { t } = useLang();
+  const { t, choice, setChoice } = useLang();
   const [config, setConfig] = useState<Config | null>(null);
   const [path, setPath] = useState("");
   const [note, setNote] = useState("");
@@ -72,6 +72,19 @@ export function Settings() {
       </div>
 
       <div className="settings-columns">
+        {/* the browser's own settings: they act at once and never touch config.toml */}
+        <fieldset className="settings-group">
+          <legend>{t("settings.interface")}</legend>
+          <Choice
+            label={t("settings.language")}
+            value={choice}
+            options={["system", "ru", "en"]}
+            render={(value) => t(`settings.lang.${value}`)}
+            onChange={(value) => setChoice(value as LangChoice)}
+          />
+          <p className="hint">{t("settings.languageNote")}</p>
+        </fieldset>
+
         <fieldset className="settings-group">
           <legend>{t("settings.zones")}</legend>
           <Num

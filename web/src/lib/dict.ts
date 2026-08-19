@@ -44,7 +44,13 @@ const DICT: Record<string, [string, string]> = {
     "Токены незаконченного хода попадают в транскрипт только вместе с ответом, поэтому при идущем запросе показания прибора занижены.",
     "The tokens of an unfinished turn reach the transcript only together with the answer, so while a request is running the readings stand below the truth.",
   ],
-  "app.lang": ["язык интерфейса", "interface language"],
+  "settings.interface": ["интерфейс", "interface"],
+  "settings.language": ["язык", "language"],
+  "settings.lang.system": ["как в системе", "system"],
+  "settings.languageNote": [
+    "действует сразу и живёт в этом браузере, не в config.toml",
+    "applies at once and lives in this browser, not in config.toml",
+  ],
   "app.theme": ["тема оформления", "colour theme"],
   "app.theme.system": ["как в системе", "follow the system"],
   "app.theme.dark": ["тёмные", "dark"],
@@ -549,12 +555,25 @@ const DICT: Record<string, [string, string]> = {
   "settings.lang.en": ["английский", "English"],
 };
 
-/** The default language is English, like everything else outside the dictionary;
- *  only an explicit choice in the masthead switches to Russian. */
-export function detect(): Lang {
+/** The choice on the "Settings" screen: a fixed language or following the system. */
+export type LangChoice = Lang | "system";
+
+/** What the system offers when nothing is chosen: everything except Russian is English. */
+export function systemLang(): Lang {
+  return navigator.language.startsWith("ru") ? "ru" : "en";
+}
+
+/** The stored choice; absent or unrecognised means "follow the system". */
+export function storedChoice(): LangChoice {
   const saved = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(RENAMED_KEY);
   if (saved === "ru" || saved === "en") return saved;
-  return "en";
+  return "system";
+}
+
+/** The language in effect right now - for code outside the provider (the error boundary). */
+export function detect(): Lang {
+  const choice = storedChoice();
+  return choice === "system" ? systemLang() : choice;
 }
 
 /** Translation outside React - where there are no hooks (constant tables, formatting). */
