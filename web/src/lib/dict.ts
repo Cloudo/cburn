@@ -549,11 +549,12 @@ const DICT: Record<string, [string, string]> = {
   "settings.lang.en": ["английский", "English"],
 };
 
-/** The default language is the browser's; everything except Russian counts as English. */
+/** The default language is English, like everything else outside the dictionary;
+ *  only an explicit choice in the masthead switches to Russian. */
 export function detect(): Lang {
   const saved = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(RENAMED_KEY);
   if (saved === "ru" || saved === "en") return saved;
-  return navigator.language.startsWith("ru") ? "ru" : "en";
+  return "en";
 }
 
 /** Translation outside React - where there are no hooks (constant tables, formatting). */
