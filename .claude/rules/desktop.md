@@ -12,6 +12,11 @@ paths:
   The server is held by a `flock` on `~/.local/share/cburn/serve.lock`
   (`instance.only_one`) - the port does not do it, `--port 8800` would start a second
   watcher happily. The lock dies with the process, so a crash leaves nothing stale behind.
+  The guard bites in a way that looks like a bug: with the demo app of `make demo-app` in
+  the tray, `make desktop` hands its launch over to it and the demo window comes up on the
+  demo dataset, while the dev build never opens at all. `make desktop` therefore refuses to
+  start when another copy is running, and `demo-app.sh` asks the real one to quit before it
+  takes the tray.
 - **The window loads the page from the server, not from files.** The frontend calls the API
   with relative paths (`api/overview`); from `tauri://` they would go nowhere,
   so `frontendDist` points at `http://127.0.0.1:8799`. Thanks to that the

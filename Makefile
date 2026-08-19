@@ -85,6 +85,13 @@ demo-app: ## the tauri app on the demo dataset; the real dashboard keeps :8799
 	tools/demo-app.sh
 
 desktop: ## the desktop window with hot reload: vite for the page, cargo for the Rust
+	@if pgrep -f 'cburn\.app/Contents/MacOS/cburn|src-tauri/target/[a-z]*/cburn' >/dev/null; then \
+	  echo "cburn is already running. The application lives in a single copy, so this launch" >&2; \
+	  echo "would be handed over to the one in the tray - and if that one came from" >&2; \
+	  echo "\`make demo-app\`, you would be looking at the demo dataset and wondering why." >&2; \
+	  echo "Quit it in the tray and run this again." >&2; \
+	  exit 1; \
+	fi
 	PATH="$(CARGO):$$PATH" npm run desktop
 
 desktop-build: ## build the .app into src-tauri/target/release/bundle/macos
