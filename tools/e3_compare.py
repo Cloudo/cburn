@@ -2,7 +2,7 @@
 
 The session transcript is read into the same database the telemetry landed in, after
 which both sides are counted over their own tables and compared by tokens and
-cost. The acceptance threshold is a mismatch of no more than 2% (TZ §10, M4).
+cost. The acceptance threshold is a mismatch of no more than 2% (SPEC §10, M4).
 
 The main request is compared (`query_source = main`): Claude Code service requests
 (session title generation and the like) never reach the transcript at all, so they are

@@ -1,9 +1,9 @@
-"""The period digest without an LLM (task D1, TZ §6).
+"""The period digest without an LLM (task D1, SPEC §6).
 
 This is the advisor's input: everything it has to know about the period is collected
 beforehand and computed in SQL. The model gets JSON, not transcripts.
 
-Privacy (TZ §7, a project invariant). Only these things reach the digest:
+Privacy (SPEC §7, a project invariant). Only these things reach the digest:
 
 * numbers - tokens, cost, counters, shares;
 * tool names and normalised bash commands ("first word + subcommand",
@@ -37,7 +37,7 @@ TOP_SESSIONS = 10
 TOP_TOOLS = 12
 
 #: Tools that decide nothing on their own: reading and searching. A turn that held
-#: only those is mechanical work, and Opus is overkill for it (TZ §6).
+#: only those is mechanical work, and Opus is overkill for it (SPEC §6).
 MECHANICAL_TOOLS = {"Read", "Glob", "Grep", "LS", "NotebookRead", "TodoWrite"}
 
 

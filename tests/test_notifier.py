@@ -1,4 +1,4 @@
-"""Notification tests (task D5, TZ §7).
+"""Notification tests (task D5, SPEC §7).
 
 No network is raised here: the channel is swapped, and the rules are checked as pure
 functions - they were written that way exactly to make it possible.

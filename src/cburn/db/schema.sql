@@ -1,4 +1,4 @@
--- The cburn database schema (see TZ.md §3 "SQLite: the data model").
+-- The cburn database schema (see SPEC.md §3 "SQLite: the data model").
 -- Applied idempotently at start; the version is recorded in user_version.
 
 PRAGMA journal_mode = WAL;
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS projects (
 CREATE TABLE IF NOT EXISTS sessions (
     id                TEXT PRIMARY KEY,  -- sessionId from the transcript
     project_id        INTEGER REFERENCES projects(id),
-    machine_id        TEXT,              -- room for multi-machine aggregation (TZ §11), NULL for now
+    machine_id        TEXT,              -- room for multi-machine aggregation (SPEC §11), NULL for now
     started_at        TEXT,
     last_at           TEXT,
     first_prompt      TEXT,              -- trimmed to 200 characters
@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS turns (
     ts               TEXT NOT NULL,
     model            TEXT,
     role             TEXT,
-    is_sidechain     INTEGER NOT NULL DEFAULT 0,  -- a subagent turn (TZ §4)
+    is_sidechain     INTEGER NOT NULL DEFAULT 0,  -- a subagent turn (SPEC §4)
     input_tokens     INTEGER NOT NULL DEFAULT 0,
     output_tokens    INTEGER NOT NULL DEFAULT 0,
     cache_read       INTEGER NOT NULL DEFAULT 0,
@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS turns (
     cache_write_1h   INTEGER NOT NULL DEFAULT 0,
     context_estimate INTEGER NOT NULL DEFAULT 0,  -- input + cache_read + cache_write
     cost_usd         REAL NOT NULL DEFAULT 0,
-    is_idle          INTEGER NOT NULL DEFAULT 0   -- an idle turn, the TZ §6 heuristic
+    is_idle          INTEGER NOT NULL DEFAULT 0   -- an idle turn, the SPEC §6 heuristic
 );
 CREATE INDEX IF NOT EXISTS idx_turns_session ON turns(session_id, ts);
 CREATE INDEX IF NOT EXISTS idx_turns_ts      ON turns(ts);
@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS advice (
     model        TEXT,
     cost_usd     REAL NOT NULL DEFAULT 0,
     max_severity TEXT,
-    status       TEXT NOT NULL DEFAULT 'new'  -- new | accepted | rejected (TZ §5, the "Advice" screen)
+    status       TEXT NOT NULL DEFAULT 'new'  -- new | accepted | rejected (SPEC §5, the "Advice" screen)
 );
 
 CREATE TABLE IF NOT EXISTS model_prices (
@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS model_prices (
 );
 
 -- Individual tips of one analysis: each has its own status so that a dismissed one
--- does not come again (TZ §5, task D6). `key` is a stable tip fingerprint:
+-- does not come again (SPEC §5, task D6). `key` is a stable tip fingerprint:
 -- it recognises the tip on the next tick even if the wording changed.
 CREATE TABLE IF NOT EXISTS advice_items (
     id        INTEGER PRIMARY KEY,
@@ -127,7 +127,7 @@ CREATE TABLE IF NOT EXISTS advice_items (
     severity  TEXT NOT NULL DEFAULT 'info',  -- info | warn | crit
     detail    TEXT,
     action    TEXT,
-    evidence  TEXT NOT NULL,   -- without it a tip is not stored (TZ §6)
+    evidence  TEXT NOT NULL,   -- without it a tip is not stored (SPEC §6)
     status    TEXT NOT NULL DEFAULT 'new',   -- new | accepted | rejected
     act_json  TEXT,            -- a typed action from the closed list (task D7), NULL for most tips
     UNIQUE (advice_id, key)
@@ -158,7 +158,7 @@ CREATE INDEX IF NOT EXISTS idx_applied_patches ON applied_patches(item_id, statu
 -- re-read tail does not double a prompt; the same prompt copied by a resume into
 -- another session is a prompt of that session too, hence the key of the pair.
 -- This text never leaves the machine: the advisor digest is built from aggregates
--- and knows nothing about this table (TZ §7).
+-- and knows nothing about this table (SPEC §7).
 CREATE TABLE IF NOT EXISTS prompts (
     id         INTEGER PRIMARY KEY,
     session_id TEXT NOT NULL,
@@ -171,7 +171,7 @@ CREATE INDEX IF NOT EXISTS idx_prompts_session ON prompts(session_id, ts);
 
 -- Notable moments inside a session: auto-compaction (after it the context
 -- collapses), other milestones later on. They are needed so the context chart
--- shows why it dropped (TZ §5, task C2).
+-- shows why it dropped (SPEC §5, task C2).
 CREATE TABLE IF NOT EXISTS session_events (
     id         INTEGER PRIMARY KEY,
     session_id TEXT NOT NULL REFERENCES sessions(id),
@@ -181,7 +181,7 @@ CREATE TABLE IF NOT EXISTS session_events (
 );
 CREATE INDEX IF NOT EXISTS idx_session_events ON session_events(session_id, ts);
 
--- Unknown transcript record types: the parser does not fail, it stores the raw data here (TZ §2).
+-- Unknown transcript record types: the parser does not fail, it stores the raw data here (SPEC §2).
 CREATE TABLE IF NOT EXISTS raw_events (
     id      INTEGER PRIMARY KEY,
     path    TEXT,
@@ -195,7 +195,7 @@ CREATE TABLE IF NOT EXISTS raw_events (
 -- The full payload is kept only for the first samples of each (type, version) pair,
 -- beyond that a counter grows: unknown records run into tens of thousands in history
 -- (attachment alone is 33 thousand per version), and without a limit the table
--- outgrows the useful data (TZ §2, task B6).
+-- outgrows the useful data (SPEC §2, task B6).
 CREATE TABLE IF NOT EXISTS raw_event_counts (
     type     TEXT NOT NULL,
     version  TEXT NOT NULL DEFAULT '',
@@ -205,7 +205,7 @@ CREATE TABLE IF NOT EXISTS raw_event_counts (
     PRIMARY KEY (type, version)
 );
 
--- The second data channel: official Claude Code telemetry over OTLP (TZ §2, milestone E).
+-- The second data channel: official Claude Code telemetry over OTLP (SPEC §2, milestone E).
 -- It is stored next to the parser data rather than on top of it: the channel is in beta,
 -- and on a mismatch the transcripts are to be trusted. `key` is the point fingerprint: the
 -- exporter repeats an unacknowledged payload, and without it a retry would double the numbers.

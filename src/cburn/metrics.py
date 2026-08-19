@@ -1,7 +1,7 @@
 """Database queries. Heavy aggregates are computed in SQL, not in Python.
 
 For now this holds only what is needed to reconcile the numbers of a session (task A3);
-the TZ §4 metrics - burn rate per window, model share, idle turns - are task B3.
+the SPEC §4 metrics - burn rate per window, model share, idle turns - are task B3.
 """
 
 from __future__ import annotations
@@ -62,7 +62,7 @@ def session_summary(conn: sqlite3.Connection, session_id: str) -> SessionSummary
                COALESCE(SUM(t.cache_write_5m), 0)          AS cache_write_5m,
                COALESCE(SUM(t.cache_write_1h), 0)          AS cache_write_1h,
                COALESCE(SUM(t.cost_usd), 0)                AS cost_usd,
-               -- Subagent spend belongs to the session and shows as its own row (TZ §4).
+               -- Subagent spend belongs to the session and shows as its own row (SPEC §4).
                COALESCE(SUM(t.is_sidechain * (t.input_tokens + t.output_tokens + t.cache_read
                           + t.cache_write_5m + t.cache_write_1h)), 0) AS sidechain_tokens,
                COALESCE(SUM(t.is_sidechain * t.cost_usd), 0) AS sidechain_cost_usd,
@@ -211,7 +211,7 @@ def known_projects(conn: sqlite3.Connection) -> list[dict]:
 def session_turns(conn: sqlite3.Connection, session_id: str, limit: int = 500) -> list[dict]:
     """Session turns in order - for the context chart and the feed (task C2).
 
-    An idle turn is decided by the same threshold as in the summary (TZ §6): a short
+    An idle turn is decided by the same threshold as in the summary (SPEC §6): a short
     answer on a large context. The flag is computed in the query rather than stored,
     so that changing the threshold needs no reindex.
     """
@@ -329,7 +329,7 @@ def _attach_mentioned_sessions(conn: sqlite3.Connection, items: list[dict]) -> N
     """Expand the ids mentioned in a tip into a session name and a project.
 
     The session title never reaches the digest - it is a retelling of the conversation
-    (TZ §7). On screen it is needed though: "b2ae5a8a" tells a human nothing. So we
+    (SPEC §7). On screen it is needed though: "b2ae5a8a" tells a human nothing. So we
     expand it here, at display time, and the title never leaves the machine.
     """
     prefixes = {
@@ -376,7 +376,7 @@ def session_prompts(conn: sqlite3.Connection, session_id: str, limit: int = 500)
     """The whole prompt log of a session in order (task C7).
 
     The text never leaves the machine: it is read by the screen, and the advisor digest
-    is built from aggregates and knows nothing about this table (TZ §7).
+    is built from aggregates and knows nothing about this table (SPEC §7).
     """
     return [
         dict(row)
@@ -449,7 +449,7 @@ def set_advice_status(conn: sqlite3.Connection, item_id: int, status: str) -> bo
     """Mark a tip as accepted, dismissed or put it back to new.
 
     A dismissed one travels into the next tick's prompt marked "do not repeat" -
-    that is what makes the status valuable (TZ §5).
+    that is what makes the status valuable (SPEC §5).
     """
     if status not in ADVICE_STATUSES:
         raise ValueError(f"unknown tip status: {status}")
@@ -572,7 +572,7 @@ def _attach_sparklines(conn: sqlite3.Connection, rows: list[dict]) -> None:
 
 #: Burn rate windows in seconds. The short ones are "what is happening right now":
 #: a turn drops hundreds of thousands of tokens into the window at once, and in a
-#: one-minute average that shows up as a minute-long step (TZ §4). The dashboard
+#: one-minute average that shows up as a minute-long step (SPEC §4). The dashboard
 #: gauge shows only the short ones; the minute stays for the notifier and the tray.
 BURN_WINDOWS = (5, 10, 60, 300, 3600)
 
@@ -610,7 +610,7 @@ def project_filter(project: str | None, column: str = "session_id") -> tuple[str
 
 
 def advisor_cost(conn: sqlite3.Connection, since: datetime) -> dict:
-    """What the advisor itself cost over the period (task C4, TZ §10).
+    """What the advisor itself cost over the period (task C4, SPEC §10).
 
     An instrument that costs more than it saves is a bad instrument, so its own spend
     is shown next to everyone else's. A tick on haiku costs about $0.07: almost all of
@@ -729,7 +729,7 @@ def live_rate(conn: sqlite3.Connection, now: datetime) -> dict:
 
 
 def burn_rates(conn: sqlite3.Connection, now: datetime) -> dict[str, dict]:
-    """Burn rate over the TZ §4 windows - always tokens per minute, windows of different lengths."""
+    """Burn rate over the SPEC §4 windows - always tokens per minute, the windows differ."""
     rates: dict[str, dict] = {"live": live_rate(conn, now)}
     for seconds in BURN_WINDOWS:
         usage = window_usage(conn, now - timedelta(seconds=seconds))
@@ -1530,7 +1530,7 @@ def otel_state(conn: sqlite3.Connection, since: datetime) -> dict:
 def overview(
     conn: sqlite3.Connection, now: datetime | None = None, *, otel: dict | None = None
 ) -> dict:
-    """The summary for the main screen (TZ §5, "Overview").
+    """The summary for the main screen (SPEC §5, "Overview").
 
     A ready telemetry slice can be passed in from outside: it is computed over tens of
     thousands of events and costs about 20 ms against 2 ms for all the rest of the
@@ -1673,7 +1673,7 @@ def burn_series(
 
 
 def pending_sessions(conn: sqlite3.Connection, now: datetime, minutes: int = 10) -> list[str]:
-    """Sessions where the model is working right now (TZ §4).
+    """Sessions where the model is working right now (SPEC §4).
 
     The tokens of such a request are not known yet: they show up in the transcript only
     together with the finished turn.
@@ -1692,10 +1692,10 @@ def set_hidden(conn: sqlite3.Connection, session_id: str, hidden: bool) -> bool:
     return cursor.rowcount > 0
 
 
-# --- TZ §4 metrics (task B3) -----------------------------------------------
+# --- SPEC §4 metrics (task B3) -----------------------------------------------
 
 #: An idle turn: the model answered almost nothing although the context is already large -
-#: the "waiting" case from the report (TZ §4). The thresholds live here rather than in the
+#: the "waiting" case from the report (SPEC §4). The thresholds live here rather than in the
 #: config: this is the definition of a metric, not a setting.
 IDLE_MAX_OUTPUT = 10
 IDLE_MIN_CONTEXT = 50_000
@@ -1710,7 +1710,7 @@ WEEK_HOURS = 24 * 7
 def model_share(
     conn: sqlite3.Connection, since: datetime, project: str | None = None
 ) -> list[dict]:
-    """Model share over the period: turns and tokens (TZ §4)."""
+    """Model share over the period: turns and tokens (SPEC §4)."""
     clause, params = project_filter(project)
     return [
         dict(row)
@@ -1790,7 +1790,7 @@ def idle_turns(conn: sqlite3.Connection, since: datetime, project: str | None = 
 
 
 def limit_window(conn: sqlite3.Connection, now: datetime) -> dict:
-    """An estimate of the subscription limit window - an approximation (TZ §4).
+    """An estimate of the subscription limit window - an approximation (SPEC §4).
 
     Claude Code writes neither the window bounds nor the limits themselves into the
     transcript, so the window is reconstructed from the turns: it starts with the first

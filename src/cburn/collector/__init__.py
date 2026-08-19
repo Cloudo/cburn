@@ -1,4 +1,4 @@
-"""Collector: watchdog over ~/.claude/projects + incremental JSONL parser (TZ §3).
+"""Collector: watchdog over ~/.claude/projects + incremental JSONL parser (SPEC §3).
 
 Split of responsibilities:
   parser.py  - parse one transcript line into turns/tool_calls/raw_events records;

@@ -8,7 +8,7 @@ import { clockTime, compact, duration, grouped, modelLabel, spent, toolLabel, us
 import { useLang } from "../lib/i18n";
 import { useSession, type SessionEvent, type SessionTurn } from "../lib/api";
 
-/** Context zones from TZ §4: up to 80k is calm, up to 150k is time to look around. */
+/** Context zones from SPEC §4: up to 80k is calm, up to 150k is time to look around. */
 const WARN = 80_000;
 const CRIT = 150_000;
 

@@ -212,7 +212,7 @@ def test_serve_arguments_are_parsed() -> None:
 
 
 def test_serve_binds_localhost_by_default() -> None:
-    """The TZ §7 invariant: the server does not face outwards."""
+    """The SPEC §7 invariant: the server does not face outwards."""
     assert cli.build_parser().parse_args(["serve"]).host == "127.0.0.1"
 
 

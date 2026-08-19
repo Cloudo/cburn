@@ -1,4 +1,4 @@
-// "Where the turns go": the TZ §4 metrics - the tool profile, the model share,
+// "Where the turns go": the SPEC §4 metrics - the tool profile, the model share,
 // idle turns and an estimate of the subscription limit window.
 
 import { agoLabel, compact, grouped, modelLabel, share, spent, toolLabel, usd } from "../lib/format";

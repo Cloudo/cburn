@@ -1,4 +1,4 @@
-"""CLI `cburn` (TZ §10).
+"""CLI `cburn` (SPEC §10).
 
 Implemented: `paths`, `initdb`, `reindex`, `prices`, `sessions`, `session`, `serve`, `otel`.
 Project and period filters and the `stats` command are task B7.
@@ -83,7 +83,7 @@ def build_parser() -> argparse.ArgumentParser:
     otel.add_argument("--prune", action="store_true", help="remove data older than otel.keep_days")
     serve = sub.add_parser("serve", help="start the API server and the dashboard")
     serve.add_argument("--port", type=int, help="port (from the config by default)")
-    serve.add_argument("--host", default="127.0.0.1", help="localhost only, TZ §7")
+    serve.add_argument("--host", default="127.0.0.1", help="localhost only, SPEC §7")
     serve.add_argument("--reload", action="store_true", help="restart on code edits")
     return parser
 
@@ -463,7 +463,7 @@ def _prices(init: bool) -> int:
 
 
 def _stats(project: str | None, period: str) -> int:
-    """The spend summary for a period (TZ §4, task B7)."""
+    """The spend summary for a period (SPEC §4, task B7)."""
     since = _since(period) or datetime.fromtimestamp(0, UTC)
     with connect() as conn:
         usage = window_usage(conn, since, project=project)

@@ -23,4 +23,4 @@ at the next advisor edit:
 - **A tick costs about $0.08** on haiku with a digest of ~1.5k tokens: almost all of that is
   writing the system prompt into the cache (11k tokens). `--strict-mcp-config` and
   `--exclude-dynamic-system-prompt-sections` trim it but do not zero it out.
-  The "<= $0.02 per tick" threshold from TZ §10 is unreachable on today's CLI.
+  The "<= $0.02 per tick" threshold from SPEC §10 is unreachable on today's CLI.

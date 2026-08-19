@@ -1,7 +1,7 @@
 # Roadmap
 
 The milestones at a glance. Every requirement behind them is spelled out in the
-[specification](TZ.md); the acceptance criteria are its section 10.
+[specification](SPEC.md); the acceptance criteria are its section 10.
 
 ## Milestones
 

@@ -1,4 +1,4 @@
-"""HTTP and WebSocket on 127.0.0.1 (task A5, TZ §5).
+"""HTTP and WebSocket on 127.0.0.1 (task A5, SPEC §5).
 
 The server does not face outwards: it listens on localhost only. The frontend talks to
 the backend exclusively through these endpoints - it has no direct filesystem access,
@@ -528,7 +528,7 @@ def create_app(
 
     @app.post("/otlp/v1/{signal}")
     async def otlp_export(signal: str, request: Request) -> Response:
-        """The receiver of official Claude Code telemetry (milestone E, TZ §2).
+        """The receiver of official Claude Code telemetry (milestone E, SPEC §2).
 
         Claude Code sends OTLP/JSON payloads here when its environment has
         `OTEL_EXPORTER_OTLP_ENDPOINT` pointed at this address (`cburn otel` prints the

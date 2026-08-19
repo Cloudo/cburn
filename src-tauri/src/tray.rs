@@ -1,4 +1,4 @@
-//! The menu-bar tray: the spend always in sight (task F2, TZ §5).
+//! The menu-bar tray: the spend always in sight (task F2, SPEC §5).
 //!
 //! The data comes from the same `/api/overview` as the dashboard - the tray counts
 //! nothing itself. Polling runs every `POLL` seconds: more often is pointless, the figure
@@ -35,7 +35,7 @@ pub const DASHBOARD: &str = "http://127.0.0.1:8799";
 /// seconds is enough for the figure to look alive, and it is four times cheaper than the frontend tick.
 const POLL: Duration = Duration::from_secs(5);
 
-/// How long the silence from the "pause for 2 hours" item lasts (TZ §5).
+/// How long the silence from the "pause for 2 hours" item lasts (SPEC §5).
 const PAUSE: Duration = Duration::from_secs(2 * 60 * 60);
 
 /// How many sessions to show in the menu: the three hottest, beyond that the list

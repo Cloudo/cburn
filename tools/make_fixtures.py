@@ -1,4 +1,4 @@
-"""Slicing anonymised transcript fixtures out of the real history (TZ §11).
+"""Slicing anonymised transcript fixtures out of the real history (SPEC §11).
 
 Run: `.venv/bin/python tools/make_fixtures.py` - it walks ~/.claude/projects,
 takes one file per Claude Code version and puts a trimmed, anonymised slice into

@@ -77,7 +77,7 @@ def test_command_matches_installed_cli(conn: sqlite3.Connection) -> None:
 
 
 def test_advice_without_evidence_is_dropped(conn: sqlite3.Connection) -> None:
-    """A tip without support in numbers is general words, we do not store those (TZ §6)."""
+    """A tip without support in numbers is general words, we do not store those (SPEC §6)."""
     payload = envelope(
         [
             {

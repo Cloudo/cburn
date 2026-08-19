@@ -1,4 +1,4 @@
-"""Dashboard autostart via launchd (task C5, TZ §10).
+"""Dashboard autostart via launchd (task C5, SPEC §10).
 
 A user agent, not a system daemon: the dashboard reads `~/.claude` and writes to
 `~/.local/share`, so root is neither needed nor healthy. It is installed into

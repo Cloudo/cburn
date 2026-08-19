@@ -2,7 +2,7 @@
 
 A local "speedometer" service for Claude Code token spend: it watches every
 session on the machine, shows the burn rate in real time and once an hour
-suggests optimisations. The full specification is `TZ.md` - the source of truth for
+suggests optimisations. The full specification is `SPEC.md` - the source of truth for
 requirements, read it when a requirement is in question; this file holds the working
 rules on top of it. The decomposition into tasks and their status live in
 `.local/ROADMAP.md`; when closing a task, tick it there. That file is written in
@@ -36,7 +36,7 @@ All three checks must pass before a commit.
 ```
 src/cburn/
   paths.py          paths (transcripts, config, database) - the single place where they are set
-  config.py         ~/.config/cburn/config.toml, defaults per TZ §8
+  config.py         ~/.config/cburn/config.toml, defaults per SPEC §8
   cli.py            the `cburn` command
   db/schema.sql     the SQLite schema, applied idempotently in connect()
   collector/        watchdog + the incremental JSONL parser (M1)
@@ -128,4 +128,4 @@ and the invariants.
 | M4 | The OTLP receiver, refined subscription limits, the weekly analysis | done |
 | M5 | The Tauri wrapper and the menu-bar tray | done |
 
-The acceptance criteria for every stage are in TZ §10.
+The acceptance criteria for every stage are in SPEC §10.

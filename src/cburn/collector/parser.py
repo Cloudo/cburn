@@ -1,4 +1,4 @@
-"""Parsing one JSONL transcript line (TZ §2, task A1).
+"""Parsing one JSONL transcript line (SPEC §2, task A1).
 
 A pure function with no database or filesystem access: a line in, a `ParsedRecord` or
 `None` out. Not a single exception escapes - a broken line goes to the log and is
@@ -80,7 +80,7 @@ class Usage:
 
     @property
     def context_estimate(self) -> int:
-        """An estimate of the context window in use at the moment of the turn (TZ §4)."""
+        """An estimate of the context window in use at the moment of the turn (SPEC §4)."""
         return self.input_tokens + self.cache_read + self.cache_write
 
     def merge(self, other: Usage) -> Usage:
@@ -361,10 +361,10 @@ def _parse_tools(content: Any) -> tuple[ToolUse, ...]:
 
 
 def _tool_detail(tool: str, tool_input: Any) -> str | None:
-    """The call detail for the tool profile (TZ §4).
+    """The call detail for the tool profile (SPEC §4).
 
     Only for Bash and only the normalised command - privacy demands that neither
-    arguments nor paths settle in the database (TZ §7).
+    arguments nor paths settle in the database (SPEC §7).
     """
     if tool != "Bash" or not isinstance(tool_input, dict):
         return None
@@ -384,7 +384,7 @@ _PATH_WRAPPERS = {"cd", "pushd"}
 
 #: Commands whose second word is a meaningful subcommand. An allowlist, not a
 #: heuristic: otherwise `cat README` turns into "cat README", and a file name
-#: leaks into the database against TZ §7.
+#: leaks into the database against SPEC §7.
 _SUBCOMMAND_HOSTS = {
     "git",
     "npm",
@@ -432,7 +432,7 @@ def normalize_command(command: str | None) -> str | None:
 
     `git commit -m "..."` → `git commit`, `sed -n 1,50p f.py` → `sed`,
     `cd /x && npm run build` becomes `npm run`. Arguments and paths are dropped:
-    only the command name settles in the database (TZ §7).
+    only the command name settles in the database (SPEC §7).
 
     A heredoc is marked separately (`python3 <<`): a script driven through the same
     chunk ten times over is a noticeable spend, yet by command name it is

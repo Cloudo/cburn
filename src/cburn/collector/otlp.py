@@ -1,4 +1,4 @@
-"""Receiving official Claude Code telemetry over OTLP (milestone E, TZ §2).
+"""Receiving official Claude Code telemetry over OTLP (milestone E, SPEC §2).
 
 Claude Code can export metrics and events over OTLP; it is switched on by environment
 variables (`cburn otel` prints which ones). The specification was checked against
@@ -37,7 +37,7 @@ TS_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
 #: Claude Code name prefix: `claude_code.token.usage`, event `claude_code.api_request`.
 PREFIX = "claude_code."
 
-#: Attributes that are never stored in the database (TZ §7).
+#: Attributes that are never stored in the database (SPEC §7).
 #:
 #: The first group is identical for the machine: the email and account ids repeat in
 #: every row and speak about the person, not about the spend.

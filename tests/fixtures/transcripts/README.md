@@ -1,7 +1,7 @@
 # Transcript fixtures
 
 Trimmed and anonymised Claude Code JSONL transcripts of versions 2.1.220-231
-(TZ §11): the parser tests and the "parse the history without failures" smoke
+(SPEC §11): the parser tests and the "parse the history without failures" smoke
 test rest on them.
 
 They are generated from the real history on the development machine:

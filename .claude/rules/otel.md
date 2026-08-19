@@ -13,7 +13,7 @@ Claude Code 2.1.222 on 14 August 2026:
   neither `grpcio` nor `opentelemetry-proto` is needed among the dependencies, and the
   receiver lives right inside `cburn serve` without occupying a second port:
   `OTEL_EXPORTER_OTLP_ENDPOINT` points at `http://127.0.0.1:8799/otlp`, and Claude Code
-  appends `/v1/metrics` and `/v1/logs` itself. Port 4317 from TZ §3 is gRPC, and we do not
+  appends `/v1/metrics` and `/v1/logs` itself. Port 4317 from SPEC §3 is gRPC, and we do not
   tie ourselves to it.
 - **The environment variables are printed, not written.** Telemetry is switched on only by
   Claude Code's own environment, and `~/.claude` is read-only for us, so

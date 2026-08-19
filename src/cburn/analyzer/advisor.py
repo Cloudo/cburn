@@ -1,4 +1,4 @@
-"""The advisor: digest -> `claude -p` -> an array of tips (task D2, TZ §6).
+"""The advisor: digest -> `claude -p` -> an array of tips (task D2, SPEC §6).
 
 The CLI contract was checked against the installed Claude Code (2.1.231) rather than
 taken from memory - it changes between versions:
@@ -42,7 +42,7 @@ MAX_BUDGET_USD = 0.10
 SEVERITIES = ("info", "warn", "crit")
 
 #: The answer schema. `evidence` is mandatory: a tip without support from the digest
-#: numbers is just general words, and those we throw away (TZ §6). `act` is optional and
+#: numbers is just general words, and those we throw away (SPEC §6). `act` is optional and
 #: comes from a closed list (task D7): most tips have no action that could be carried out.
 RESPONSE_SCHEMA: dict[str, Any] = {
     "type": "object",

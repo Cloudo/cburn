@@ -1177,7 +1177,7 @@ def test_manual_run_is_labelled_manual(transcripts: Path, db_path: Path) -> None
     assert runs[0]["cost_usd"] == pytest.approx(0.07)
 
 
-# --- TZ §4 metrics (task B3) ---------------------------------------------------
+# --- SPEC §4 metrics (task B3) ---------------------------------------------------
 
 
 def test_tool_profile_and_bash_commands(transcripts: Path, db_path: Path) -> None:

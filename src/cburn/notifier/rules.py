@@ -1,4 +1,4 @@
-"""When it is worth writing to telegram and when to stay quiet (task D5, TZ §7).
+"""When it is worth writing to telegram and when to stay quiet (task D5, SPEC §7).
 
 The decisions live in pure functions: network and database stay outside, and the rules
 are covered by tests without a single request. There are three rules and all of them
@@ -21,7 +21,7 @@ from datetime import UTC, datetime, timedelta
 #: the length of one work stretch: there is nothing to remind about more often.
 COOLDOWN = timedelta(minutes=30)
 
-#: How long the global pause from the button lasts (TZ §5).
+#: How long the global pause from the button lasts (SPEC §5).
 PAUSE = timedelta(hours=2)
 
 #: Severity order: comparison follows this list, not the alphabet.

@@ -26,7 +26,7 @@ from .indexer import IngestStats, ingest_file
 
 log = logging.getLogger(__name__)
 
-#: The pause after the last event on a file, TZ §3 - "debounce ~200 ms".
+#: The pause after the last event on a file, SPEC §3 - "debounce ~200 ms".
 DEFAULT_DEBOUNCE = 0.2
 
 #: How often the worker thread wakes up to look at the queue.

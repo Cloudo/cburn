@@ -157,7 +157,7 @@ def test_personal_attributes_are_not_stored(conn: Any) -> None:
 
 def test_conversation_text_is_never_stored(conn: Any) -> None:
     """A human may switch OTEL_LOG_USER_PROMPTS on for their own debugging - the dashboard
-    must not become a conversation store because of that (TZ §7)."""
+    must not become a conversation store because of that (SPEC §7)."""
     otlp.ingest(
         conn,
         "logs",

@@ -1,4 +1,4 @@
-"""Advisor scheduler (task D3, TZ §6).
+"""Advisor scheduler (task D3, SPEC §6).
 
 A tick every `analyzer.interval_minutes`, and once a week a deep analysis on a bigger
 model. Every tick costs money, so the "call the model or not" decision lives in the pure

@@ -1,4 +1,4 @@
-"""Config ~/.config/cburn/config.toml (TZ §8).
+"""Config ~/.config/cburn/config.toml (SPEC §8).
 
 The file may be missing - then the defaults apply. User values are layered
 over the defaults section by section, unknown keys are kept.

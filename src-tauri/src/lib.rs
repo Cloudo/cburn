@@ -1,4 +1,4 @@
-//! The desktop wrapper of the dashboard (milestone F, TZ §11 M5).
+//! The desktop wrapper of the dashboard (milestone F, SPEC §11 M5).
 //!
 //! The window loads the very same frontend from `http://127.0.0.1:8799` that opens
 //! in a browser: the frontend does not change for this - from the very beginning it talks
@@ -6,7 +6,7 @@
 //! of that the page is taken from the server rather than from local files: relative paths
 //! like `api/overview` must land in our own server, not in `tauri://`.
 //!
-//! The menu-bar tray (TZ §5) is the second way to look at the instrument: the spend figure
+//! The menu-bar tray (SPEC §5) is the second way to look at the instrument: the spend figure
 //! is always in sight, and the menu answers the question "what is happening now" without
 //! requiring the window to be opened.
 //!

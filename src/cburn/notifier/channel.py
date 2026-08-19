@@ -1,4 +1,4 @@
-"""Where a message goes: the bridge, the Bot API or nowhere (task D5, TZ §7).
+"""Where a message goes: the bridge, the Bot API or nowhere (task D5, SPEC §7).
 
 The main channel is the neighbouring `cc-tg-bridge`: it already knows topics, buttons and
 whom to write to, and all we have to do is send text. The direct Bot API stays as a

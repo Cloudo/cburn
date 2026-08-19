@@ -1,4 +1,4 @@
-"""Telegram notifications: the bridge on localhost:8788 or the direct Bot API (TZ §7, M3).
+"""Telegram notifications: the bridge on localhost:8788 or the direct Bot API (SPEC §7, M3).
 
 Everything that ties the rules (`rules`) to the database and the channel (`channel`) lives
 here: what has already been sent, when the last alert for a session went out and whether a

@@ -1,7 +1,7 @@
 //! Bring the dashboard server up if it does not answer yet (task F3).
 //!
 //! The application is "one .app" a human puts into autostart instead of the
-//! launchd agent (TZ §11 M5). The Python part stays installed separately:
+//! launchd agent (SPEC §11 M5). The Python part stays installed separately:
 //! packing an interpreter inside the .app for a local tool is pointless,
 //! while finding an already installed command and running it is not.
 //!
