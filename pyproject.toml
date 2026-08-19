@@ -1,6 +1,6 @@
 [project]
 name = "cburn"
-version = "0.1.0"
+version = "0.1.1"
 description = "A Claude speedometer: a local dashboard of token spend across every Claude Code session"
 requires-python = ">=3.11"
 license = { text = "MIT" }

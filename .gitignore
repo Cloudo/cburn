@@ -44,3 +44,6 @@ src-tauri/gen/
 
 # the recordings themselves: the readme carries the encoded mp4, not the 36 MB source
 *.mov
+
+# the frontend packed into the wheel by the release workflow
+src/cburn/web_dist/

@@ -80,7 +80,17 @@ OTEL_CACHE_SECONDS = 5.0
 LivenessProbe = Callable[[], dict[str, datetime | None] | None]
 
 #: The built frontend (task A6). Until it exists, a stub is served.
-WEB_DIST = Path(__file__).resolve().parents[3] / "web" / "dist"
+#:
+#: An installed copy carries the frontend inside the package: a wheel holds only what lies
+#: under `src/cburn`, and `web/dist` beside the sources would be left behind at the build -
+#: the dashboard would answer with a list of endpoints instead of a page. A checkout has no
+#: `web_dist` and keeps reading `web/dist`, which is where `make web` puts it.
+_PACKAGED_WEB = Path(__file__).resolve().parents[1] / "web_dist"
+WEB_DIST = (
+    _PACKAGED_WEB
+    if (_PACKAGED_WEB / "index.html").exists()
+    else Path(__file__).resolve().parents[3] / "web" / "dist"
+)
 
 
 class Hub:

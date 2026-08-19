@@ -65,7 +65,9 @@ jobs:
           NAME="cburn-${{ steps.version.outputs.version }}"
           mkdir -p staging
           git archive --format=tar --prefix="$NAME/" HEAD | tar -x -C staging
-          cp -R web/dist "staging/$NAME/web/dist"
+          # Inside the package, not beside it: a wheel takes only what lies under
+          # src/cburn, and the frontend has to travel with it.
+          cp -R web/dist "staging/$NAME/src/cburn/web_dist"
           tar -czf "$NAME.tar.gz" -C staging "$NAME"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "sha=$(shasum -a 256 "$NAME.tar.gz" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
