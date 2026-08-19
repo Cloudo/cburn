@@ -102,7 +102,10 @@ export default function App() {
     <main>
       <header className="masthead">
         <div className="brand">
-          <span className="brand-name">cburn</span>
+          <span className="brand-name">
+            <img className="brand-logo" src="logo.png" alt="" />
+            cburn
+          </span>
           <nav className="screens">
             {SCREENS.map((key) => (
               <a
