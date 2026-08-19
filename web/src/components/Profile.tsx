@@ -231,7 +231,7 @@ export function LimitWindow({ limits, now }: { limits: Limits; now: string }) {
         <span className="limits-note">{t("limits.approx")}</span>
       </div>
       <div className="limits-track">
-        <span className="limits-fill" style={{ width: `${passed * 100}%` }} />
+        <span className="limits-fill" style={{ transform: `scaleX(${passed})` }} />
       </div>
       <dl className="limits-facts">
         <div>
@@ -300,7 +300,7 @@ export function PlanLimits({ plan }: { plan: Plan }) {
             <div className="plan-track">
               <span
                 className={`plan-fill plan-fill-${limit.severity ?? "normal"}`}
-                style={{ width: `${Math.min(limit.percent, 100)}%` }}
+                style={{ transform: `scaleX(${Math.min(limit.percent, 100) / 100})` }}
               />
             </div>
             {limit.resets_at && (

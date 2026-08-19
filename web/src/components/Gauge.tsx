@@ -185,7 +185,7 @@ export function OutputMeter({ value, peak }: { value: number; peak: number }) {
         </span>
       </div>
       <div className="meter-track">
-        <div className="meter-fill" style={{ width: `${share * 100}%` }} />
+        <div className="meter-fill" style={{ transform: `scaleX(${share})` }} />
       </div>
       <div className="meter-scale">
         <span>0</span>
