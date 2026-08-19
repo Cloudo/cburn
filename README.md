@@ -10,9 +10,17 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/dashboard-dark.png" />
-    <img src="docs/dashboard-light.png" alt="the dashboard" width="920" />
+    <source media="(prefers-color-scheme: dark)" srcset="media/dashboard-dark.png" />
+    <img src="media/dashboard-light.png" alt="the dashboard" width="920" />
   </picture>
+</p>
+
+<p align="center">
+  <video src="media/demo.mp4" width="920" controls muted playsinline></video>
+</p>
+<p align="center">
+  <sub><a href="media/demo.mp4">A tour of the dashboard</a> - a minute and a bit over the
+  demo dataset: the gauge, the palettes, the sessions and the advisor.</sub>
 </p>
 
 cburn watches every Claude Code session on the machine and turns the transcripts

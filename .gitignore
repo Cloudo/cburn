@@ -41,3 +41,6 @@ web/dist/
 # The desktop wrapper build (milestone F): gigabytes of object files.
 src-tauri/target/
 src-tauri/gen/
+
+# the recordings themselves: the readme carries the encoded mp4, not the 36 MB source
+*.mov
