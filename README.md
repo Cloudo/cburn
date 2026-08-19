@@ -32,15 +32,6 @@ Everything happens locally: the transcripts are read straight from
 - **Menu-bar tray** - a Tauri wrapper puts the figures you pick into the macOS menu bar.
 - **OTLP receiver** - takes Claude Code telemetry for what the transcripts do not carry.
 
-<p align="center">
-  <img src="docs/session.png" alt="a session screen" width="49%" />
-  <img src="docs/advice.png" alt="the advice screen" width="49%" />
-</p>
-<p align="center">
-  <sub>The session and advice screens show a synthetic demo dataset - <code>make demo</code>
-  generates it and serves a second dashboard without touching the real database.</sub>
-</p>
-
 ## Quick start
 
 Python 3.11+ and Node are required.
