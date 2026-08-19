@@ -55,6 +55,28 @@ make serve     # the dashboard on http://127.0.0.1:8799
 The interface speaks English and Russian and ships eighteen colour themes
 borrowed from VS Code. `cburn install` adds autostart at login (launchd).
 
+## Telemetry (optional)
+
+Claude Code can export OTLP metrics and events, and cburn ships a receiver for
+them. Telemetry fills the gaps the history files cannot: service spend that
+never reaches a transcript (session titles cost a separate haiku call), how
+often work stopped for a permission prompt, exact request prices and durations,
+time spent inside tools and hooks.
+
+It is off by default because only Claude Code's own environment can switch it
+on - cburn never writes into another program's config. Print the ready-made
+lines, paste them into your shell profile or `settings.json` and restart
+Claude Code:
+
+```bash
+cburn otel --env
+```
+
+Everything stays on the machine: the exporter points at the local receiver
+inside `cburn serve`, and prompt or response texts are dropped at parsing -
+only counters and durations are stored. Without telemetry the dashboard simply
+counts the old way, from the transcripts alone.
+
 ## Privacy
 
 Only tool names, normalised commands, paths and numbers reach the advisor; what
