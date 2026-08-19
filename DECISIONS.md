@@ -12,9 +12,9 @@ either sat whole or dropped out at once, teleporting the needle instead of
 letting it fall. Now the server ships a `live` burn entry - every turn is
 weighted by `exp(-age / 30 s)`, a ~21-second half-life - so active work keeps
 pushing the value up and silence lets it glide down, load-average style. The
-gauge picker shrank to live / 5 s / 10 s with live as the default; the minute
-windows left the picker but are still computed, because the notifier threshold
-and the tray read `burn.1m`.
+gauge picker shrank to live / 5 s / 10 s / 1 min with live as the default; the
+5-minute and hour windows left the picker but are still computed, because the
+notifier threshold and the tray read the minute entry.
 
 Rejected: an even shorter rectangular window (twitchy, not car-like); smoothing
 the needle in the frontend only (the caption would lie about what the number

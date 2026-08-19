@@ -39,7 +39,7 @@ import {
 
 // "live" is not a window: the server decays turns exponentially, so the needle
 // climbs while Claude works and glides down in silence instead of teleporting.
-const WINDOWS = ["live", "5s", "10s"] as const;
+const WINDOWS = ["live", "5s", "10s", "1m"] as const;
 
 // The slices take the accents from the theme rather than from a copy of their values: the
 // palette is switched by the picker, and a duplicated hex would stay at the old theme.
