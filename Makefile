@@ -92,6 +92,19 @@ desktop: ## the desktop window with hot reload: vite for the page, cargo for the
 	  echo "Quit it in the tray and run this again." >&2; \
 	  exit 1; \
 	fi
+	@pids=$$(lsof -nP -tiTCP:5173 -sTCP:LISTEN); if [ -n "$$pids" ]; then \
+	  echo "Port 5173 is taken (vite has strictPort, tauri waits for exactly this address):" >&2; \
+	  ps -p $$pids -o pid,etime,command >&2; \
+	  printf "Kill it and continue? [y/N] " >&2; \
+	  read -r ans; \
+	  case "$$ans" in \
+	    [yY]) kill $$pids; sleep 1; \
+	      if lsof -nP -tiTCP:5173 -sTCP:LISTEN >/dev/null; then \
+	        echo "The port is still busy - deal with it by hand." >&2; exit 1; \
+	      fi;; \
+	    *) exit 1;; \
+	  esac; \
+	fi
 	PATH="$(CARGO):$$PATH" npm run desktop
 
 desktop-build: ## build the .app into src-tauri/target/release/bundle/macos
