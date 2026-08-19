@@ -150,7 +150,9 @@ dismissed, do not repeat").
 **The "Settings" screen.** The config from §8 as a form.
 
 **The menu bar (the Tauri tray, the final stage M5).** An icon with the current combined burn
-rate (thousand tokens/min or $/h - switchable). A red dot on any active alert. A drop-down
+rate (thousand tokens/min or $/h - switchable). No alert marks in the menu bar: the title
+is drawn monochrome, a "red" dot cannot be red there, and alerts live in telegram and on
+the dashboard. A drop-down
 menu: the three hottest sessions with mini-speedometer needles, the last tip, the
 "Open the dashboard" and "Pause notifications for 2 hours" items.
 

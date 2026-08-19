@@ -4,6 +4,15 @@ Why things are the way they are: the option taken, the options rejected and the
 reason. Newest first. Things visible from the code and the git history do not
 belong here; neither do the invariants, which live in `CLAUDE.md`.
 
+## 2026-08-20 - no alert mark in the menu bar
+
+SPEC asked for a red dot on an active alert, but macOS draws the tray title
+monochrome: the dot rendered white, read as decoration rather than alarm, and
+pushed the glyph out of line with the neighbouring icons. Dropped, together
+with the `/api/config` threshold poll that fed it; alerts live in telegram and
+on the dashboard, and "pause for 2 hours" still holds the telegram messages.
+SPEC §5 is reworded accordingly.
+
 ## 2026-08-20 - the menu bar gets its own template glyph, not the app icon
 
 The tray icon is a dedicated monochrome png (`src-tauri/icons/tray.png`, drawn

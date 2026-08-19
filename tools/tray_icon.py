@@ -14,7 +14,7 @@ import zlib
 SIZE = 72
 SS = 4  # subsamples per axis
 
-CX, CY = 0.5, 0.55
+CX, CY = 0.5, 0.5
 R_OUT, R_IN = 0.40, 0.285
 GAP_HALF = math.radians(38)  # opening at the bottom of the dial
 NEEDLE_ANGLE = math.radians(-50)

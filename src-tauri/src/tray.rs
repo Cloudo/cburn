@@ -7,10 +7,8 @@
 //! What the icon title shows is chosen in the "menu bar shows" submenu: the burn rate,
 //! the cost per hour, the spend of the day and the percentages of the subscription
 //! windows - any combination of them, and the choice survives a restart in
-//! `~/.local/share/cburn/tray.json`. A red dot before the
-//! figure means the spend is above the `thresholds.burn_rate_warn_per_min`
-//! threshold from the config; it can be silenced for two hours by the "pause for 2 hours"
-//! item - that is silence in the tray only, telegram notifications live apart (D5).
+//! `~/.local/share/cburn/tray.json`. The "pause for 2 hours" item asks the server
+//! to hold the telegram notifications (D5).
 //!
 //! The menu speaks the language chosen on the dashboard. The choice stays the browser's
 //! (`localStorage`, like the layout), and the tray cannot reach in there: the server
@@ -72,14 +70,14 @@ const DEFAULT_METRICS: u32 = 1;
 /// the language of everything else outside the interface dictionary.
 const DEFAULT_LANG: Lang = Lang::En;
 
-/// What the icon title shows, in which language the menu speaks and until when the alert
-/// stays quiet.
+/// What the icon title shows, in which language the menu speaks and until when the pause
+/// holds.
 struct State {
     /// A bit mask over `METRICS`: which figures go into the icon title.
     metrics: AtomicU32,
     /// The language of the menu: 0 - Russian, 1 - English (the order of `dict.json`).
     lang: AtomicU8,
-    /// Unix time until which the red dot is not shown.
+    /// Unix time until which the pause is on.
     quiet_until: AtomicI64,
 }
 
@@ -349,8 +347,7 @@ fn on_menu<R: Runtime>(
                 },
                 Ordering::Relaxed,
             );
-            // The same pause goes to the server too: it silences not only the red dot
-            // in the menu bar but also the telegram messages (D5).
+            // The pause is carried to the server, which holds the telegram messages (D5).
             let _ = ureq::post(&format!(
                 "{}/api/notify/pause?on={}",
                 dashboard(),
@@ -435,22 +432,6 @@ pub fn show_dashboard<R: Runtime>(app: &AppHandle<R>, hash: &str) {
     }
 }
 
-/// The alert threshold from the dashboard config: keeping a copy of it in the tray is not
-/// allowed - a human edits the thresholds in "Settings", and the tray must obey that same number.
-fn warn_threshold() -> f64 {
-    ureq::get(&format!("{}/api/config", dashboard()))
-        .timeout(Duration::from_secs(3))
-        .call()
-        .ok()
-        .and_then(|response| response.into_json::<serde_json::Value>().ok())
-        .and_then(|config| {
-            config
-                .pointer("/config/thresholds/burn_rate_warn_per_min")
-                .and_then(|value| value.as_f64())
-        })
-        .unwrap_or(0.0)
-}
-
 fn fetch_overview() -> Result<serde_json::Value, String> {
     let response = ureq::get(&format!("{}/api/overview", dashboard()))
         .timeout(Duration::from_secs(3))
@@ -478,33 +459,16 @@ fn apply<R: Runtime>(
         .get("cost_per_hour")
         .and_then(|v| v.as_f64())
         .unwrap_or(0.0);
-    let tokens = burn
-        .get("tokens_per_min")
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.0);
-    // The threshold is asked for once per tick: two calls in a row would cost
-    // two extra requests to our own server every five seconds.
-    let threshold = warn_threshold();
-    let alert = threshold > 0.0 && tokens >= threshold;
     let lang = state.lang();
 
-    let value = METRICS
+    let title = METRICS
         .iter()
         .enumerate()
         .filter(|(index, _)| state.shows(*index))
         .map(|(_, (key, _))| metric_text(lang, key, overview, output, cost_hour))
         .collect::<Vec<String>>()
         .join(" · ");
-    // The red dot is the only alert in the menu bar: the icon cannot be given
-    // a colour, and a dot before the figure is noticeable without hindering reading.
-    let title = if value.is_empty() {
-        // Everything unticked means the bare icon: the menu is worth something on its own.
-        String::new()
-    } else if alert && !state.is_quiet() {
-        format!("● {value}")
-    } else {
-        value
-    };
+    // Everything unticked means the bare icon: the menu is worth something on its own.
     let _ = tray.set_title(if title.is_empty() { None } else { Some(&title) });
 
     let _ = items.burn.set_text(tf(
