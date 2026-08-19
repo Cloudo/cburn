@@ -12,7 +12,6 @@
   <a href="LICENSE"><img alt="license MIT" src="https://img.shields.io/github/license/Cloudo/cburn?color=4c8eda" /></a>
   <img alt="macOS 13+" src="https://img.shields.io/badge/macOS-13%2B-1a1a1a?logo=apple&logoColor=white" />
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776ab?logo=python&logoColor=white" />
-  <a href="README.ru.md"><img alt="README in Russian" src="https://img.shields.io/badge/README-%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-c85450" /></a>
 </p>
 
 <p align="center">
