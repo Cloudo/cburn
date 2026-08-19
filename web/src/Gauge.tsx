@@ -16,6 +16,12 @@ const DECADES = [3, 4, 5, 6, 7]; // 1k ... 10M tokens per minute
 const MIN = 10 ** DECADES[0];
 const MAX = 10 ** DECADES[DECADES.length - 1];
 
+// The decades carry the numbers, and the halves between them are strokes only: a whole
+// decade between the marks leaves too much to the eye, while five more numbers around the
+// arc would crowd it. A number is written at 5 M alone - the stretch the needle lives on.
+const HALVES = DECADES.slice(0, -1).map((decade) => 5 * 10 ** decade);
+const LABELLED_HALF = 5 * 10 ** 6;
+
 const CX = 200;
 const CY = 190;
 const R_SCALE = 148;
@@ -100,6 +106,25 @@ export function Gauge({ value, slices, caption }: Props) {
               <text x={label.x} y={label.y} dominantBaseline="middle" textAnchor="middle">
                 {compact(10 ** decade)}
               </text>
+            </g>
+          );
+        })}
+
+        {HALVES.map((value) => {
+          const fraction = scalePosition(value);
+          const outer = polar(R_SCALE, fraction);
+          const inner = polar(R_SCALE - 11, fraction);
+          // 5 M stands near the end of the arc, so its number is pushed as deep as the
+          // number of the end itself - otherwise it sticks out of the ring of the others.
+          const label = value === LABELLED_HALF ? polar(R_SCALE - 44, fraction) : null;
+          return (
+            <g key={value} className="gauge-tick gauge-tick-half">
+              <line x1={outer.x} y1={outer.y} x2={inner.x} y2={inner.y} />
+              {label && (
+                <text x={label.x} y={label.y} dominantBaseline="middle" textAnchor="middle">
+                  {compact(value)}
+                </text>
+              )}
             </g>
           );
         })}
