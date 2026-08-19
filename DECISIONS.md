@@ -38,6 +38,20 @@ single widget would freeze all ten); inferring "touched" by comparing the saved
 layout against the default (react-grid-layout saves a layout on the very first
 mount, so a saved layout proves nothing about hands).
 
+## 2026-08-19 - the magnitude suffix speaks the language of the interface
+
+Large numbers were shortened US-style everywhere - K, M, B - and that was fine while
+the numbers stood alone. As soon as a unit joined the reading of the instrument, the
+word came out of two alphabets at once: "1,71 M/мин". Now `compact` takes the suffix
+from the dictionary like every other word: "тыс", "млн", "млрд" in Russian, K, M and
+B in English, so a number and the unit beside it are written in one script.
+
+Rejected: a Latin unit to match the Latin suffix ("1.71 M/min" in a Russian
+interface, with "ток/мин" already standing next to it in the same widget); Russian
+suffixes on the instrument alone (the breakdown lies a centimetre away and would keep
+saying "1,69 M"). The columns grew by a couple of characters - checked on the
+dashboard, in the session list and on the dial of the instrument, nothing overflows.
+
 ## 2026-08-19 - the instrument scale is a power, not a logarithm
 
 Four orders of magnitude have to fit on one semicircle, so the scale has to be

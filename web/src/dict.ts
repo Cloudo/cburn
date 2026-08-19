@@ -476,6 +476,9 @@ const DICT: Record<string, [string, string]> = {
 
   // --- Форматирование чисел и времени (format.ts) ---
   "format.decimal": [",", "."],
+  "format.thousand": ["тыс", "K"],
+  "format.million": ["млн", "M"],
+  "format.billion": ["млрд", "B"],
   "format.recomputed": ["пересчитано", "recomputed"],
   "format.noData": ["данных за период нет", "no data for the period"],
   "format.lastData": ["последние данные", "last data"],

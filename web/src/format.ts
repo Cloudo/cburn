@@ -25,12 +25,14 @@ export function grouped(value: number): string {
   return Math.round(value).toLocaleString(locale).replace(/\s/g, SPACE);
 }
 
-/** Large numbers are shortened US-style: K, M, B through a thin space. */
+/** Large numbers are shortened through a thin space, and the suffix speaks the language of
+ *  the interface: K, M, B in English, "тыс", "млн", "млрд" in Russian. A Latin letter next
+ *  to a Cyrillic unit ("1,71 M/мин") reads as two alphabets in one word. */
 export function compact(value: number): string {
   const abs = Math.abs(value);
-  if (abs >= 1_000_000_000) return `${trim(value / 1_000_000_000)}${SPACE}B`;
-  if (abs >= 1_000_000) return `${trim(value / 1_000_000)}${SPACE}M`;
-  if (abs >= 1_000) return `${trim(value / 1_000)}${SPACE}K`;
+  if (abs >= 1_000_000_000) return `${trim(value / 1_000_000_000)}${SPACE}${word("format.billion")}`;
+  if (abs >= 1_000_000) return `${trim(value / 1_000_000)}${SPACE}${word("format.million")}`;
+  if (abs >= 1_000) return `${trim(value / 1_000)}${SPACE}${word("format.thousand")}`;
   return grouped(value);
 }
 
