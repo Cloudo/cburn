@@ -525,7 +525,7 @@ def _model_label(model: str) -> str:
 
 
 def _tool_label(tool: str) -> str:
-    """`mcp__plugin_playwright_playwright__browser_click` → `playwright: browser_click`."""
+    """`mcp__plugin_playwright_playwright__browser_click` => `playwright: browser_click`."""
     if not tool.startswith("mcp__"):
         return tool
     parts = tool.removeprefix("mcp__").split("__")

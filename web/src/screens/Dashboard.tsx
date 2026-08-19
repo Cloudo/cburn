@@ -238,7 +238,7 @@ function WidgetHead({ widget, onHide }: { widget: WidgetContent; onHide: () => v
             className="widget-at widget-at-none"
             title={freshnessLabel(null, widget.checkedAt, now)}
           >
-            —
+            -
           </span>
         ) : (
           <time

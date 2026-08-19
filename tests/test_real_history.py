@@ -63,7 +63,7 @@ def test_parser_survives_every_line(history: Path) -> None:
                     continue
                 kinds[record.kind] += 1
                 if record.kind is RecordKind.UNKNOWN:
-                    unknown[(record.raw_type, record.version or "—")] += 1
+                    unknown[(record.raw_type, record.version or "-")] += 1
 
     print(f"\nfiles {files}, lines {lines}")
     for kind, count in kinds.most_common():

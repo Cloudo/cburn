@@ -146,8 +146,8 @@ const DICT: Record<string, [string, string]> = {
   ],
   "otel.hidden": ["расхода мимо истории", "spending off the record"],
   "otel.hidden.note": [
-    "{tokens} токенов служебных запросов — {percent}% от всего расхода за сегодня",
-    "{tokens} tokens of service requests — {percent}% of everything spent today",
+    "{tokens} токенов служебных запросов - {percent}% от всего расхода за сегодня",
+    "{tokens} tokens of service requests - {percent}% of everything spent today",
   ],
   "otel.manual": ["подтверждений руками", "manual confirmations"],
   "otel.manual.note": [
@@ -157,8 +157,8 @@ const DICT: Record<string, [string, string]> = {
   "settings.otel": ["телеметрия", "telemetry"],
   "settings.otelKeepDays": ["хранить дней", "keep days"],
   "settings.otelHint": [
-    "Приём данных от Claude Code. Сама телеметрия включается его переменными окружения — их печатает команда cburn otel --env.",
-    "Receiving data from Claude Code. Telemetry itself is switched on by its environment variables — run cburn otel --env to print them.",
+    "Приём данных от Claude Code. Сама телеметрия включается его переменными окружения - их печатает команда cburn otel --env.",
+    "Receiving data from Claude Code. Telemetry itself is switched on by its environment variables - run cburn otel --env to print them.",
   ],
   "otel.work.time": ["работа {time} без пауз", "worked {time}, idle excluded"],
   "otel.work.why": [
@@ -173,8 +173,8 @@ const DICT: Record<string, [string, string]> = {
   ],
   "otel.hooks": ["хуки отняли {time}: {events}", "hooks took {time}: {events}"],
   "otel.hooks.why": [
-    "Хук выполняется между ходами, и в файлах истории на его месте остаётся только пауза — ожидание хука там не отличить от раздумий модели.",
-    "A hook runs between turns and the history files show only a pause — waiting on a hook is indistinguishable from the model thinking.",
+    "Хук выполняется между ходами, и в файлах истории на его месте остаётся только пауза - ожидание хука там не отличить от раздумий модели.",
+    "A hook runs between turns and the history files show only a pause - waiting on a hook is indistinguishable from the model thinking.",
   ],
   "otel.internal": ["сбоев клиента: {count} ({errors})", "client failures: {count} ({errors})"],
   "otel.internal.why": [
@@ -186,14 +186,14 @@ const DICT: Record<string, [string, string]> = {
     "failed requests: {count} ({statuses})",
   ],
   "otel.errors.why": [
-    "В файлах истории неудавшихся запросов нет — там виден только тот ответ, который в итоге пришёл, поэтому повторы после 429 и 529 незаметны.",
-    "The history files omit failed requests — only the reply that eventually arrived is there, so retries after 429 and 529 stay invisible.",
+    "В файлах истории неудавшихся запросов нет - там виден только тот ответ, который в итоге пришёл, поэтому повторы после 429 и 529 незаметны.",
+    "The history files omit failed requests - only the reply that eventually arrived is there, so retries after 429 and 529 stay invisible.",
   ],
 
   "dash.widgets": ["виджеты", "widgets"],
   "dash.tune": ["настройка дашборда", "dashboard settings"],
   "dash.tuneHint": [
-    "Перетаскивать за заголовок, размер — за правый нижний угол. Расположение сохраняется в браузере.",
+    "Перетаскивать за заголовок, размер - за правый нижний угол. Расположение сохраняется в браузере.",
     "Drag by the header, resize from the bottom-right corner. The layout is kept in your browser.",
   ],
   "dash.reset": ["вернуть как было", "reset layout"],
@@ -202,8 +202,8 @@ const DICT: Record<string, [string, string]> = {
     "обновить (прошлая попытка не удалась)",
     "refresh (last attempt failed)",
   ],
-  "dash.refreshWidget": ["обновить виджет «{title}»", "refresh the “{title}” widget"],
-  "dash.hideWidget": ["скрыть виджет «{title}»", "hide the “{title}” widget"],
+  "dash.refreshWidget": ['обновить виджет "{title}"', 'refresh the "{title}" widget'],
+  "dash.hideWidget": ['скрыть виджет "{title}"', 'hide the "{title}" widget'],
 
   "gauge.rate": ["ток/мин", "tok/min"],
   "meter.label": ["выход модели", "model output"],
@@ -228,8 +228,8 @@ const DICT: Record<string, [string, string]> = {
   ],
 
   "today.advisor": [
-    "советчик обошёлся в {cost} за {ticks} разбор(а/ов) — {share}% дневного расхода",
-    "the advisor cost {cost} over {ticks} run(s) — {share}% of today's spending",
+    "советчик обошёлся в {cost} за {ticks} разбор(а/ов) - {share}% дневного расхода",
+    "the advisor cost {cost} over {ticks} run(s) - {share}% of today's spending",
   ],
   "leaders.empty": ["сегодня ходов ещё не было", "no turns today yet"],
 
@@ -244,7 +244,7 @@ const DICT: Record<string, [string, string]> = {
   "live.empty": ["ни одной сессии за последний час", "no sessions in the last hour"],
   "live.tabs": ["статус сессий", "session status"],
   "live.emptyStatus": ["в этом состоянии сессий нет", "no sessions in this state"],
-  "live.more": ["и ещё {count} — показаны самые свежие", "{count} more — showing the freshest"],
+  "live.more": ["и ещё {count} - показаны самые свежие", "{count} more - showing the freshest"],
 
   "card.close": ["закрыть сессию", "close session"],
   "card.closeQuestion": [
@@ -280,8 +280,8 @@ const DICT: Record<string, [string, string]> = {
   ],
 
   "limits.empty": [
-    "окно ещё не началось — ходов за последние часы нет",
-    "the window hasn’t started — no turns in the last hours",
+    "окно ещё не началось - ходов за последние часы нет",
+    "the window hasn’t started - no turns in the last hours",
   ],
   "limits.window": ["окно {hours} ч · сброс в {time}", "{hours}h window · resets at {time}"],
   "limits.approx": ["приближение", "estimate"],
@@ -348,11 +348,11 @@ const DICT: Record<string, [string, string]> = {
   "settings.price.cache_write_5m": ["кэш 5m", "cache 5m"],
   "settings.price.cache_write_1h": ["кэш 1h", "cache 1h"],
   "settings.price.cache_read": ["чтение", "read"],
-  "settings.noPrices": ["цен нет — положите заготовку командой", "no prices — create a stub with"],
+  "settings.noPrices": ["цен нет - положите заготовку командой", "no prices - create a stub with"],
   "advice.title": ["советы", "advice"],
   "advice.empty": [
-    "разборов ещё не было — советчик тикает раз в час, когда включён",
-    "no runs yet — the analyzer ticks hourly while enabled",
+    "разборов ещё не было - советчик тикает раз в час, когда включён",
+    "no runs yet - the analyzer ticks hourly while enabled",
   ],
   "advice.noneInRun": [
     "в этом разборе советов не нашлось",
@@ -450,7 +450,7 @@ const DICT: Record<string, [string, string]> = {
   "advice.reject": ["отклонить", "reject"],
   "advice.back": ["вернуть", "undo"],
   "advice.rejectedNote": [
-    "не придёт снова: уедет в следующий такт пометкой «не повторять»",
+    'не придёт снова: уедет в следующий такт пометкой "не повторять"',
     "won't come back: the next tick is told not to repeat it",
   ],
 
@@ -541,7 +541,7 @@ const DICT: Record<string, [string, string]> = {
   // --- Граница ошибок: рисуется выше провайдера языка ---
   "boundary.title": ["дашборд не отрисовался: {message}", "the dashboard failed to render: {message}"],
   "boundary.hint": [
-    "если сервер запущен давно, а фронт пересобран — перезапустите cburn serve",
+    "если сервер запущен давно, а фронт пересобран - перезапустите cburn serve",
     "if the server has been running for a while and the frontend was rebuilt, restart cburn serve",
   ],
 

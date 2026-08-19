@@ -284,5 +284,5 @@ function bucketClock(at: string, seconds: number): string {
   const to = new Date(from.getTime() + seconds * 1000);
   const clock = (date: Date) =>
     date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  return `${clock(from)} — ${clock(to)}`;
+  return `${clock(from)} - ${clock(to)}`;
 }

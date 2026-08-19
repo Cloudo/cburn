@@ -167,7 +167,7 @@ export function Telemetry({ otel }: { otel?: Otel }) {
           <li title={t("otel.modes.why")}>
             {t("otel.modes", {
               modes: (permissions.mode_switches ?? [])
-                .map((row) => `${row.mode ?? "—"} ×${row.switches}`)
+                .map((row) => `${row.mode ?? "-"} ×${row.switches}`)
                 .join(", "),
             })}
           </li>

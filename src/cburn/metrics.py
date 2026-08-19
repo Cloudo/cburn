@@ -84,7 +84,7 @@ def session_summary(conn: sqlite3.Connection, session_id: str) -> SessionSummary
 def session_models(conn: sqlite3.Connection, session_id: str) -> list[tuple[str, int, int]]:
     """Distribution of turns and output tokens across models."""
     return [
-        (row["model"] or "—", row["turns"], row["output_tokens"])
+        (row["model"] or "-", row["turns"], row["output_tokens"])
         for row in conn.execute(
             """
             SELECT model, COUNT(*) AS turns, SUM(output_tokens) AS output_tokens
@@ -1151,7 +1151,7 @@ def otel_permissions(
             rejected += row["decisions"]
         if row["source"] in OTEL_MANUAL_SOURCES:
             manual_total += row["decisions"]
-            tool = row["tool"] or "—"
+            tool = row["tool"] or "-"
             manual[tool] = manual.get(tool, 0) + row["decisions"]
     # Mode switches are the same subject from the other side: if a human goes into
     # acceptEdits over and over, the permission rules are in their way.
@@ -1187,7 +1187,7 @@ def otel_errors(conn: sqlite3.Connection, since: datetime) -> dict:
     rows = [
         dict(row)
         for row in conn.execute(
-            "SELECT COALESCE(json_extract(attrs, '$.status_code'), '—') AS status,"
+            "SELECT COALESCE(json_extract(attrs, '$.status_code'), '-') AS status,"
             "       COUNT(*) AS errors"
             "  FROM otel_events WHERE name IN ('api_error', 'api_refusal') AND ts >= ?"
             " GROUP BY status ORDER BY errors DESC",
@@ -1199,7 +1199,7 @@ def otel_errors(conn: sqlite3.Connection, since: datetime) -> dict:
     internal = [
         dict(row)
         for row in conn.execute(
-            "SELECT COALESCE(json_extract(attrs, '$.error_name'), '—') AS error,"
+            "SELECT COALESCE(json_extract(attrs, '$.error_name'), '-') AS error,"
             "       COUNT(*) AS count"
             "  FROM otel_events WHERE name = 'internal_error' AND ts >= ?"
             " GROUP BY error ORDER BY count DESC",
@@ -1241,7 +1241,7 @@ def otel_mcp(
             # A key with a dot inside the name: without quotes the path would read as
             # a nested object `plugin` with a field `name`.
             f"SELECT COALESCE(json_extract(attrs, '$.server_name'),"
-            f"                json_extract(attrs, '$.\"plugin.name\"'), '—') AS server,"
+            f"                json_extract(attrs, '$.\"plugin.name\"'), '-') AS server,"
             f"       json_extract(attrs, '$.status')                      AS status,"
             f"       COUNT(*)                                             AS events,"
             f"       COUNT(DISTINCT session_id)                           AS sessions,"
@@ -1354,7 +1354,7 @@ def otel_hooks(
     rows = [
         dict(row)
         for row in conn.execute(
-            f"SELECT COALESCE(json_extract(attrs, '$.hook_event'), '—') AS event,"
+            f"SELECT COALESCE(json_extract(attrs, '$.hook_event'), '-') AS event,"
             f"       COUNT(*) AS runs,"
             f"       SUM(CAST(json_extract(attrs, '$.total_duration_ms') AS REAL)) / 1000.0"
             f"         AS seconds,"
@@ -1373,8 +1373,8 @@ def otel_hooks(
     registered = [
         dict(row)
         for row in conn.execute(
-            f"SELECT DISTINCT COALESCE(json_extract(attrs, '$.hook_event'), '—') AS event,"
-            f"       COALESCE(json_extract(attrs, '$.hook_type'), '—')          AS type"
+            f"SELECT DISTINCT COALESCE(json_extract(attrs, '$.hook_event'), '-') AS event,"
+            f"       COALESCE(json_extract(attrs, '$.hook_type'), '-')          AS type"
             f"  FROM otel_events WHERE name = 'hook_registered' AND {clause}"  # noqa: S608
             f" ORDER BY event",
             params,
@@ -1411,7 +1411,7 @@ def otel_plugins(
     return [
         dict(row)
         for row in conn.execute(
-            f"SELECT COALESCE(json_extract(attrs, '$.\"plugin.name\"'), '—') AS plugin,"
+            f"SELECT COALESCE(json_extract(attrs, '$.\"plugin.name\"'), '-') AS plugin,"
             # The sign may be missing entirely: without COALESCE MAX(NULL) gives NULL,
             # and "no hooks" would become indistinguishable from "unknown".
             f"       COALESCE(MAX(json_extract(attrs, '$.has_mcp') IN (1, 'true')), 0)"
@@ -1441,7 +1441,7 @@ def otel_sessions(conn: sqlite3.Connection, since: datetime) -> dict:
     starts = [
         dict(row)
         for row in conn.execute(
-            "SELECT COALESCE(json_extract(attrs, '$.start_type'), '—') AS start_type,"
+            "SELECT COALESCE(json_extract(attrs, '$.start_type'), '-') AS start_type,"
             "       COALESCE(SUM(value), 0) AS sessions"
             "  FROM otel_metrics WHERE name = 'claude_code.session.count' AND ts >= ?"
             " GROUP BY start_type ORDER BY sessions DESC",
@@ -1716,7 +1716,7 @@ def model_share(
         dict(row)
         for row in conn.execute(
             f"""
-            SELECT COALESCE(model, '—')                      AS model,
+            SELECT COALESCE(model, '-')                      AS model,
                    COUNT(*)                                  AS turns,
                    COALESCE(SUM(output_tokens), 0)           AS output_tokens,
                    COALESCE(SUM(input_tokens + output_tokens + cache_read

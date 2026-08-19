@@ -191,7 +191,7 @@ function SessionLine({
         </a>
       </span>
       <span className="sessions-project" title={row.root_path ?? undefined}>
-        {row.project ?? "—"}
+        {row.project ?? "-"}
       </span>
       <span className="sessions-number">{grouped(row.turns)}</span>
       <span className="sessions-number">{compact(row.tokens)}</span>

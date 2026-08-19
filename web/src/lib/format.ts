@@ -98,14 +98,14 @@ export function agoLabel(seconds: number): string {
 }
 
 export function modelLabel(model: string | null): string {
-  if (!model) return "—";
+  if (!model) return "-";
   return model.replace(/^claude-/, "").replace(/-\d{8}$/, "");
 }
 
 
 /** How long the session has been running: "3 h 12 min", "7 min". */
 export function duration(fromIso: string | null, toIso: string | null): string {
-  if (!fromIso || !toIso) return "—";
+  if (!fromIso || !toIso) return "-";
   const ms = new Date(stamp(toIso)).getTime() - new Date(stamp(fromIso)).getTime();
   const minutes = Math.max(Math.round(ms / 60000), 0);
   if (minutes < 60) return `${minutes} ${word("format.minutes")}`;
@@ -142,7 +142,7 @@ export function spent(seconds: number): string {
 
 /** How long ago that was, counting from "now"; past a week a date is read faster. */
 export function sinceLabel(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const at = new Date(stamp(iso)).getTime();
   const seconds = (Date.now() - at) / 1000;
   if (seconds < 45) return word("format.justNow");

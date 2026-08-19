@@ -432,7 +432,7 @@ function LeadersWidget({ data }: { data: Overview }) {
             />
           </div>
           <code>{session.id.slice(0, 8)}</code>
-          <span className="leaders-project">{session.project ?? "—"}</span>
+          <span className="leaders-project">{session.project ?? "-"}</span>
           <span className="leaders-tokens">{compact(session.tokens)}</span>
         </li>
       ))}
@@ -593,7 +593,7 @@ function SessionCard({ session, now }: { session: LiveSession; now: string }) {
         <code>{session.id.slice(0, 8)}</code>
         {/* The full path is in the tooltip: on the card the short name is what matters. */}
         <span className="session-project" title={session.root_path ?? undefined}>
-          {session.project ?? "—"}
+          {session.project ?? "-"}
         </span>
       </div>
       <div className="session-meta">
@@ -614,7 +614,7 @@ function TurnRow({ turn }: { turn: Turn }) {
     <li className={turn.is_sidechain ? "turn turn-sidechain" : "turn"}>
       <time>{clockTime(turn.ts)}</time>
       <span className="turn-model">{modelLabel(turn.model)}</span>
-      <span className="turn-project">{turn.project ?? "—"}</span>
+      <span className="turn-project">{turn.project ?? "-"}</span>
       <span className="turn-output">{grouped(turn.output_tokens)}</span>
       <span className="turn-context">{compact(turn.context_estimate)}</span>
       <span className="turn-tools">

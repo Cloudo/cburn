@@ -1113,7 +1113,7 @@ def test_api_failures_are_visible_only_here(conn: Any) -> None:
     stats = metrics.otel_errors(conn, datetime(2026, 8, 14, tzinfo=UTC))
     assert stats["errors"] == 4
     assert stats["by_status"][0] == {"status": "429", "errors": 2}
-    assert {row["status"] for row in stats["by_status"]} == {"429", "529", "—"}
+    assert {row["status"] for row in stats["by_status"]} == {"429", "529", "-"}
     assert stats["internal"] == []
 
 

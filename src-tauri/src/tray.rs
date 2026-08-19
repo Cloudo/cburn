@@ -246,7 +246,7 @@ pub fn setup<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", t(lang, "tray.open"), true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", t(lang, "tray.quit"), true, None::<&str>)?;
     let sessions: Vec<MenuItem<R>> = (0..HOT_SESSIONS)
-        .map(|index| MenuItem::with_id(app, format!("session-{index}"), "—", false, None::<&str>))
+        .map(|index| MenuItem::with_id(app, format!("session-{index}"), "-", false, None::<&str>))
         .collect::<tauri::Result<_>>()?;
 
     let separator = PredefinedMenuItem::separator(app)?;
@@ -308,7 +308,7 @@ pub fn setup<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         match fetch_overview() {
             Ok(overview) => apply(&tray, &poll_state, &poll_items, &overview),
             Err(error) => {
-                let _ = tray.set_title(Some("—"));
+                let _ = tray.set_title(Some("-"));
                 let _ = poll_items
                     .burn
                     .set_text(tf(lang, "tray.offline", &[("error", error)]));
@@ -535,15 +535,15 @@ fn apply<R: Runtime>(
     for (index, item) in items.sessions.iter().enumerate() {
         match sessions.get(index) {
             Some(session) => {
-                let id = session.get("id").and_then(|v| v.as_str()).unwrap_or("—");
+                let id = session.get("id").and_then(|v| v.as_str()).unwrap_or("-");
                 let project = session
                     .get("project")
                     .and_then(|v| v.as_str())
-                    .unwrap_or("—");
+                    .unwrap_or("-");
                 let status = session
                     .get("status")
                     .and_then(|v| v.as_str())
-                    .unwrap_or("—");
+                    .unwrap_or("-");
                 let _ = item.set_text(format!(
                     "{id:.8} {project} - {}",
                     status_label(lang, status)
@@ -551,7 +551,7 @@ fn apply<R: Runtime>(
                 let _ = item.set_enabled(true);
             }
             None => {
-                let _ = item.set_text("—");
+                let _ = item.set_text("-");
                 let _ = item.set_enabled(false);
             }
         }

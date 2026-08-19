@@ -50,7 +50,7 @@ export function Session({ id }: { id: string }) {
           ← {t("session.back")}
         </a>
         <h2>{session.title ?? session.session_id.slice(0, 8)}</h2>
-        <span className="hint">{session.project ?? "—"}</span>
+        <span className="hint">{session.project ?? "-"}</span>
       </div>
 
       <p className="session-prompt">{session.first_prompt ?? t("card.noPrompt")}</p>

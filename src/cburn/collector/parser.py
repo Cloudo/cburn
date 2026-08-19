@@ -430,7 +430,7 @@ _ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 def normalize_command(command: str | None) -> str | None:
     """Collapse a bash command down to "first word + subcommand".
 
-    `git commit -m "..."` → `git commit`, `sed -n 1,50p f.py` → `sed`,
+    `git commit -m "..."` => `git commit`, `sed -n 1,50p f.py` => `sed`,
     `cd /x && npm run build` becomes `npm run`. Arguments and paths are dropped:
     only the command name settles in the database (SPEC §7).
 
