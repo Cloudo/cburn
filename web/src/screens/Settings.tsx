@@ -4,8 +4,8 @@
 
 import { useEffect, useState } from "react";
 
-import { loadConfig, saveConfig, type Config, type ModelPrice } from "./api";
-import { useLang } from "./i18n";
+import { loadConfig, saveConfig, type Config, type ModelPrice } from "../lib/api";
+import { useLang } from "../lib/i18n";
 
 const PRICE_COLUMNS: Array<keyof ModelPrice> = [
   "input",

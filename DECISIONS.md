@@ -4,6 +4,16 @@ Why things are the way they are: the option taken, the options rejected and the
 reason. Newest first. Things visible from the code and the git history do not
 belong here; neither do the invariants, which live in `CLAUDE.md`.
 
+## 2026-08-19 - web/src is split by role: screens, components, lib
+
+Twenty-one files lay flat in one directory. The split is by role, matching the
+app's own shape (a shell with hash-routed screens filled by widgets): `screens/`
+for the routed screens, `components/` for widget bodies and shared pieces,
+`lib/` for the non-visual modules, entry files at the root. Rejected: feature
+folders (a folder per screen with its own components - ceremony a dashboard of
+this size does not repay) and a bare ts/tsx split (two piles say nothing about
+what a file is for).
+
 ## 2026-08-19 - the public face of the plan is ROADMAP.md; TZ.md keeps its name
 
 An English reader now gets a checkbox roadmap (`ROADMAP.md`) instead of being

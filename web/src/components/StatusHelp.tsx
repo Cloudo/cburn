@@ -4,8 +4,8 @@
 // itself comes from `Help` - the masthead has a cheat sheet of its own in the same shell.
 
 import { HelpPopover } from "./Help";
-import { useLang } from "./i18n";
-import type { SessionStatus } from "./api";
+import { useLang } from "../lib/i18n";
+import type { SessionStatus } from "../lib/api";
 
 //: Statuses in order of importance: the tab that opens first is the one where something happens.
 export const STATUSES: SessionStatus[] = ["permission", "working", "answered", "idle", "done"];

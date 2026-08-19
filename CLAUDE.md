@@ -101,7 +101,7 @@ and the invariants.
 - Claude Code hooks are not used for collecting data - only the file watcher.
 - Commits follow Conventional Commits (the `conventional-commits` skill), with messages in
   English.
-- **Russian lives in the interface dictionaries and nowhere else:** `web/src/dict.ts` for
+- **Russian lives in the interface dictionaries and nowhere else:** `web/src/lib/dict.ts` for
   the dashboard and `src-tauri/dict.json` for the tray menu. Everything else - the code,
   the comments, the CLI output, the HTTP answers, the telegram notifications and the
   documentation - is English. The advisor prompt is English too, and the language of its

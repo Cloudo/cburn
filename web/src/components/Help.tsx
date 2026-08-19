@@ -4,7 +4,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-import { useLang } from "./i18n";
+import { useLang } from "../lib/i18n";
 
 export function HelpPopover({ label, children }: { label: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);

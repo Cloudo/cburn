@@ -8,8 +8,8 @@
 
 import { useState, type MouseEvent } from "react";
 
-import { compact, grouped } from "./format";
-import { useLang } from "./i18n";
+import { compact, grouped } from "../lib/format";
+import { useLang } from "../lib/i18n";
 
 export type Slice = { key: string; label: string; value: number; color: string };
 

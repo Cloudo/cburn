@@ -5,6 +5,12 @@ paths:
 
 # The dashboard frontend
 
+- **`web/src` is three folders, and no more.** `screens/` - the hash-routed screens
+  (`Dashboard.tsx`, the widget grid, is one of them), `components/` - widget bodies and
+  shared pieces (`Gauge`, `Profile`, `Help`, `StatusHelp`, `ThemePicker`), `lib/` - the
+  non-visual modules (`api`, `dict`, `format`, `i18n`, `layout`, `theme`, `themes`,
+  `zoom`). Only the entry files stay at the root: `main.tsx`, `App.tsx`, `styles.css`.
+  A new file goes into one of the three; a new folder needs a reason.
 - **Room for Tauri (M5).** The frontend talks to the backend over HTTP/WebSocket on localhost
   only - no direct filesystem access; no browser APIs missing from the system webview. The
   wrapper in M5 must not require reworking the frontend.
@@ -14,7 +20,7 @@ paths:
   reacts to its own width through `@container` rather than to the window width: widgets are
   dragged by hand while the window does not change.
 - **The colour theme is data, and the choice is the browser's business too.** The eighteen
-  palettes live in `web/src/themes.ts` as a table of thirteen tokens - the same ones
+  palettes live in `web/src/lib/themes.ts` as a table of thirteen tokens - the same ones
   `styles.css` declares in `:root` - and are borrowed from the VS Code themes of the same
   name, so the dashboard offers the choice a person already made in the editor. The chosen
   theme writes those tokens onto `<html>`, and the stylesheet keeps only the fallback palette
@@ -33,7 +39,7 @@ paths:
 - **Texts the frontend shows never come from the server.** The server sends data (a limit
   window `kind`, a dictionary key for a failed request), and the words around it are built
   by `dict.ts`: the interface has two languages, and the backend has none.
-- **The two dictionaries are the same device.** `web/src/dict.ts` for the dashboard and
+- **The two dictionaries are the same device.** `web/src/lib/dict.ts` for the dashboard and
   `src-tauri/dict.json` for the tray menu: a key and a pair of languages, the reader picks
   one. They are data, not code - the tray pairs are baked into the binary by `include_str!`,
   so the menu needs no build step of its own.

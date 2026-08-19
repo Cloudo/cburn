@@ -4,8 +4,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { clockTime, sinceLabel, toolLabel, usd } from "./format";
-import { useLang } from "./i18n";
+import { clockTime, sinceLabel, toolLabel, usd } from "../lib/format";
+import { useLang } from "../lib/i18n";
 import {
   ActFailed,
   applyAct,
@@ -20,7 +20,7 @@ import {
   type AdviceRun,
   type AdviceSession,
   type Prompt,
-} from "./api";
+} from "../lib/api";
 
 const SEVERITY_ORDER = ["crit", "warn", "info"] as const;
 

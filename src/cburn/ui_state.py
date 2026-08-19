@@ -15,7 +15,7 @@ from typing import Any
 
 from . import paths
 
-#: The languages the interface dictionary knows (`web/src/dict.ts`).
+#: The languages the interface dictionary knows (`web/src/lib/dict.ts`).
 LANGUAGES = frozenset({"ru", "en"})
 
 

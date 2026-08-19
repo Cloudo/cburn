@@ -4,10 +4,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { compact, duration, grouped, sinceLabel, usd } from "./format";
-import { useSessions, type SessionRow } from "./api";
-import { useLang } from "./i18n";
-import { STATUSES, StatusHelp, statusTitle } from "./StatusHelp";
+import { compact, duration, grouped, sinceLabel, usd } from "../lib/format";
+import { useSessions, type SessionRow } from "../lib/api";
+import { useLang } from "../lib/i18n";
+import { STATUSES, StatusHelp, statusTitle } from "../components/StatusHelp";
 
 //: Period keys; the captions come from the dictionary, the statuses from `StatusHelp`.
 const PERIODS = ["today", "24h", "7d", "30d", "all"];

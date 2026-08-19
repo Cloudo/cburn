@@ -5,8 +5,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import GridLayout, { type Layout } from "react-grid-layout";
 
-import { clockTime, freshnessLabel } from "./format";
-import { useLang } from "./i18n";
+import { clockTime, freshnessLabel } from "../lib/format";
+import { useLang } from "../lib/i18n";
 import {
   COLUMNS,
   MARGIN,
@@ -17,7 +17,7 @@ import {
   rowsForPixels,
   saveState,
   type WidgetId,
-} from "./layout";
+} from "../lib/layout";
 
 export type WidgetContent = {
   id: WidgetId;

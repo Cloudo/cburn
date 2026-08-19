@@ -4,9 +4,9 @@
 
 import { useEffect, useMemo } from "react";
 
-import { clockTime, compact, duration, grouped, modelLabel, spent, toolLabel, usd } from "./format";
-import { useLang } from "./i18n";
-import { useSession, type SessionEvent, type SessionTurn } from "./api";
+import { clockTime, compact, duration, grouped, modelLabel, spent, toolLabel, usd } from "../lib/format";
+import { useLang } from "../lib/i18n";
+import { useSession, type SessionEvent, type SessionTurn } from "../lib/api";
 
 /** Context zones from TZ §4: up to 80k is calm, up to 150k is time to look around. */
 const WARN = 80_000;

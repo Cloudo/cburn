@@ -1,9 +1,9 @@
 // "Where the turns go": the TZ §4 metrics - the tool profile, the model share,
 // idle turns and an estimate of the subscription limit window.
 
-import { agoLabel, compact, grouped, modelLabel, share, spent, toolLabel, usd } from "./format";
-import type { IdleTurns, Limits, ModelShare, Otel, Plan, ToolProfile } from "./api";
-import { translate, useLang, type Lang } from "./i18n";
+import { agoLabel, compact, grouped, modelLabel, share, spent, toolLabel, usd } from "../lib/format";
+import type { IdleTurns, Limits, ModelShare, Otel, Plan, ToolProfile } from "../lib/api";
+import { translate, useLang, type Lang } from "../lib/i18n";
 
 /** A list with share bars - one shape for tools and for bash commands. */
 function Ranked({ rows, total }: { rows: Array<{ name: string; calls: number }>; total: number }) {

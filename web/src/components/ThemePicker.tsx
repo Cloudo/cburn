@@ -5,9 +5,9 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
-import { useLang } from "./i18n";
-import { SYSTEM, useTheme } from "./theme";
-import { THEMES, themeById, type Theme } from "./themes";
+import { useLang } from "../lib/i18n";
+import { SYSTEM, useTheme } from "../lib/theme";
+import { THEMES, themeById, type Theme } from "../lib/themes";
 
 type Row = { id: string; name: string; theme: Theme; group: string | null };
 

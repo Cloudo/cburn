@@ -1,17 +1,17 @@
 import { useEffect, useState } from "react";
 
-import { Gauge, OutputMeter, Recorder, type Slice } from "./Gauge";
-import { Idle, Models, PlanLimits, Telemetry, Tools } from "./Profile";
-import { Dashboard, type WidgetContent } from "./Dashboard";
-import { Advice } from "./Advice";
-import { Session } from "./Session";
-import { Sessions } from "./Sessions";
-import { Settings } from "./Settings";
-import { useLang } from "./i18n";
-import { ThemePicker } from "./ThemePicker";
-import { LiveHelp } from "./Help";
-import { STATUSES, StatusHelp, statusTitle } from "./StatusHelp";
-import { useZoom } from "./zoom";
+import { Gauge, OutputMeter, Recorder, type Slice } from "./components/Gauge";
+import { Idle, Models, PlanLimits, Telemetry, Tools } from "./components/Profile";
+import { Dashboard, type WidgetContent } from "./screens/Dashboard";
+import { Advice } from "./screens/Advice";
+import { Session } from "./screens/Session";
+import { Sessions } from "./screens/Sessions";
+import { Settings } from "./screens/Settings";
+import { useLang } from "./lib/i18n";
+import { ThemePicker } from "./components/ThemePicker";
+import { LiveHelp } from "./components/Help";
+import { STATUSES, StatusHelp, statusTitle } from "./components/StatusHelp";
+import { useZoom } from "./lib/zoom";
 import {
   agoLabel,
   clockTime,
@@ -24,7 +24,7 @@ import {
   timestamp,
   toolLabel,
   usd,
-} from "./format";
+} from "./lib/format";
 import {
   closeSession,
   hideSession,
@@ -36,7 +36,7 @@ import {
   type Stamps,
   type Turn,
   type Usage,
-} from "./api";
+} from "./lib/api";
 
 // "live" is not a window: the server decays turns exponentially, so the needle
 // climbs while Claude works and glides down in silence instead of teleporting.
