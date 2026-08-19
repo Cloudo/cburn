@@ -176,7 +176,7 @@ const DICT: Record<string, [string, string]> = {
   "dash.refreshWidget": ["обновить виджет «{title}»", "refresh the “{title}” widget"],
   "dash.hideWidget": ["скрыть виджет «{title}»", "hide the “{title}” widget"],
 
-  "gauge.rate": ["/мин", "/min"],
+  "gauge.rate": ["ток/мин", "tok/min"],
   "meter.label": ["выход модели", "model output"],
   "meter.unit": ["ток/мин", "tok/min"],
   "recorder.label": ["выход по {seconds} с", "output per {seconds}s"],

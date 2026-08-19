@@ -132,9 +132,12 @@ export function Gauge({ value, slices, caption }: Props) {
       </svg>
 
       <figcaption>
+        {/* Read like a speedometer: the figure holds a field of its own width, so it does
+            not jump about as it grows from a nought to millions, and the unit stands under
+            it, smaller and quieter. The window used to be written here as a third line -
+            the picker in the header names it already. */}
         <strong className="gauge-value">{compact(value)}</strong>
-        <span className="gauge-unit">{t("gauge.unit")}</span>
-        <span className="gauge-caption">{caption}</span>
+        <span className="gauge-rate">{t("gauge.rate")}</span>
       </figcaption>
     </figure>
   );
