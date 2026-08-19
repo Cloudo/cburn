@@ -94,12 +94,14 @@ main.empty {
   color: var(--text);
 }
 
+/* no pixel offsets in the vertical: the webview multiplies css lengths by the
+   interface zoom, and a hang below the baseline lands on the nav row */
 .brand-logo {
   width: 20px;
   height: 20px;
   border-radius: 5px;
   margin-right: 8px;
-  vertical-align: -5px;
+  vertical-align: text-bottom;
 }
 
 .brand-note {
