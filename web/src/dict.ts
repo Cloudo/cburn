@@ -21,6 +21,29 @@ const DICT: Record<string, [string, string]> = {
   "app.offline": ["нет связи", "offline"],
   "app.noConnection": ["нет связи с cburn serve", "no connection to cburn serve"],
   "app.connecting": ["подключаюсь…", "connecting…"],
+  "live.help.open": ["что показывают эти значки", "what these marks mean"],
+  "live.help.title": ["связь и свежесть цифр", "the link and the freshness of the numbers"],
+  "live.help.hint.live": [
+    "сокет открыт, сервер сам шлёт обновления",
+    "the socket is open, the server pushes updates itself",
+  ],
+  "live.help.hint.offline": [
+    "поток прервался: на экране последнее, что успело прийти",
+    "the stream broke: on screen is the last that got through",
+  ],
+  "live.help.hint.connecting": ["сокет ещё открывается", "the socket is still opening"],
+  "live.help.hint.ago": [
+    "когда пришло последнее обновление",
+    "when the last update arrived",
+  ],
+  "live.help.hint.working": [
+    "в одной из сессий модель работает прямо сейчас",
+    "in one of the sessions the model is working right now",
+  ],
+  "live.help.note": [
+    "Токены незаконченного хода попадают в транскрипт только вместе с ответом, поэтому при идущем запросе показания прибора занижены.",
+    "The tokens of an unfinished turn reach the transcript only together with the answer, so while a request is running the readings stand below the truth.",
+  ],
   "app.lang": ["язык интерфейса", "interface language"],
   "app.theme": ["тема оформления", "colour theme"],
   "app.theme.system": ["как в системе", "follow the system"],

@@ -1274,6 +1274,15 @@ main.empty {
   top: -2px;
 }
 
+/* the marks of the masthead sit in the same column as the dots of the statuses; a bare
+   span is inline, and inline ignores a width - hence the block */
+.status-help-list .dot,
+.status-help-list .working-pulse {
+  display: block;
+  position: relative;
+  top: -1px;
+}
+
 .status-help-name {
   color: var(--text);
 }

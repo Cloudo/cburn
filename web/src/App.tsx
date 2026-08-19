@@ -9,6 +9,7 @@ import { Sessions } from "./Sessions";
 import { Settings } from "./Settings";
 import { useLang } from "./i18n";
 import { ThemePicker } from "./ThemePicker";
+import { LiveHelp } from "./Help";
 import { STATUSES, StatusHelp, statusTitle } from "./StatusHelp";
 import { useZoom } from "./zoom";
 import {
@@ -126,8 +127,15 @@ export default function App() {
             </span>
           )}
           <span className={`dot dot-${connection}`} />
-          <span>{connection === "live" ? t("app.live") : t("app.offline")}</span>
+          <span>
+            {connection === "live"
+              ? t("app.live")
+              : connection === "offline"
+                ? t("app.offline")
+                : t("app.connecting")}
+          </span>
           <span className="status-ago">{updatedAt ? agoLabel(ago) : ""}</span>
+          <LiveHelp />
           {/* the dashboard puts the widget button here through a portal */}
           <div id="dash-tools" className="dash-tools" />
           <ThemePicker />
