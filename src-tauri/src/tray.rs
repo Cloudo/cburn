@@ -282,7 +282,12 @@ pub fn setup<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let handler_state = Arc::clone(&state);
     let handler_items = Arc::clone(&items);
     let tray = TrayIconBuilder::with_id("cburn")
-        .icon(app.default_window_icon().unwrap().clone())
+        // the app icon is opaque, and a template is drawn from alpha alone - the menu
+        // bar needs its own transparent glyph, not a solid rounded square
+        .icon(
+            tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))
+                .expect("tray.png is embedded at build time"),
+        )
         .icon_as_template(true)
         .menu(&menu)
         .show_menu_on_left_click(true)

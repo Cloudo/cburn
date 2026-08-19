@@ -4,6 +4,17 @@ Why things are the way they are: the option taken, the options rejected and the
 reason. Newest first. Things visible from the code and the git history do not
 belong here; neither do the invariants, which live in `CLAUDE.md`.
 
+## 2026-08-20 - the menu bar gets its own template glyph, not the app icon
+
+The tray icon is a dedicated monochrome png (`src-tauri/icons/tray.png`, drawn
+by `tools/tray_icon.py`) embedded with `include_bytes!`. Rejected: feeding
+`default_window_icon()` into the template - macOS builds a template image from
+the alpha channel alone, and the app icon's opaque rounded square rendered as a
+featureless white blob; the speedometer never reached the menu bar at all. A
+side gain: `include_bytes!` registers the file with cargo, so a changed glyph
+rebuilds, while icons taken through `generate_context!` can survive a rebuild
+stale.
+
 ## 2026-08-19 - the demo dataset goes through the real pipeline, not a mocked backend
 
 The README screenshots need believable English data. Chosen: a generator
