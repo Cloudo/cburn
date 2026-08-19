@@ -572,11 +572,15 @@ main.empty {
   overflow: hidden;
 }
 
+/* fills are full-width and scaled, not width-animated: an animated width leaves a
+   one-pixel smear across the track in the zoomed webview */
 .meter-fill {
   height: 100%;
+  width: 100%;
   background: linear-gradient(90deg, color-mix(in srgb, var(--amber) 55%, transparent), var(--amber));
   border-radius: 4px;
-  transition: width 0.5s cubic-bezier(0.2, 0.8, 0.3, 1);
+  transform-origin: left;
+  transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.3, 1);
 }
 
 .meter-scale {
@@ -1584,9 +1588,11 @@ main.empty {
 .limits-fill {
   display: block;
   height: 100%;
+  width: 100%;
   background: var(--steel);
   border-radius: 3px;
-  transition: width 1s linear;
+  transform-origin: left;
+  transition: transform 1s linear;
 }
 
 .limits-facts {
@@ -1677,9 +1683,11 @@ main.empty {
 .plan-fill {
   display: block;
   height: 100%;
+  width: 100%;
   border-radius: 3px;
   background: var(--steel);
-  transition: width 0.6s ease-out;
+  transform-origin: left;
+  transition: transform 0.6s ease-out;
 }
 
 .plan-fill-warning {

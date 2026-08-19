@@ -4,6 +4,18 @@ Why things are the way they are: the option taken, the options rejected and the
 reason. Newest first. Things visible from the code and the git history do not
 belong here; neither do the invariants, which live in `CLAUDE.md`.
 
+## 2026-08-20 - progress fills animate transform, not width
+
+The meter/limits/plan fills are full-width elements scaled with
+`transform: scaleX(share)` instead of an animated `width`. Reason: in the
+zoomed desktop webview an animated width left a one-pixel amber smear across
+the empty part of the track (a repaint artifact of layout animation under CSS
+`zoom`); a composited transform repaints the whole layer and cannot leave a
+trail. Rejected: `will-change: width` / `translateZ(0)` (does not stop layout
+repaints), `translateX` or `clip-path` on a full-width fill (the gradient
+stops compressing with the bar and the fade all but disappears at low fills).
+The cost of `scaleX` is a slightly squarer rounded cap at small shares.
+
 ## 2026-08-20 - the menu bar gets its own template glyph, not the app icon
 
 The tray icon is a dedicated monochrome png (`src-tauri/icons/tray.png`, drawn
