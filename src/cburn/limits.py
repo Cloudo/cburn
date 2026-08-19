@@ -22,10 +22,11 @@ import subprocess
 import threading
 import time
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 import httpx
+
+from . import paths
 
 log = logging.getLogger(__name__)
 
@@ -34,8 +35,9 @@ USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 #: The keychain entry where Claude Code keeps the OAuth token.
 KEYCHAIN_SERVICE = "Claude Code-credentials"
 
-#: The local answer cache that Claude Code maintains itself.
-CLAUDE_STATE = Path.home() / ".claude.json"
+#: The local answer cache that Claude Code maintains itself. It travels with the Claude
+#: Code directory: a demo tree gets the seeded one, the real run gets the real one.
+CLAUDE_STATE = paths.CLAUDE_STATE
 
 #: How often to ask for the limits. More often is pointless: percentages move slowly,
 #: and extra requests to someone else's endpoint serve no purpose.
@@ -202,9 +204,13 @@ def read_from_cache() -> PlanLimits | None:
 class LimitsWatcher:
     """Holds the last known limits, refreshing them no more often than REFRESH_SECONDS."""
 
-    def __init__(self, refresh_seconds: float = REFRESH_SECONDS, use_api: bool = True) -> None:
+    def __init__(
+        self, refresh_seconds: float = REFRESH_SECONDS, use_api: bool | None = None
+    ) -> None:
         self.refresh_seconds = refresh_seconds
-        self.use_api = use_api
+        # A second instance - the demo tree, a test - must not ask about the real account:
+        # its token is in the keychain all the same, and the answer would be real numbers.
+        self.use_api = not paths.OVERRIDDEN if use_api is None else use_api
         self._lock = threading.Lock()
         self._value: PlanLimits | None = None
         self._checked_at = 0.0

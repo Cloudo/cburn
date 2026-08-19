@@ -564,15 +564,17 @@ def generate(root: Path) -> None:
                 }
             )
     (root / "state.json").write_text(json.dumps(state, indent=2), encoding="utf-8")
+    write_plan_limits(root, now)
 
     conn = db.connect(root / "data" / "cburn.db")
     try:
         pricing.sync_prices(conn, config.load(root / "config.toml"))
         ingest_tree(conn, root / "claude" / "projects")
         by_title = {spec["title"]: tr.id for spec, tr in sessions}
+        live_ids = {tr.id for spec, tr in sessions if spec.get("live")}
         with conn:
             seed_advice(conn, now, by_title)
-            seed_otel(conn, now, rng, by_title)
+            seed_otel(conn, now, rng, by_title, live_ids)
         turns, cost = conn.execute("SELECT COUNT(*), SUM(cost_usd) FROM turns").fetchone()
         print(f"demo root: {root}")
         print(f"sessions: {len(sessions)}, turns: {turns}, cost: ${cost:.2f}")
@@ -583,6 +585,44 @@ def generate(root: Path) -> None:
         f"  CLAUDE_CONFIG_DIR={root}/claude CBURN_CONFIG={root}/config.toml"
         f" CBURN_DATA_DIR={root}/data .venv/bin/cburn serve"
     )
+
+
+def write_plan_limits(root: Path, now: datetime) -> None:
+    """Seed the cache of the subscription limits Claude Code keeps in `.claude.json`.
+
+    The demo instance never asks Anthropic - `paths.OVERRIDDEN` keeps it off the real
+    account - so without this the widget says the limits are unavailable. The percentages
+    match the seeded spend: a busy day inside a five-hour window.
+    """
+    reset = (now + timedelta(minutes=15)).replace(second=0, microsecond=0)
+    monday = (now + timedelta(days=7 - now.weekday())).replace(
+        hour=2, minute=0, second=0, microsecond=0
+    )
+    payload = {
+        "limits": [
+            {"kind": "session", "percent": 55, "resets_at": _stamp(reset), "is_active": True},
+            {
+                "kind": "weekly_all",
+                "percent": 31,
+                "resets_at": _stamp(monday),
+                "is_active": True,
+            },
+            {
+                "kind": "weekly_scoped",
+                "percent": 30,
+                "resets_at": _stamp(monday - timedelta(minutes=1)),
+                "is_active": True,
+                "scope": {"model": {"display_name": "Fable"}},
+            },
+        ]
+    }
+    state = {
+        "cachedUsageUtilization": {
+            "utilization": payload,
+            "fetchedAtMs": int(now.timestamp() * 1000),
+        }
+    }
+    (root / ".claude.json").write_text(json.dumps(state, indent=2), encoding="utf-8")
 
 
 def seed_advice(conn: Any, now: datetime, by_title: dict[str, str]) -> None:
@@ -678,15 +718,19 @@ def seed_advice(conn: Any, now: datetime, by_title: dict[str, str]) -> None:
     )
 
 
-def seed_otel(conn: Any, now: datetime, rng: random.Random, by_title: dict[str, str]) -> None:
+def seed_otel(
+    conn: Any, now: datetime, rng: random.Random, by_title: dict[str, str], live: set[str]
+) -> None:
     """Telemetry on top of the transcripts: what the JSONL alone cannot show.
 
     The main-work numbers mirror the ingested turns (a couple of per cent higher, as in
     life); the service spend, permission decisions, hooks and tool durations are the
     events the dashboard's "beyond the transcripts" widget and the session screen read.
+    The live sessions get none of it: a random `tool_decision` landing after their
+    pending tool request would read as "already allowed" and break the status palette.
     """
     day_start = local_day_start(now)
-    sessions = list(by_title.values())
+    sessions = [sid for sid in by_title.values() if sid not in live]
 
     def metric(name: str, ts: datetime, value: float, kind: str | None, **attrs: Any) -> None:
         conn.execute(

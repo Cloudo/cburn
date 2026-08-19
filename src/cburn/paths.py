@@ -12,9 +12,13 @@ CLAUDE_PROJECTS_DIR = CLAUDE_DIR / "projects"
 #: Persistent instructions: they ride along with every request, so their size is a metric.
 CLAUDE_MD = CLAUDE_DIR / "CLAUDE.md"
 
+#: The state file Claude Code keeps beside its directory; the cache of the subscription
+#: limits lives inside it. It moves with the directory, so a demo tree has its own.
+CLAUDE_STATE = CLAUDE_DIR.parent / ".claude.json"
+
 #: A second instance next to the real one (the demo dataset, tests): the config and the
 #: data directory move by environment, and the real directories stay untouched.
-_OVERRIDDEN = "CBURN_CONFIG" in os.environ or "CBURN_DATA_DIR" in os.environ
+OVERRIDDEN = "CBURN_CONFIG" in os.environ or "CBURN_DATA_DIR" in os.environ
 
 CONFIG_PATH = Path(
     os.environ.get("CBURN_CONFIG", Path.home() / ".config" / "cburn" / "config.toml")
@@ -33,7 +37,7 @@ LEGACY_DATA_DIR = Path.home() / ".local" / "share" / LEGACY_NAME
 
 def migrate_legacy() -> None:
     """Move state over from the directories of the former name, unless the new ones exist."""
-    if _OVERRIDDEN:
+    if OVERRIDDEN:
         return  # a second instance must not drag the real state into its directories
     for legacy, current in ((LEGACY_DATA_DIR, DATA_DIR), (LEGACY_CONFIG_DIR, CONFIG_PATH.parent)):
         if current.exists() or not legacy.is_dir():
