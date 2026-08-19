@@ -4,6 +4,23 @@ Why things are the way they are: the option taken, the options rejected and the
 reason. Newest first. Things visible from the code and the git history do not
 belong here; neither do the invariants, which live in `CLAUDE.md`.
 
+## 2026-08-19 - a widget's height follows its content until a hand touches it
+
+The default layout pinned every widget's height, and short content left dead
+space at the bottom. Now an untouched widget fits itself to what it shows - a
+`ResizeObserver` on an inner wrapper measures the natural content height, and
+the grid `h` follows it, on first open and on every content change alike. The
+moment the user grabs the resize corner the widget joins the `sized` list next
+to the layout in `localStorage` and the fit backs off for good; per widget, not
+globally, so tuning one card does not freeze the rest. The reset button clears
+the list and hands the heights back to the fit.
+
+Rejected: fitting only on the first open (live widgets change their content
+every minute, and the gap would reopen); one global "touched" flag (resizing a
+single widget would freeze all ten); inferring "touched" by comparing the saved
+layout against the default (react-grid-layout saves a layout on the very first
+mount, so a saved layout proves nothing about hands).
+
 ## 2026-08-18 - the needle turns around a zero, not around a pixel
 
 The instrument needle rotated about `transform-origin: 200px 190px`, the hub in

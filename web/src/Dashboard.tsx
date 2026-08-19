@@ -13,6 +13,7 @@ import {
   WIDGETS,
   defaultState,
   loadState,
+  rowsForPixels,
   saveState,
   type WidgetId,
 } from "./layout";
@@ -73,6 +74,57 @@ export function Dashboard({ widgets }: { widgets: WidgetContent[] }) {
     });
   }, []);
 
+  // Height follows the content until the user grabs the resize handle: a widget
+  // once resized by hand is theirs, the fit backs off for good.
+  const fitContent = useCallback((fit: HTMLElement) => {
+    const id = fit.dataset.widget as WidgetId;
+    const body = fit.parentElement;
+    const panel = body?.parentElement;
+    if (!body || !panel) return;
+    const pad = getComputedStyle(body);
+    const chrome = panel.offsetHeight - body.offsetHeight; // the header and the borders
+    const needed =
+      chrome +
+      parseFloat(pad.paddingTop) +
+      parseFloat(pad.paddingBottom) +
+      fit.offsetHeight +
+      1; // offsetHeight rounds down - the spare pixel keeps the scrollbar away
+    setState((current) => {
+      if (current.sized.includes(id)) return current;
+      const item = current.layout.find((entry) => entry.i === id);
+      if (!item) return current;
+      const h = Math.max(item.minH ?? 1, rowsForPixels(needed));
+      if (item.h === h) return current;
+      return {
+        ...current,
+        layout: current.layout.map((entry) => (entry.i === id ? { ...entry, h } : entry)),
+      };
+    });
+  }, []);
+
+  const [fitObserver] = useState(
+    () =>
+      new ResizeObserver((entries) => {
+        for (const entry of entries) fitContent(entry.target as HTMLElement);
+      }),
+  );
+  useEffect(() => () => fitObserver.disconnect(), [fitObserver]);
+
+  const observeFit = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (node) fitObserver.observe(node);
+    },
+    [fitObserver],
+  );
+
+  const onResizeStart = useCallback((_next: Layout[], item: Layout) => {
+    setState((current) =>
+      current.sized.includes(item.i as WidgetId)
+        ? current
+        : { ...current, sized: [...current.sized, item.i as WidgetId] },
+    );
+  }, []);
+
   const toggle = (id: WidgetId) =>
     setState((current) => ({
       ...current,
@@ -120,13 +172,18 @@ export function Dashboard({ widgets }: { widgets: WidgetContent[] }) {
           draggableHandle=".widget-grip"
           draggableCancel=".widget-tools"
           onLayoutChange={onLayoutChange}
+          onResizeStart={onResizeStart}
           resizeHandles={["se"]}
           compactType="vertical"
         >
           {visible.map((widget) => (
             <section key={widget.id} className="panel widget">
               <WidgetHead widget={widget} onHide={() => toggle(widget.id)} />
-              <div className="widget-body">{widget.body}</div>
+              <div className="widget-body">
+                <div className="widget-fit" data-widget={widget.id} ref={observeFit}>
+                  {widget.body}
+                </div>
+              </div>
             </section>
           ))}
         </GridLayout>

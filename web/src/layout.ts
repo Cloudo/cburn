@@ -63,10 +63,17 @@ export const DEFAULT_LAYOUT: Layout[] = [
   { i: "otel", x: 0, y: 104, w: 12, h: 18, minW: 6, minH: 10 },
 ];
 
-export type DashboardState = { layout: Layout[]; hidden: WidgetId[] };
+/** `sized` lists widgets whose height the user has set by hand: those keep it,
+ *  the rest follow their content. */
+export type DashboardState = { layout: Layout[]; hidden: WidgetId[]; sized: WidgetId[] };
 
 export function defaultState(): DashboardState {
-  return { layout: DEFAULT_LAYOUT.map((item) => ({ ...item })), hidden: [] };
+  return { layout: DEFAULT_LAYOUT.map((item) => ({ ...item })), hidden: [], sized: [] };
+}
+
+/** grid rows for a pixel height: an item spans h*ROW_HEIGHT + (h-1)*MARGIN px */
+export function rowsForPixels(px: number): number {
+  return Math.max(1, Math.ceil((px + MARGIN[1]) / (ROW_HEIGHT + MARGIN[1])));
 }
 
 /** A layout from the old, twice coarser grid: the same places, new units. */
@@ -101,6 +108,7 @@ export function loadState(): DashboardState {
     return {
       layout: [...layout, ...missing.map((item) => ({ ...item }))],
       hidden: (saved.hidden ?? []).filter((id): id is WidgetId => known.has(id)),
+      sized: (saved.sized ?? []).filter((id): id is WidgetId => known.has(id)),
     };
   } catch {
     return defaultState();

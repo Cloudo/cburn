@@ -1953,6 +1953,12 @@ main.empty {
   display: none; /* the title now lives in the widget header */
 }
 
+/* The measuring wrapper: its height is the natural content height the auto-fit
+   reads. flow-root keeps child margins inside the measurement. */
+.widget-fit {
+  display: flow-root;
+}
+
 .react-grid-item.react-grid-placeholder {
   background: rgb(77 127 163 / 25%);
   border-radius: var(--radius);
