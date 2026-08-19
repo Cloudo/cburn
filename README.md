@@ -9,7 +9,10 @@
 </p>
 
 <p align="center">
-  <img src="docs/gauge.png" alt="the live gauge" width="660" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/dashboard-dark.png" />
+    <img src="docs/dashboard-light.png" alt="the dashboard" width="920" />
+  </picture>
 </p>
 
 cburn watches every Claude Code session on the machine and turns the transcripts
@@ -28,6 +31,15 @@ Everything happens locally: the transcripts are read straight from
 - **Advisor** - once an hour `claude -p` reads an anonymised digest and suggests optimisations, with optional telegram notifications.
 - **Menu-bar tray** - a Tauri wrapper puts the figures you pick into the macOS menu bar.
 - **OTLP receiver** - takes Claude Code telemetry for what the transcripts do not carry.
+
+<p align="center">
+  <img src="docs/session.png" alt="a session screen" width="49%" />
+  <img src="docs/advice.png" alt="the advice screen" width="49%" />
+</p>
+<p align="center">
+  <sub>All screenshots show a synthetic demo dataset - <code>make demo</code> generates it
+  and serves a second dashboard without touching the real database.</sub>
+</p>
 
 ## Quick start
 
@@ -55,7 +67,7 @@ rollback.
 A bare `make` prints the whole toolbox: the checks (`make check` before every
 commit), the hot-reload frontend, the desktop window, the telemetry receiver.
 What is done and what lies ahead is in the [roadmap](ROADMAP.md), and every
-requirement in detail is in the [specification](TZ.md).
+requirement in detail is in the [specification](SPEC.md).
 
 ## License
 

@@ -5,15 +5,21 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-#: Claude Code transcript directory. Opened READ-ONLY (TZ §2).
+#: Claude Code transcript directory. Opened READ-ONLY (SPEC §2).
 CLAUDE_DIR = Path(os.environ.get("CLAUDE_CONFIG_DIR", Path.home() / ".claude"))
 CLAUDE_PROJECTS_DIR = CLAUDE_DIR / "projects"
 
 #: Persistent instructions: they ride along with every request, so their size is a metric.
 CLAUDE_MD = CLAUDE_DIR / "CLAUDE.md"
 
-CONFIG_PATH = Path.home() / ".config" / "cburn" / "config.toml"
-DATA_DIR = Path.home() / ".local" / "share" / "cburn"
+#: A second instance next to the real one (the demo dataset, tests): the config and the
+#: data directory move by environment, and the real directories stay untouched.
+_OVERRIDDEN = "CBURN_CONFIG" in os.environ or "CBURN_DATA_DIR" in os.environ
+
+CONFIG_PATH = Path(
+    os.environ.get("CBURN_CONFIG", Path.home() / ".config" / "cburn" / "config.toml")
+)
+DATA_DIR = Path(os.environ.get("CBURN_DATA_DIR", Path.home() / ".local" / "share" / "cburn"))
 DB_PATH = DATA_DIR / "cburn.db"
 
 #: The browser's choice for the native surfaces: the tray cannot read `localStorage`.
@@ -27,6 +33,8 @@ LEGACY_DATA_DIR = Path.home() / ".local" / "share" / LEGACY_NAME
 
 def migrate_legacy() -> None:
     """Move state over from the directories of the former name, unless the new ones exist."""
+    if _OVERRIDDEN:
+        return  # a second instance must not drag the real state into its directories
     for legacy, current in ((LEGACY_DATA_DIR, DATA_DIR), (LEGACY_CONFIG_DIR, CONFIG_PATH.parent)):
         if current.exists() or not legacy.is_dir():
             continue

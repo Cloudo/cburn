@@ -4,6 +4,22 @@ Why things are the way they are: the option taken, the options rejected and the
 reason. Newest first. Things visible from the code and the git history do not
 belong here; neither do the invariants, which live in `CLAUDE.md`.
 
+## 2026-08-19 - the demo dataset goes through the real pipeline, not a mocked backend
+
+The README screenshots need believable English data. Chosen: a generator
+(`tools/demo_data.py`) writes synthetic transcripts in the verified JSONL
+format, the real collector ingests them into a demo database, and the server is
+pointed at the demo tree by environment - `CLAUDE_CONFIG_DIR` existed, and
+`CBURN_CONFIG` / `CBURN_DATA_DIR` overrides were added to `paths.py`. What the
+transcripts cannot carry (telemetry, advice) is seeded into the demo database
+directly; `--tick` appends a fresh burst to the live sessions so the needle is
+up at the moment of a screenshot.
+
+Rejected: a mocked backend (every endpoint plus the WebSocket protocol would
+have to be faked and kept in step, and the screenshots would stop showing the
+real product); screenshotting the real database (private, Russian, and the
+prompts would need blurring).
+
 ## 2026-08-19 - web/src is split by role: screens, components, lib
 
 Twenty-one files lay flat in one directory. The split is by role, matching the
@@ -14,13 +30,27 @@ folders (a folder per screen with its own components - ceremony a dashboard of
 this size does not repay) and a bare ts/tsx split (two piles say nothing about
 what a file is for).
 
-## 2026-08-19 - the public face of the plan is ROADMAP.md; TZ.md keeps its name
+## 2026-08-19 - the specification is SPEC.md after all
+
+The price the entry below refused to pay came to one pass of a replacement:
+nine links and seventy-eight citations of the form "TZ §4" across thirty-nine
+files, mechanical to the last one and covered by the test suite. "TZ" is
+"техническое задание" written in Latin letters - the last thing in the
+repository that its own rule about language forbids, and a name a reader
+outside Russian cannot decode. The file has called itself "Specification" in
+its first line from the very start; now the name says the same.
+
+Rejected: `REQUIREMENTS.md` - it reads worse where the file is quoted most,
+inside a comment: "SPEC §4" fits the line, "REQUIREMENTS §4" does not.
+
+## 2026-08-19 - the public face of the plan is ROADMAP.md
 
 An English reader now gets a checkbox roadmap (`ROADMAP.md`) instead of being
-sent to `TZ.md`, whose name says nothing outside Russian. Renaming `TZ.md`
-itself was rejected: some thirty files cite it as "TZ §n", and a rename would
-buy a clearer filename at the price of touching them all. The README links it
-as "the specification" instead, which does the same job for the reader.
+sent to the specification, whose name at the time - `TZ.md` - said nothing
+outside Russian. Renaming the file itself was rejected here: some thirty files
+cite it as "TZ §n", and a rename would buy a clearer filename at the price of
+touching them all. The README links it as "the specification" instead, which
+does the same job for the reader. (The rename happened anyway - see above.)
 
 ## 2026-08-19 - the ring compresses its shares: square roots and a floor sliver
 
@@ -55,7 +85,7 @@ notifier threshold and the tray read the minute entry.
 Rejected: an even shorter rectangular window (twitchy, not car-like); smoothing
 the needle in the frontend only (the caption would lie about what the number
 means); dropping the 1m/5m/60m windows from the API (the notifier and the tray
-consume 1m, and TZ §4 names them).
+consume 1m, and SPEC §4 names them).
 
 ## 2026-08-19 - a widget's height follows its content until a hand touches it
 
@@ -127,12 +157,12 @@ to divide 190 by 232 to see the hub in `81.9%`).
 
 ## 2026-08-18 - CLAUDE.md keeps the core, the area knowledge moves to path-scoped rules
 
-`CLAUDE.md` had grown to 410 lines and, together with the imported `TZ.md`,
+`CLAUDE.md` had grown to 410 lines and, together with the imported `SPEC.md`,
 loaded whole into every session. Now it keeps only what applies everywhere -
 the stack, the structure, the global invariants and the conventions - and the
 area knowledge (the transcript format, OTel, the advisor contract, the desktop
 and the rest) lives in `.claude/rules/*.md` with `paths:` frontmatter, so a
-rule enters the context only when the matching files are touched. The `@TZ.md`
+rule enters the context only when the matching files are touched. The `@SPEC.md`
 import became a plain mention for the same reason: the spec is read when a
 requirement is in question, not at every start.
 
