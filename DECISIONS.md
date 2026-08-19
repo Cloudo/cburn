@@ -4,6 +4,14 @@ Why things are the way they are: the option taken, the options rejected and the
 reason. Newest first. Things visible from the code and the git history do not
 belong here; neither do the invariants, which live in `CLAUDE.md`.
 
+## 2026-08-19 - the public face of the plan is ROADMAP.md; TZ.md keeps its name
+
+An English reader now gets a checkbox roadmap (`ROADMAP.md`) instead of being
+sent to `TZ.md`, whose name says nothing outside Russian. Renaming `TZ.md`
+itself was rejected: some thirty files cite it as "TZ §n", and a rename would
+buy a clearer filename at the price of touching them all. The README links it
+as "the specification" instead, which does the same job for the reader.
+
 ## 2026-08-19 - the ring compresses its shares: square roots and a floor sliver
 
 Cache reads outrun the other parts by two orders of magnitude, so honest shares

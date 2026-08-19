@@ -54,7 +54,8 @@ rollback.
 
 A bare `make` prints the whole toolbox: the checks (`make check` before every
 commit), the hot-reload frontend, the desktop window, the telemetry receiver.
-The full specification lives in [TZ.md](TZ.md).
+What is done and what lies ahead is in the [roadmap](ROADMAP.md), and every
+requirement in detail is in the [specification](TZ.md).
 
 ## License
 
