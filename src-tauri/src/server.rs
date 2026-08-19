@@ -16,14 +16,14 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
-use crate::tray::DASHBOARD;
+use crate::tray::dashboard;
 
 /// How long to wait for the server answer before deciding it is absent.
 const PROBE_TIMEOUT: Duration = Duration::from_millis(700);
 
 /// Whether the server is running right now.
 pub fn is_running() -> bool {
-    ureq::get(&format!("{DASHBOARD}/api/health"))
+    ureq::get(&format!("{}/api/health", dashboard()))
         .timeout(PROBE_TIMEOUT)
         .call()
         .is_ok()

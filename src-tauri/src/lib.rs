@@ -48,6 +48,17 @@ pub fn run() {
                 log::info!("dashboard server started: {}", path.display());
             }
             tray::setup(app.handle())?;
+            // `CBURN_PORT` points the application at another instance (the demo dataset),
+            // while the window URL is baked to the real port at build time - so the
+            // window is sent to the right address here, at start.
+            if std::env::var("CBURN_PORT").is_ok() {
+                use tauri::Manager;
+                if let Some(window) = app.get_webview_window("main") {
+                    if let Ok(url) = format!("{}/", tray::dashboard()).parse() {
+                        let _ = window.navigate(url);
+                    }
+                }
+            }
             Ok(())
         })
         .run(tauri::generate_context!())

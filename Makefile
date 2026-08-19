@@ -13,7 +13,7 @@ CARGO := $(HOME)/.cargo/bin
 
 .DEFAULT_GOAL := help
 .PHONY: help install venv check test test-real lint format types web dev serve restart \
-        reindex paths stats otel desktop desktop-build clean demo demo-tick
+        reindex paths stats otel desktop desktop-build clean demo demo-tick demo-app
 
 DEMO_ROOT := $(HOME)/.local/share/cburn-demo
 DEMO_ENV := CLAUDE_CONFIG_DIR=$(DEMO_ROOT)/claude CBURN_CONFIG=$(DEMO_ROOT)/config.toml \
@@ -80,6 +80,9 @@ demo: ## generate the demo dataset and serve it on http://127.0.0.1:8798
 
 demo-tick: ## refresh the demo's live sessions (right before a screenshot)
 	$(PY) tools/demo_data.py --root $(DEMO_ROOT) --tick
+
+demo-app: ## the tauri app on the demo dataset; the real dashboard keeps :8799
+	tools/demo-app.sh
 
 desktop: ## the desktop window with hot reload: vite for the page, cargo for the Rust
 	PATH="$(CARGO):$$PATH" npm run desktop

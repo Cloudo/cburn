@@ -16,6 +16,12 @@ paths:
   with relative paths (`api/overview`); from `tauri://` they would go nowhere,
   so `frontendDist` points at `http://127.0.0.1:8799`. Thanks to that the
   frontend did not change by a single line for M5 - the acceptance criterion is met literally.
+- **`CBURN_PORT` re-points the whole application at another instance.** The window URL is
+  baked to `http://127.0.0.1:8799` at build time, so at start the window is navigated to
+  the env port, and the tray poll, the pause POST and the health check follow the same
+  address (`dashboard()` in `tray.rs`). `make demo-app` rests on it: the demo server takes
+  :8798 and the real dashboard is left alone. The single-instance guard still holds - the
+  script quits a running copy first, two applications at once are not possible.
 - **The tray counts nothing itself:** every five seconds it takes `/api/overview`, and the
   alert threshold comes from `/api/config`, so that it obeys the same number that is edited
   in "Settings". The polling lives in its own thread: the menu bar lives without the window.

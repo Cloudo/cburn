@@ -28,8 +28,19 @@ use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindowBuilder};
 
 use crate::dict::{t, tf, Lang};
 
-/// The dashboard address: the same one that opens in a browser.
-pub const DASHBOARD: &str = "http://127.0.0.1:8799";
+/// The dashboard address: the same one that opens in a browser. `CBURN_PORT` points the
+/// whole application - the window, the tray poll, the health check - at another instance
+/// (the demo dataset first of all); the built-in default is the real port.
+pub fn dashboard() -> &'static str {
+    static URL: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    URL.get_or_init(|| {
+        let port = std::env::var("CBURN_PORT")
+            .ok()
+            .and_then(|value| value.parse::<u16>().ok())
+            .unwrap_or(8799);
+        format!("http://127.0.0.1:{port}")
+    })
+}
 
 /// How often to ask for the overview. An instrument in the menu bar is no stopwatch: five
 /// seconds is enough for the figure to look alive, and it is four times cheaper than the frontend tick.
@@ -336,7 +347,8 @@ fn on_menu<R: Runtime>(
             // The same pause goes to the server too: it silences not only the red dot
             // in the menu bar but also the telegram messages (D5).
             let _ = ureq::post(&format!(
-                "{DASHBOARD}/api/notify/pause?on={}",
+                "{}/api/notify/pause?on={}",
+                dashboard(),
                 if quiet { "false" } else { "true" }
             ))
             .timeout(Duration::from_secs(3))
@@ -399,7 +411,7 @@ fn relabel<R: Runtime>(app: &AppHandle<R>, state: &Arc<State>, items: &Items<R>,
 /// Show the dashboard: an open window is raised, otherwise it is created anew.
 /// A second launch of the application ends up here as well - instead of its own window.
 pub fn show_dashboard<R: Runtime>(app: &AppHandle<R>, hash: &str) {
-    let url = format!("{DASHBOARD}/{hash}");
+    let url = format!("{}/{hash}", dashboard());
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.set_focus();
@@ -421,7 +433,7 @@ pub fn show_dashboard<R: Runtime>(app: &AppHandle<R>, hash: &str) {
 /// The alert threshold from the dashboard config: keeping a copy of it in the tray is not
 /// allowed - a human edits the thresholds in "Settings", and the tray must obey that same number.
 fn warn_threshold() -> f64 {
-    ureq::get(&format!("{DASHBOARD}/api/config"))
+    ureq::get(&format!("{}/api/config", dashboard()))
         .timeout(Duration::from_secs(3))
         .call()
         .ok()
@@ -435,7 +447,7 @@ fn warn_threshold() -> f64 {
 }
 
 fn fetch_overview() -> Result<serde_json::Value, String> {
-    let response = ureq::get(&format!("{DASHBOARD}/api/overview"))
+    let response = ureq::get(&format!("{}/api/overview", dashboard()))
         .timeout(Duration::from_secs(3))
         .call()
         .map_err(|error| error.to_string())?;
