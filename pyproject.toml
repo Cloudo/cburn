@@ -1,6 +1,6 @@
 [project]
 name = "cburn"
-version = "0.1.1"
+version = "0.1.2"
 description = "A Claude speedometer: a local dashboard of token spend across every Claude Code session"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -30,6 +30,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/cburn"]
+# The built frontend is ignored by git (the release workflow puts it there), and hatchling
+# skips what the vcs ignores - so it has to be named as an artifact, or the wheel ships
+# without a dashboard.
+artifacts = ["src/cburn/web_dist/**"]
 
 [tool.ruff]
 line-length = 100

@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "cburn",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "identifier": "com.cloudo.cburn",
   "build": {
     "frontendDist": "http://127.0.0.1:8799",
