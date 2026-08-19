@@ -1,9 +1,10 @@
-// The spend instrument. The scale is logarithmic: the burn rate of a live machine roams
-// from thousands to tens of millions of tokens per minute, and on a linear scale the
-// needle either lies at zero or hits the stop.
+// The spend instrument. The scale is compressed: the burn rate of a live machine roams from
+// thousands to tens of millions of tokens per minute, and on a linear scale the needle
+// either lies at zero or hits the stop.
 //
 // The ring under the scale is split into shares of the parts: cache reads are usually two
-// orders of magnitude larger than the rest, and without the split the instrument would
+// orders of magnitude larger than the rest, and without the split the instrument would show
+// one colour and nothing else.
 
 import { useState, type MouseEvent } from "react";
 
@@ -12,37 +13,17 @@ import { useLang } from "./i18n";
 
 export type Slice = { key: string; label: string; value: number; color: string };
 
-// The decades carry the numbers, and the halves between them are strokes only: a whole
-// decade between the marks leaves too much to the eye, while five more numbers around the
-// arc would crowd it. A number is written at the topmost half alone - the stretch the
-// needle lives on.
-//
-// The shape of the scale is a matter of taste, so it is chosen in the widget header rather
-// than settled here. Three things differ: the floor of the range, where inside a decade the
-// halves stand, and whether the curve is a plain logarithm or a gentler power. A five sits
-// at 70% of a decade rather than in its middle, so on a logarithm 5 M crowds against 10 M;
-// the middle of a decade is the root of ten, and a three lands all but exactly there. The
-// power softens the top at the cost of the bottom - it is kept to be looked at, not
-// because it reads better.
-export type ScaleShape = "1k-5" | "1k-3" | "10k-5" | "10k-3" | "power";
+// The scale is a gentle power rather than a plain logarithm. On a logarithm a five sits at
+// 70% of its decade instead of in the middle, so 5 M pressed against 10 M - and the top of
+// the arc is exactly where a working machine keeps the needle. The exponent is low enough
+// to hold four orders of magnitude on one semicircle and high enough to open the top up.
+const MIN = 1_000;
+const MAX = 10_000_000;
+const CURVE = 0.15;
 
-const SHAPES: Record<
-  ScaleShape,
-  { label: string; decades: number[]; half: number; power: number | null }
-> = {
-  "1k-5": { label: "1K/5", decades: [3, 4, 5, 6, 7], half: 5, power: null },
-  "1k-3": { label: "1K/3", decades: [3, 4, 5, 6, 7], half: 3, power: null },
-  "10k-5": { label: "10K/5", decades: [4, 5, 6, 7], half: 5, power: null },
-  "10k-3": { label: "10K/3", decades: [4, 5, 6, 7], half: 3, power: null },
-  power: { label: "pow", decades: [3, 4, 5, 6, 7], half: 5, power: 0.15 },
-};
-
-export const SCALE_SHAPES = Object.keys(SHAPES) as ScaleShape[];
-export const DEFAULT_SHAPE: ScaleShape = "1k-5";
-
-export function shapeLabel(shape: ScaleShape): string {
-  return SHAPES[shape].label;
-}
+// The decades carry the numbers, and 5 M stands among them: between a million and ten the
+// needle would otherwise be read by guessing.
+const MARKS = [1e3, 1e4, 1e5, 1e6, 5e6, 1e7];
 
 const CX = 200;
 const CY = 190;
@@ -75,37 +56,18 @@ function ringSegment(from: number, to: number): string {
   ].join(" ");
 }
 
-type Scale = {
-  decades: number[];
-  halves: number[];
-  /** the only half that carries a number: the one in the topmost decade */
-  labelled: number;
-  /** the position of a value on the scale, 0...1 */
-  position: (value: number) => number;
-};
-
-function scaleOf(shape: ScaleShape): Scale {
-  const { decades, half, power } = SHAPES[shape];
-  const min = 10 ** decades[0];
-  const max = 10 ** decades[decades.length - 1];
-  const position = (value: number) => {
-    if (value <= min) return 0;
-    if (value >= max) return 1;
-    if (power === null) {
-      return (Math.log10(value) - Math.log10(min)) / (Math.log10(max) - Math.log10(min));
-    }
-    return (value ** power - min ** power) / (max ** power - min ** power);
-  };
-  const halves = decades.slice(0, -1).map((decade) => half * 10 ** decade);
-  return { decades, halves, labelled: halves[halves.length - 1], position };
+/** The position of a value on the scale, 0...1. */
+export function scalePosition(value: number): number {
+  if (value <= MIN) return 0;
+  if (value >= MAX) return 1;
+  return (value ** CURVE - MIN ** CURVE) / (MAX ** CURVE - MIN ** CURVE);
 }
 
-type Props = { value: number; slices: Slice[]; caption: string; shape: ScaleShape };
+type Props = { value: number; slices: Slice[]; caption: string };
 
-export function Gauge({ value, slices, caption, shape }: Props) {
+export function Gauge({ value, slices, caption }: Props) {
   const { t } = useLang();
-  const scale = scaleOf(shape);
-  const position = scale.position(value);
+  const position = scalePosition(value);
   const total = slices.reduce((sum, slice) => sum + slice.value, 0);
 
   let cursor = 0;
@@ -133,38 +95,19 @@ export function Gauge({ value, slices, caption, shape }: Props) {
             </path>
           ))}
 
-        {scale.decades.map((decade, index) => {
-          const fraction = scale.position(10 ** decade);
+        {MARKS.map((mark, index) => {
+          const fraction = scalePosition(mark);
           const outer = polar(R_SCALE, fraction);
           const inner = polar(R_SCALE - 14, fraction);
           // The outermost labels press against the arc ends, so we push them deeper.
-          const edge = index === 0 || index === scale.decades.length - 1;
+          const edge = index === 0 || index === MARKS.length - 1;
           const label = polar(R_SCALE - (edge ? 52 : 32), fraction);
           return (
-            <g key={decade} className="gauge-tick">
+            <g key={mark} className="gauge-tick">
               <line x1={outer.x} y1={outer.y} x2={inner.x} y2={inner.y} />
               <text x={label.x} y={label.y} dominantBaseline="middle" textAnchor="middle">
-                {compact(10 ** decade)}
+                {compact(mark)}
               </text>
-            </g>
-          );
-        })}
-
-        {scale.halves.map((value) => {
-          const fraction = scale.position(value);
-          const outer = polar(R_SCALE, fraction);
-          const inner = polar(R_SCALE - 11, fraction);
-          // The signed half stands near the end of the arc, so its number is pushed as deep
-          // as the number of the end itself - otherwise it sticks out of the ring.
-          const label = value === scale.labelled ? polar(R_SCALE - 44, fraction) : null;
-          return (
-            <g key={value} className="gauge-tick gauge-tick-half">
-              <line x1={outer.x} y1={outer.y} x2={inner.x} y2={inner.y} />
-              {label && (
-                <text x={label.x} y={label.y} dominantBaseline="middle" textAnchor="middle">
-                  {compact(value)}
-                </text>
-              )}
             </g>
           );
         })}

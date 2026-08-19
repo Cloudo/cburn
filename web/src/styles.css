@@ -455,22 +455,6 @@ main.empty {
   font-size: 11px;
 }
 
-/* the second picker of the same header stands apart from the first */
-.scale-picker {
-  margin-left: 10px;
-  padding-left: 10px;
-  border-left: 1px solid var(--line);
-}
-
-/* the halves are shorter and paler: the decades stay the marks that are read */
-.gauge-tick-half line {
-  opacity: 0.7;
-}
-
-.gauge-tick-half text {
-  font-size: 10px;
-}
-
 .gauge-needle {
   /* The pivot is the hub, and the group has already put it at the local zero. A zero is the
      one length the interface zoom cannot spoil. */

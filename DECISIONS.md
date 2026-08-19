@@ -21,6 +21,25 @@ single widget would freeze all ten); inferring "touched" by comparing the saved
 layout against the default (react-grid-layout saves a layout on the very first
 mount, so a saved layout proves nothing about hands).
 
+## 2026-08-19 - the instrument scale is a power, not a logarithm
+
+Four orders of magnitude have to fit on one semicircle, so the scale has to be
+compressed - but a plain logarithm gives every decade the same quarter of the arc,
+and the needle of a working machine lives in the top one. A five sits at 70% of its
+decade rather than in the middle, so 5 M pressed against 10 M with 13 degrees between
+them. The curve is now `value ** 0.15`, normalised over 1 K...10 M: the top decade
+takes 70 degrees instead of 45, and 5 M stands 24 degrees off the end. It is written
+as a number of its own next to the decades - between a million and ten the needle
+would otherwise be read by guessing.
+
+Rejected: marks at the root of ten (3 K, 30 K, 300 K, 3 M land almost exactly in the
+middle of a decade and space out evenly, but the numbers a person names are fives and
+tens, not threes); cutting the range to 10 K...10 M (widens every decade to 60 degrees
+and costs the whole bottom one); pale half-marks between the decades (tried and taken
+away - the eye counts the marks it can read, and grey strokes only litter the dial).
+All the variants were built behind a picker in the widget header and looked at side by
+side; the picker went away with the choice made.
+
 ## 2026-08-18 - the needle turns around a zero, not around a pixel
 
 The instrument needle rotated about `transform-origin: 200px 190px`, the hub in

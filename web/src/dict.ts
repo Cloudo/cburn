@@ -33,27 +33,6 @@ const DICT: Record<string, [string, string]> = {
   "app.zoom.out": ["мельче", "smaller"],
   "app.zoom.reset": ["обычный масштаб", "normal scale"],
 
-  "scale.picker": ["шкала прибора", "the instrument scale"],
-  "scale.1k-5": [
-    "1 K...10 M, половинки на пятёрках",
-    "1 K...10 M, the halves on the fives",
-  ],
-  "scale.1k-3": [
-    "1 K...10 M, половинки на тройках: середина декады",
-    "1 K...10 M, the halves on the threes: the middle of a decade",
-  ],
-  "scale.10k-5": [
-    "10 K...10 M, половинки на пятёрках: декада шире",
-    "10 K...10 M, the halves on the fives: a wider decade",
-  ],
-  "scale.10k-3": [
-    "10 K...10 M, половинки на тройках: отметки почти вровень",
-    "10 K...10 M, the halves on the threes: all but even marks",
-  ],
-  "scale.power": [
-    "степенная вместо логарифма: верх шире, низ теснее",
-    "a power instead of a logarithm: a wider top, a tighter bottom",
-  ],
   "window.10s": ["10 секунд", "10 seconds"],
   "window.1m": ["минута", "minute"],
   "window.5m": ["5 минут", "5 minutes"],
