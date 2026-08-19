@@ -1,0 +1,4 @@
+# The pictures of the readme and the recording have no business in a release archive:
+# the formula installs the python package and the built frontend, and none of this is
+# needed either to run or to build. Six megabytes of the first ten were exactly this.
+media/ export-ignore
