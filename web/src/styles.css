@@ -61,6 +61,12 @@ main {
   gap: 16px;
 }
 
+/* the widget grid divides the width into column shares, so the dashboard
+   is allowed to take the whole screen; text screens keep the cap */
+main.wide {
+  max-width: none;
+}
+
 main.empty {
   min-height: 60vh;
   align-items: center;

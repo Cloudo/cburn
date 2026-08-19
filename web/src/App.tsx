@@ -100,7 +100,7 @@ export default function App() {
   const ago = updatedAt ? (Date.now() - updatedAt) / 1000 : 0;
 
   return (
-    <main>
+    <main className={screen === "" ? "wide" : undefined}>
       <header className="masthead">
         <div className="brand">
           <span className="brand-name">
@@ -398,7 +398,7 @@ function TodayWidget({ data }: { data: Overview }) {
           <dt>{t("today.cacheWrite")}</dt>
           <dd>{grouped(data.today.cache_write)}</dd>
         </div>
-        {/* The rate is the subscription one: this is not a bill but "what it would cost over the API" (TZ §4). */}
+        {/* The rate is the subscription one: this is not a bill but "what it would cost over the API" (SPEC §4). */}
         <div className="today-wide">
           <dt>{t("today.cost")}</dt>
           <dd>{usd(data.today.cost_usd)}</dd>
