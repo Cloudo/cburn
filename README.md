@@ -37,8 +37,8 @@ Everything happens locally: the transcripts are read straight from
   <img src="docs/advice.png" alt="the advice screen" width="49%" />
 </p>
 <p align="center">
-  <sub>All screenshots show a synthetic demo dataset - <code>make demo</code> generates it
-  and serves a second dashboard without touching the real database.</sub>
+  <sub>The session and advice screens show a synthetic demo dataset - <code>make demo</code>
+  generates it and serves a second dashboard without touching the real database.</sub>
 </p>
 
 ## Quick start
