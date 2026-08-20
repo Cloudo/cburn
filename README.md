@@ -5,7 +5,7 @@
 <h1 align="center">cburn</h1>
 
 <p align="center">
-  Watches what Claude Code spends on this machine and says what to change about it.
+  <b>Claude burns. cburn watches.</b>
 </p>
 
 <p align="center">
