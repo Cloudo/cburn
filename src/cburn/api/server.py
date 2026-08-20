@@ -55,6 +55,7 @@ from ..metrics import (
     set_hidden,
 )
 from ..processes import live_state, process_for_session, terminate
+from ..selfstat import SelfStat
 
 log = logging.getLogger(__name__)
 
@@ -142,6 +143,9 @@ def create_app(
     events: asyncio.Queue[IngestStats] = asyncio.Queue()
     # Limits live apart from the database: they come from Anthropic, not from transcripts.
     plan_limits = limits or LimitsWatcher()
+    # What cburn costs itself. Kept for the life of the server: the CPU share is the
+    # difference between two polls, and there is nothing to subtract from on the first.
+    own_cost = SelfStat()
 
     def open_db() -> Any:
         return connect(db_path, apply_schema=False)
@@ -597,6 +601,11 @@ def create_app(
     @app.get("/api/health")
     async def api_health() -> dict[str, Any]:
         return {"ok": True, "clients": hub.size, "now": datetime.now(UTC).isoformat()}
+
+    @app.get("/api/self")
+    async def api_self() -> dict[str, Any]:
+        """What cburn itself is eating. Asked for by the development build alone."""
+        return await asyncio.to_thread(own_cost.read)
 
     @app.websocket("/ws")
     async def ws(socket: WebSocket) -> None:

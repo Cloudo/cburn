@@ -441,6 +441,19 @@ export type Config = {
 };
 
 /** Settings exactly as they sit in the file (the "Settings" screen, task C3). */
+/** What cburn costs itself: the development build shows it, the built one never asks. */
+export type SelfCost = {
+  server: { pid: number; cpu_percent: number | null; rss_mb: number };
+  app: { pid: number; cpu_percent: number; rss_mb: number } | null;
+  window_seconds: number;
+};
+
+export async function loadSelfCost(): Promise<SelfCost> {
+  const response = await fetch("api/self");
+  if (!response.ok) throw new Error(fail("error.selfCost", response.status));
+  return response.json();
+}
+
 export async function loadConfig(): Promise<{ config: Config; path: string }> {
   const response = await fetch("api/config");
   if (!response.ok) throw new Error(fail("error.configRead", response.status));

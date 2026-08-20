@@ -216,6 +216,21 @@ def test_first_run_is_silent_when_there_is_data(transcripts: Path, db_path: Path
     assert data["first_run"]["kind"] == "ok"
 
 
+def test_self_cost_needs_two_polls_for_a_share(db_path: Path, transcripts: Path) -> None:
+    """The CPU share is the difference between two polls; the first one has nothing to
+    subtract from and says so instead of inventing a number."""
+    with client(db_path, transcripts) as api:
+        first = api.get("/api/self").json()
+        second = api.get("/api/self").json()
+
+    assert first["server"]["cpu_percent"] is None
+    assert first["server"]["rss_mb"] > 0, "the server does occupy memory"
+    assert second["server"]["cpu_percent"] is not None
+    assert second["server"]["cpu_percent"] >= 0
+    assert second["window_seconds"] > 0
+    assert first["server"]["pid"] == second["server"]["pid"]
+
+
 def test_burn_rate_is_per_minute(transcripts: Path, db_path: Path) -> None:
     """The 5-minute window divides by 5 - otherwise the needle lies fivefold."""
     now = datetime.now(UTC)

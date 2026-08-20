@@ -412,6 +412,34 @@ main.empty {
   line-height: 1.5;
 }
 
+/* the cost of cburn itself: a dev-only readout, quiet enough to forget and legible
+   enough to catch a burst out of the corner of an eye */
+.self-cost {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 10px;
+  border-left: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.self-cost-part {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.self-cost-name {
+  color: var(--text-dim);
+  opacity: 0.7;
+}
+
+.self-cost-ram {
+  color: var(--text-dim);
+}
+
 /* --- the instrument --- */
 
 .gauge {

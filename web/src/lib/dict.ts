@@ -31,6 +31,10 @@ const DICT: Record<string, [string, string]> = {
     "История есть, но ещё не прочитана. Запустите `cburn reindex` - это делается один раз, дальше cburn следит за файлами сам.",
     "The history is there and has not been read yet. Run `cburn reindex` once; after that cburn follows the files by itself.",
   ],
+  "self.hint": [
+    "сколько ест сам cburn: сервер и, если запущено, окно приложения. Видно только в дев-сборке.",
+    "what cburn itself is eating: the server and, if it runs, the application window. The development build only.",
+  ],
   "app.noConnection": ["нет связи с cburn serve", "no connection to cburn serve"],
   "app.connecting": ["подключаюсь…", "connecting…"],
   "live.help.open": ["что показывают эти значки", "what these marks mean"],
@@ -545,6 +549,7 @@ const DICT: Record<string, [string, string]> = {
   "error.sessionClose": ["не удалось закрыть сессию: {status}", "could not close the session: {status}"],
   "error.sessionHide": ["не удалось убрать сессию: {status}", "could not hide the session: {status}"],
   "error.limitsRefresh": ["не удалось обновить лимиты: {status}", "could not refresh the limits: {status}"],
+  "error.selfCost": ["не вышло спросить о расходе самого cburn", "could not ask what cburn itself costs"],
   "error.configRead": ["не удалось прочитать настройки: {status}", "could not read the settings: {status}"],
   "error.adviceStatus": ["не удалось сохранить статус: {status}", "could not save the status: {status}"],
   "error.overviewRefresh": ["не удалось обновить обзор: {status}", "could not refresh the overview: {status}"],

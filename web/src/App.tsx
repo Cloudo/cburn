@@ -10,6 +10,7 @@ import { Settings } from "./screens/Settings";
 import { useLang } from "./lib/i18n";
 import { ThemePicker } from "./components/ThemePicker";
 import { LiveHelp } from "./components/Help";
+import { SelfCost } from "./components/SelfCost";
 import { STATUSES, StatusHelp, statusTitle } from "./components/StatusHelp";
 import { useZoom } from "./lib/zoom";
 import {
@@ -162,6 +163,8 @@ export default function App() {
               +
             </button>
           </div>
+          {/* The cost of cburn itself, in the development build alone. */}
+          {import.meta.env.DEV && <SelfCost />}
         </div>
       </header>
 
