@@ -399,6 +399,19 @@ main.empty {
   outline-offset: 2px;
 }
 
+/* the reason an empty dashboard is empty: one line above the widgets, quiet but not
+   hidden - it is the only thing on the page that explains the zeros */
+.first-run {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 /* --- the instrument --- */
 
 .gauge {

@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from . import paths
+
 
 @dataclass(frozen=True)
 class SessionSummary:
@@ -1567,7 +1569,33 @@ def overview(
         "advisor": advisor_cost(conn, day_start),
         "series_bucket_seconds": SERIES_BUCKET_SECONDS,
         "totals": dict(totals),
+        # An empty dashboard explains itself: without this all three reasons look alike.
+        "first_run": first_run(conn),
     }
+
+
+def first_run(conn: sqlite3.Connection) -> dict[str, str | None]:
+    """Why the dashboard is empty, when it is (SPEC §5).
+
+    Zeros everywhere have three different causes and three different cures, and a person
+    who has just installed cburn cannot tell them apart: the widgets all say the same
+    polite "nothing yet". The kind is decided here and the words are the frontend's, as
+    always. `ok` means there is data and there is nothing to explain.
+    """
+    turns = conn.execute("SELECT COUNT(*) FROM turns").fetchone()[0]
+    if turns:
+        return {"kind": "ok", "transcripts": None}
+
+    transcripts = paths.CLAUDE_PROJECTS_DIR
+    if not transcripts.is_dir():
+        # Claude Code is not installed, or it keeps its directory elsewhere.
+        return {"kind": "no_claude", "transcripts": str(transcripts)}
+    # One file is enough to tell "there is history" from "there is none": the tree can
+    # hold hundreds of megabytes, and counting it all here would be paid for on a page
+    # that is only ever shown when the base is empty anyway.
+    has_history = next(transcripts.rglob("*.jsonl"), None) is not None
+    kind = "not_indexed" if has_history else "no_history"
+    return {"kind": kind, "transcripts": str(transcripts)}
 
 
 def data_stamps(conn: sqlite3.Connection, now: datetime) -> dict[str, str | None]:

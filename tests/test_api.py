@@ -183,6 +183,39 @@ def test_overview_on_empty_db(db_path: Path, transcripts: Path) -> None:
     assert data["live_sessions"] == []
 
 
+def test_first_run_tells_the_three_reasons(
+    db_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Zeros everywhere have three causes, and each has its own cure."""
+    from cburn import db as db_module
+    from cburn import metrics, paths
+
+    conn = db_module.connect(db_path)
+
+    missing = tmp_path / "nowhere" / "projects"
+    monkeypatch.setattr(paths, "CLAUDE_PROJECTS_DIR", missing)
+    assert metrics.first_run(conn)["kind"] == "no_claude"
+
+    empty = tmp_path / "claude" / "projects"
+    empty.mkdir(parents=True)
+    monkeypatch.setattr(paths, "CLAUDE_PROJECTS_DIR", empty)
+    assert metrics.first_run(conn)["kind"] == "no_history"
+
+    (empty / "project").mkdir()
+    (empty / "project" / "session.jsonl").write_text("{}\n", encoding="utf-8")
+    assert metrics.first_run(conn)["kind"] == "not_indexed"
+    assert metrics.first_run(conn)["transcripts"] == str(empty)
+    conn.close()
+
+
+def test_first_run_is_silent_when_there_is_data(transcripts: Path, db_path: Path) -> None:
+    """With turns in the base there is nothing to explain."""
+    seed(transcripts, db_path, [assistant("msg_1", ts=datetime.now(UTC), output=10)])
+    with client(db_path, transcripts) as api:
+        data = api.get("/api/overview").json()
+    assert data["first_run"]["kind"] == "ok"
+
+
 def test_burn_rate_is_per_minute(transcripts: Path, db_path: Path) -> None:
     """The 5-minute window divides by 5 - otherwise the needle lies fivefold."""
     now = datetime.now(UTC)

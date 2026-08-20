@@ -238,6 +238,11 @@ export type Overview = {
     by_kind: Array<{ kind: string; ticks: number; cost_usd: number }>;
   };
   pending_sessions: string[];
+  /** Why the dashboard is empty, when it is: the words are built by `dict.ts`. */
+  first_run: {
+    kind: "ok" | "no_claude" | "no_history" | "not_indexed";
+    transcripts: string | null;
+  };
 };
 
 /** Ask for the subscription limits at once: the overview caches them for five minutes. */

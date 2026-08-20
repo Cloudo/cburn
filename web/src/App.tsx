@@ -84,6 +84,14 @@ function useScreen(): string {
 
 const SCREENS = ["", "sessions", "advice", "settings"];
 
+//: The reason an empty dashboard is empty, as the server names it, and the dictionary key
+//: that explains it. The words are the interface's, the kind is the server's.
+const FIRST_RUN_KEYS: Record<string, string> = {
+  no_claude: "noClaude",
+  no_history: "noHistory",
+  not_indexed: "notIndexed",
+};
+
 export default function App() {
   const { t } = useLang();
   const { zoom, zoomIn, zoomOut, reset: resetZoom } = useZoom();
@@ -166,7 +174,19 @@ export default function App() {
       ) : screen === "sessions" ? (
         <Sessions />
       ) : data ? (
-        <Dashboard widgets={buildWidgets(data, refresh, burnWindow, setBurnWindow, t)} />
+        <>
+          {/* Zeros in every widget have three different causes and one cure each; the
+              widgets all say the same polite "nothing yet", so the reason is said once,
+              above them. */}
+          {data.first_run.kind !== "ok" && (
+            <p className="first-run">
+              {t(`start.${FIRST_RUN_KEYS[data.first_run.kind]}`, {
+                path: data.first_run.transcripts ?? "",
+              })}
+            </p>
+          )}
+          <Dashboard widgets={buildWidgets(data, refresh, burnWindow, setBurnWindow, t)} />
+        </>
       ) : (
         <p className="empty-note">
           {connection === "offline" ? t("app.noConnection") : t("app.connecting")}

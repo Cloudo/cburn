@@ -113,7 +113,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "paths":
         cfg = config.load()
-        print(f"transcripts : {paths.CLAUDE_PROJECTS_DIR} (read-only)")
+        # A missing directory is the usual reason for an empty dashboard, and printing
+        # the path in silence tells nobody that there is nothing at the end of it.
+        state = "read-only" if paths.CLAUDE_PROJECTS_DIR.is_dir() else "NOT FOUND"
+        print(f"transcripts : {paths.CLAUDE_PROJECTS_DIR} ({state})")
         print(f"config      : {paths.CONFIG_PATH}")
         print(f"database    : {paths.DB_PATH}")
         print(f"port        : {cfg['server']['port']}")

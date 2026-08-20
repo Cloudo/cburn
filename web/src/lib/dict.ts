@@ -19,6 +19,18 @@ const DICT: Record<string, [string, string]> = {
   "app.working": ["идёт запрос", "request running"],
   "app.live": ["живые данные", "live data"],
   "app.offline": ["нет связи", "offline"],
+  "start.noClaude": [
+    "Транскриптов Claude Code нет. cburn смотрел в {path} - если Claude Code держит их в другом месте, укажите каталог в CLAUDE_CONFIG_DIR.",
+    "No Claude Code transcripts. cburn looked in {path} - if Claude Code keeps them elsewhere, point CLAUDE_CONFIG_DIR at that directory.",
+  ],
+  "start.noHistory": [
+    "Claude Code найден, но сессий в нём ещё не было. Поработайте с ним - стрелка тронется через секунду после первого ответа.",
+    "Claude Code is there, but it has no sessions yet. Work with it: the needle moves within a second of the first answer.",
+  ],
+  "start.notIndexed": [
+    "История есть, но ещё не прочитана. Запустите `cburn reindex` - это делается один раз, дальше cburn следит за файлами сам.",
+    "The history is there and has not been read yet. Run `cburn reindex` once; after that cburn follows the files by itself.",
+  ],
   "app.noConnection": ["нет связи с cburn serve", "no connection to cburn serve"],
   "app.connecting": ["подключаюсь…", "connecting…"],
   "live.help.open": ["что показывают эти значки", "what these marks mean"],
