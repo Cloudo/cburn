@@ -4,6 +4,24 @@ Why things are the way they are: the option taken, the options rejected and the
 reason. Newest first. Things visible from the code and the git history do not
 belong here; neither do the invariants, which live in `CLAUDE.md`.
 
+## 2026-08-20 - the digest counts, the model formulates
+
+Three new detectors raised the question of where a tip is born. A rule in Python can
+carry its own wording - cheaper by a whole call, and the answer is instant. It was
+rejected: a rule says the same sentence to everyone forever, and the tips that are worth
+reading are the ones that put two numbers side by side ("the cache is rewritten on every
+turn of the long sessions" is not a threshold, it is a reading of the digest as a whole).
+
+So the division stays as it was. The digest counts and says nothing: `cache` weighs what
+the five-minute writes came to, `compaction` weighs what the turn after a squeeze cost,
+`subagents` weighs the share of the sidechains. The prompt explains what each number
+means and where the line is - including the traps: the hour-long cache is not a blind
+answer, and a compaction is normal work rather than a fault. What sentence to say is the
+model's business, and it says it in the language of the person reading.
+
+The price is one call an hour, which is already paid. The gain is that a new detector is
+a query and a paragraph rather than a set of thresholds nobody dares to change.
+
 ## 2026-08-20 - no alert mark in the menu bar
 
 SPEC asked for a red dot on an active alert, but macOS draws the tray title
