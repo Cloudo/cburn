@@ -8,8 +8,8 @@ class Cburn < Formula
 
   desc "Local speedometer for Claude Code token spend"
   homepage "https://github.com/cloudo/cburn"
-  url "https://github.com/cloudo/cburn/releases/download/v0.1.0/cburn-0.1.0.tar.gz"
-  sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+  url "https://github.com/cloudo/cburn/releases/download/v0.1.2/cburn-0.1.2.tar.gz"
+  sha256 "18c965c57a61cc2df38760f7202f1c056cc9ca940a23036d2dc188d856ec92fd"
   license "MIT"
 
   # The paths, the keychain and the tray are written for macOS and for nothing else.

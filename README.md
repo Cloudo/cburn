@@ -5,7 +5,7 @@
 <h1 align="center">cburn</h1>
 
 <p align="center">
-  A local speedometer for Claude Code token spend.
+  Watches what Claude Code spends on this machine and says what to change about it.
 </p>
 
 <p align="center">
@@ -23,18 +23,39 @@
   dataset: the gauge, the palettes, the sessions and the advisor.</sub>
 </p>
 
-cburn watches every Claude Code session on the machine and turns the transcripts
-into a live picture of where the tokens go. The needle climbs while Claude works
-and glides down in silence; around it - the day's totals, the cost at API prices,
-the subscription limit windows and the sessions in flight.
+Counting tokens after the fact is easy, and several tools do it. cburn is here for
+the next question: **what to change so that there are fewer of them.** Once an hour it
+reads an anonymised digest of the day and comes back with named, numbered advice -
+this session has outgrown its context, these 1768 bash calls want a skill, that MCP
+server takes three seconds at every start and has never been called. Part of it is
+carried out by one button, with a diff to look at first and a rollback after.
+
+The gauge on the front page is the other half: the burn rate live, so a session that
+went wrong is visible while it is going wrong rather than in tomorrow's bill.
 
 Everything happens locally: the transcripts are read straight from
 `~/.claude/projects`, and the conversation text never leaves the machine.
 
 ## Install
 
-There is no packaged build yet - `brew install` and a ready `.app` in the releases
-are the next thing on the list. Today cburn is built from source:
+```bash
+brew tap cloudo/tap
+brew install cburn
+cburn reindex   # read the history in; without it the dashboard starts from now
+cburn serve     # the dashboard on http://127.0.0.1:8799
+```
+
+`cburn install` puts it into autostart at login through launchd. The menu-bar
+application is a separate download - `cburn-VERSION-macos.zip` from the
+[latest release](https://github.com/cloudo/cburn/releases/latest). It is not signed,
+so macOS holds it at arm's length the first time: open it from the Finder with a right
+click and "Open", or lift the quarantine flag by hand.
+
+```bash
+xattr -dr com.apple.quarantine /Applications/cburn.app
+```
+
+<details><summary>From source</summary>
 
 ```bash
 git clone https://github.com/cloudo/cburn.git && cd cburn
@@ -44,19 +65,9 @@ make reindex   # read the transcripts into the database
 make serve     # the dashboard on http://127.0.0.1:8799
 ```
 
-`cburn install` adds autostart at login through launchd. The menu-bar application
-is a separate build and wants Rust:
-
-```bash
-make desktop-build   # the .app lands in src-tauri/target/release/bundle/macos
-```
-
-It is not signed, so macOS holds it at arm's length the first time: open it from
-the Finder with a right click and "Open", or lift the quarantine flag by hand.
-
-```bash
-xattr -dr com.apple.quarantine src-tauri/target/release/bundle/macos/cburn.app
-```
+`make desktop-build` puts the application into
+`src-tauri/target/release/bundle/macos`; Rust is needed for that one.
+</details>
 
 ## Requirements
 
@@ -64,21 +75,50 @@ macOS 13 or newer, Apple Silicon or Intel. Python 3.11+ and Node to build, Rust
 only for the menu-bar application. And Claude Code itself, naturally: cburn reads
 the transcripts it leaves in `~/.claude/projects` and never writes there.
 
-## Why
+## What the advisor finds
 
-Counting tokens after the fact is easy, and several tools do it. The question that
-costs money is a different one: what is burning **right now**, and what to change
-about it. cburn answers with a needle that moves within a second of a turn landing
-in a transcript, with the subscription windows taken from Anthropic rather than
-guessed, and with an advisor that reads an anonymised digest once an hour and says
-where the context went to waste.
+Every hour `claude -p` reads a digest of the period - aggregates, the heavy sessions,
+the tool profile, the model share, and what Claude Code's own telemetry adds on top.
+Each tip has to rest on numbers from that digest; a tip without them is not issued.
+What it looks for falls into three kinds.
 
-## What it does
+**Something has outgrown itself**
+
+- a session whose context has swollen: paid for again on every turn, and the advisor
+  offers to close it in a pause between steps
+- one task carried through several `resume`: each continuation reads the whole
+  context in again
+- `CLAUDE.md` and the pinned files: they ride along with every single request, so an
+  extra kilobyte is multiplied by the number of turns
+
+**The work is done by the wrong instrument**
+
+- an expensive model on mechanical turns - the ones that only read and searched
+- the same command over and over: 1768 calls of `Bash`, 265 of them `grep`, is a skill
+  waiting to be written
+- the model share of the day, when a cheaper one would have done
+
+**Something is spent for nothing**
+
+- idle turns: the context was paid for and the answer came back shorter than ten tokens
+- an MCP server that takes seconds to connect at every start and was never called
+- hooks that eat the time between turns
+- permissions confirmed by hand again and again - the advisor writes the rule for
+  `permissions.allow` itself
+- service requests that never reach a transcript at all, so every other number is
+  understated by exactly that much
+
+A tip that can be carried out carries an action: close the session, add the permission
+rule, switch off the hook or the plugin. Nothing runs by itself - the diff of the file
+is shown first, a backup is kept, and the change can be rolled back. What you reject
+does not come back on the next tick.
+
+## What it shows
 
 - **Live gauge** - the burn rate over WebSocket, moving within a second of a turn landing in a transcript.
 - **Cost and totals** - tokens by kind, dollars at API prices, models and tools of the day.
 - **Subscription limits** - the 5-hour and weekly windows, refreshed from Anthropic.
-- **Advisor** - once an hour `claude -p` reads an anonymised digest and suggests optimisations, with optional telegram notifications.
+- **Sessions** - what each one is waiting for right now, how its context grew, where it went idle.
 - **Menu-bar tray** - a Tauri wrapper puts the figures you pick into the macOS menu bar.
 - **OTLP receiver** - takes Claude Code telemetry for what the transcripts do not carry.
 
