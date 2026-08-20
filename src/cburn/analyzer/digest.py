@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from .. import metrics, paths
@@ -35,6 +35,10 @@ CHARS_PER_TOKEN = 4
 TOP_COMMANDS = 20
 TOP_SESSIONS = 10
 TOP_TOOLS = 12
+
+#: The life of the five-minute cache. A write that no turn reached within it is money
+#: spent on nothing - the same context is written again on the next turn.
+CACHE_TTL_SECONDS = 300
 
 #: Tools that decide nothing on their own: reading and searching. A turn that held
 #: only those is mechanical work, and Opus is overkill for it (SPEC §6).
@@ -67,6 +71,7 @@ def build(
         "sessions": _heavy_sessions(conn, since, context_crit, project),
         "chains": _chains(conn, since, project),
         "mechanical_opus": _mechanical_opus(conn, since, project),
+        "cache": _cache(conn, since, until, project),
         "mcp": _mcp(conn, since, project),
         "permissions": _permissions(conn, since, until, project),
         "off_transcript": _off_transcript(conn, since, until, project),
@@ -91,6 +96,61 @@ def _tools(conn: sqlite3.Connection, since: datetime, project: str | None) -> di
         "heredoc_calls": sum(
             row["calls"] for row in profile["bash_commands"] if row["command"].endswith("<<")
         ),
+    }
+
+
+def _cache(
+    conn: sqlite3.Connection, since: datetime, until: datetime | None, project: str | None
+) -> dict[str, Any]:
+    """Writes into the five-minute cache that could not have been read back.
+
+    The five-minute cache is paid for on the way in and pays for itself on the way out -
+    but only if the next turn comes within its five minutes. A pause longer than that and
+    the money is spent on nothing: the same context is written again on the next turn.
+    Which bytes were re-read is not in the transcript, but the deadline is a fact, and a
+    gap wider than it is enough to call a write wasted.
+
+    The tail of the period is left alone: a write from a minute ago is not wasted, its
+    turn has simply not come yet.
+    """
+    clause, params = metrics.project_filter(project, "session_id")
+    edge = (until or datetime.now(UTC)) - timedelta(seconds=CACHE_TTL_SECONDS)
+    rows = conn.execute(
+        f"""
+        WITH ordered AS (
+            SELECT session_id, ts, cache_write_5m, cache_write_1h, cache_read,
+                   LEAD(ts) OVER (PARTITION BY session_id ORDER BY ts) AS next_ts
+              FROM turns
+             WHERE ts >= ?{clause}
+        )
+        SELECT SUM(cache_write_5m) AS write_5m,
+               SUM(cache_write_1h) AS write_1h,
+               SUM(cache_read)     AS read,
+               SUM(CASE WHEN wasted THEN cache_write_5m ELSE 0 END) AS expired,
+               SUM(CASE WHEN wasted AND cache_write_5m > 0 THEN 1 ELSE 0 END) AS pauses
+          FROM (SELECT *,
+                       (next_ts IS NULL AND ts < ?)
+                    OR (next_ts IS NOT NULL
+                        AND (julianday(next_ts) - julianday(ts)) * 86400 > ?) AS wasted
+                  FROM ordered)
+        """,  # noqa: S608
+        (
+            metrics._utc_stamp(since),
+            *params,
+            metrics._utc_stamp(edge),
+            CACHE_TTL_SECONDS,
+        ),
+    ).fetchone()
+
+    write_5m = int(rows["write_5m"] or 0)
+    expired = int(rows["expired"] or 0)
+    return {
+        "write_5m": write_5m,
+        "write_1h": int(rows["write_1h"] or 0),
+        "read": int(rows["read"] or 0),
+        "expired_5m": expired,
+        "expired_share": round(expired / write_5m, 3) if write_5m else 0.0,
+        "pauses": int(rows["pauses"] or 0),
     }
 
 

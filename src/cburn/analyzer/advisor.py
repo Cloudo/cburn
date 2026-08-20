@@ -92,6 +92,15 @@ server that takes seconds to start and was never called is a reason to switch it
 A hook runs between turns, so waiting for it looks like a pause rather than
 spend - but the human waits exactly the same.
 
+`cache` weighs the five-minute cache: `write_5m` is what was written into it, `expired_5m`
+the part of that no turn could have read back - the pause after it was longer than the five
+minutes the cache lives. A large `expired_share` means the same context is being paid for
+again and again, and there are two cures, of which only one fits any given person: move the
+stable part (the system prompt, CLAUDE.md, the pinned files) into the hour-long cache, or
+stop leaving the session for ten minutes in the middle of the work. Do not advise the hour
+cache blindly - a write into it costs more, and it only pays off where the pauses are
+frequent. `pauses` says how many times this happened.
+
 Rules:
 1. Every tip rests on concrete numbers from the digest. `evidence` holds
    those numbers and where they come from. Without support a tip is not needed: fewer is better.

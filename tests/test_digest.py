@@ -31,6 +31,7 @@ def assistant(
     model: str = "claude-opus-5",
     output: int = 100,
     cache_read: int = 60_000,
+    cache_write_5m: int = 0,
     tools: list[dict] | None = None,
 ) -> str:
     stamp = (ts or datetime.now(UTC)).isoformat().replace("+00:00", "Z")
@@ -62,7 +63,7 @@ def assistant(
                     "cache_read_input_tokens": cache_read,
                     "cache_creation": {
                         "ephemeral_1h_input_tokens": 1000,
-                        "ephemeral_5m_input_tokens": 0,
+                        "ephemeral_5m_input_tokens": cache_write_5m,
                     },
                 },
             },
@@ -84,6 +85,41 @@ def prompt(text: str, *, session: str = "s1", uuid: str = "p1") -> str:
 
 def title(text: str, *, session: str = "s1") -> str:
     return json.dumps({"type": "ai-title", "sessionId": session, "aiTitle": text})
+
+
+def test_cache_counts_writes_that_could_not_be_read(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """A five-minute write is wasted when the next turn comes later than its five minutes."""
+    now = datetime.now(UTC)
+    seed(
+        conn,
+        tmp_path,
+        [
+            # the pause after it is ten minutes: nothing could have read this back
+            assistant("m1", uuid="u1", ts=now - timedelta(minutes=30), cache_write_5m=500),
+            # a minute later comes the next turn - this one paid for itself
+            assistant("m2", uuid="u2", ts=now - timedelta(minutes=20), cache_write_5m=500),
+            # the last of the session, and long enough ago that its turn will not come
+            assistant("m3", uuid="u3", ts=now - timedelta(minutes=19), cache_write_5m=500),
+        ],
+    )
+    section = digest._cache(conn, now - timedelta(hours=1), now, None)
+    assert section["write_5m"] == 1500
+    assert section["expired_5m"] == 1000, "the first and the last write are the wasted ones"
+    assert section["pauses"] == 2
+    assert section["expired_share"] == pytest.approx(0.667, abs=0.001)
+
+
+def test_cache_leaves_the_tail_of_the_period_alone(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """A write from a minute ago is not wasted - its turn has simply not come yet."""
+    now = datetime.now(UTC)
+    seed(conn, tmp_path, [assistant("m1", ts=now - timedelta(minutes=1), cache_write_5m=800)])
+    section = digest._cache(conn, now - timedelta(hours=1), now, None)
+    assert section["write_5m"] == 800
+    assert section["expired_5m"] == 0
 
 
 @pytest.fixture
