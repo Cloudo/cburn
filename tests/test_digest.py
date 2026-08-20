@@ -83,6 +83,21 @@ def prompt(text: str, *, session: str = "s1", uuid: str = "p1") -> str:
     )
 
 
+def compacted(*, session: str = "s1", ts: datetime | None = None, uuid: str = "c1") -> str:
+    """The summary Claude Code writes when it squeezes the context by itself."""
+    stamp = (ts or datetime.now(UTC)).isoformat().replace("+00:00", "Z")
+    return json.dumps(
+        {
+            "type": "user",
+            "uuid": uuid,
+            "sessionId": session,
+            "timestamp": stamp,
+            "isCompactSummary": True,
+            "message": {"role": "user", "content": "the conversation so far, in short"},
+        }
+    )
+
+
 def title(text: str, *, session: str = "s1") -> str:
     return json.dumps({"type": "ai-title", "sessionId": session, "aiTitle": text})
 
@@ -120,6 +135,33 @@ def test_cache_leaves_the_tail_of_the_period_alone(
     section = digest._cache(conn, now - timedelta(hours=1), now, None)
     assert section["write_5m"] == 800
     assert section["expired_5m"] == 0
+
+
+def test_compaction_counts_what_the_next_turn_cost(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """Compaction itself is normal work; the turn that re-reads the summary is the bill."""
+    now = datetime.now(UTC)
+    seed(
+        conn,
+        tmp_path,
+        [
+            assistant("m1", uuid="u1", ts=now - timedelta(minutes=40)),
+            compacted(ts=now - timedelta(minutes=30)),
+            # the first turn after the summary: read back at full price
+            assistant("m2", uuid="u2", ts=now - timedelta(minutes=29), cache_read=120_000),
+            assistant("m3", uuid="u3", ts=now - timedelta(minutes=28), cache_read=1_000),
+        ],
+    )
+    pricing.sync_prices(conn, {"prices": {"claude-opus-5": {"input": 5.0, "output": 25.0}}})
+    pricing.apply_costs(conn)
+
+    section = digest._compaction(conn, now - timedelta(hours=2), None)
+    assert section["events"] == 1
+    assert section["sessions"] == 1
+    assert section["read_after"] == 120_000, "only the first turn after the summary counts"
+    assert section["cost_after_usd"] > 0
+    assert section["top"][0]["events"] == 1
 
 
 @pytest.fixture

@@ -72,6 +72,7 @@ def build(
         "chains": _chains(conn, since, project),
         "mechanical_opus": _mechanical_opus(conn, since, project),
         "cache": _cache(conn, since, until, project),
+        "compaction": _compaction(conn, since, project),
         "mcp": _mcp(conn, since, project),
         "permissions": _permissions(conn, since, until, project),
         "off_transcript": _off_transcript(conn, since, until, project),
@@ -151,6 +152,61 @@ def _cache(
         "expired_5m": expired,
         "expired_share": round(expired / write_5m, 3) if write_5m else 0.0,
         "pauses": int(rows["pauses"] or 0),
+    }
+
+
+def _compaction(conn: sqlite3.Connection, since: datetime, project: str | None) -> dict[str, Any]:
+    """Auto-compactions and what the first turn after each of them cost.
+
+    Compaction itself is normal work and no reason for advice - Claude Code does it to
+    keep going at all. What costs money is the turn right after: the summary is read back
+    at full price, and part of the working thread is gone with it. So the number worth
+    showing is not "it happened", but what it came to - and the cure is to cut the session
+    before the ceiling, not to forbid the compaction.
+    """
+    clause, params = metrics.project_filter(project, "e.session_id")
+    rows = conn.execute(
+        f"""
+        SELECT e.session_id AS session_id,
+               s.title      AS title,
+               t.cost_usd   AS cost_usd,
+               t.cache_read AS cache_read
+          FROM session_events AS e
+          JOIN sessions AS s ON s.id = e.session_id
+          LEFT JOIN turns AS t
+            ON t.id = (SELECT id FROM turns
+                        WHERE session_id = e.session_id AND ts >= e.ts
+                        ORDER BY ts LIMIT 1)
+         WHERE e.kind = 'compact' AND e.ts >= ?{clause}
+        """,  # noqa: S608
+        (metrics._utc_stamp(since), *params),
+    ).fetchall()
+
+    by_session: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        entry = by_session.setdefault(
+            row["session_id"],
+            {
+                "session_id": row["session_id"],
+                "title": row["title"],
+                "events": 0,
+                "cost_after_usd": 0.0,
+                "read_after": 0,
+            },
+        )
+        entry["events"] += 1
+        entry["cost_after_usd"] += float(row["cost_usd"] or 0.0)
+        entry["read_after"] += int(row["cache_read"] or 0)
+
+    top = sorted(by_session.values(), key=lambda item: item["cost_after_usd"], reverse=True)
+    for entry in top:
+        entry["cost_after_usd"] = round(entry["cost_after_usd"], 4)
+    return {
+        "events": len(rows),
+        "sessions": len(by_session),
+        "cost_after_usd": round(sum(item["cost_after_usd"] for item in top), 4),
+        "read_after": sum(item["read_after"] for item in top),
+        "top": top[:TOP_SESSIONS],
     }
 
 

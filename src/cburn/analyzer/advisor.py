@@ -101,6 +101,12 @@ stop leaving the session for ten minutes in the middle of the work. Do not advis
 cache blindly - a write into it costs more, and it only pays off where the pauses are
 frequent. `pauses` says how many times this happened.
 
+`compaction` is auto-compaction: how many times the context was squeezed and what the
+first turn after each squeeze cost - the summary is read back at full price and part of
+the working thread is lost with it. The compaction itself is normal work and no reason
+for a tip; the number to lean on is `cost_after_usd`, and the cure is to cut the session
+before the ceiling rather than to fear the squeeze.
+
 Rules:
 1. Every tip rests on concrete numbers from the digest. `evidence` holds
    those numbers and where they come from. Without support a tip is not needed: fewer is better.
