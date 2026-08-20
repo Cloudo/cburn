@@ -73,6 +73,7 @@ def build(
         "mechanical_opus": _mechanical_opus(conn, since, project),
         "cache": _cache(conn, since, until, project),
         "compaction": _compaction(conn, since, project),
+        "subagents": _subagents(conn, since, project),
         "mcp": _mcp(conn, since, project),
         "permissions": _permissions(conn, since, until, project),
         "off_transcript": _off_transcript(conn, since, until, project),
@@ -207,6 +208,41 @@ def _compaction(conn: sqlite3.Connection, since: datetime, project: str | None) 
         "cost_after_usd": round(sum(item["cost_after_usd"] for item in top), 4),
         "read_after": sum(item["read_after"] for item in top),
         "top": top[:TOP_SESSIONS],
+    }
+
+
+def _subagents(conn: sqlite3.Connection, since: datetime, project: str | None) -> dict[str, Any]:
+    """What the Task agents cost: every one of them carries a context of its own.
+
+    A subagent is a fair way to keep the main thread clean, and a fair way to pay twice
+    for the same reading. The share is the whole point: a fifth of the bill going into
+    sidechains is a reason to look at what is being delegated, while a couple of percent
+    is the tool doing its job.
+    """
+    clause, params = metrics.project_filter(project, "session_id")
+    row = conn.execute(
+        f"""
+        SELECT COUNT(*)                                            AS turns,
+               SUM(is_sidechain)                                   AS side_turns,
+               SUM(cost_usd)                                       AS cost_usd,
+               SUM(CASE WHEN is_sidechain THEN cost_usd ELSE 0 END) AS side_cost,
+               SUM(CASE WHEN is_sidechain THEN cache_read ELSE 0 END) AS side_read
+          FROM turns
+         WHERE ts >= ?{clause}
+        """,  # noqa: S608
+        (metrics._utc_stamp(since), *params),
+    ).fetchone()
+
+    cost = float(row["cost_usd"] or 0.0)
+    side_cost = float(row["side_cost"] or 0.0)
+    return {
+        "turns": int(row["side_turns"] or 0),
+        "turns_share": round(int(row["side_turns"] or 0) / row["turns"], 3)
+        if row["turns"]
+        else 0.0,
+        "cost_usd": round(side_cost, 4),
+        "cost_share": round(side_cost / cost, 3) if cost else 0.0,
+        "read": int(row["side_read"] or 0),
     }
 
 

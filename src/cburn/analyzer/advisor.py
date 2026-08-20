@@ -107,6 +107,12 @@ the working thread is lost with it. The compaction itself is normal work and no 
 for a tip; the number to lean on is `cost_after_usd`, and the cure is to cut the session
 before the ceiling rather than to fear the squeeze.
 
+`subagents` is the share of the bill that went into Task agents. Each of them reads its
+own context, which is the point of them and the price of them at once. A couple of
+percent is the tool doing its job; a fifth of the bill is a reason to look at what is
+being delegated and whether the main thread could have done it without the second
+reading.
+
 Rules:
 1. Every tip rests on concrete numbers from the digest. `evidence` holds
    those numbers and where they come from. Without support a tip is not needed: fewer is better.

@@ -164,6 +164,22 @@ def test_compaction_counts_what_the_next_turn_cost(
     assert section["top"][0]["events"] == 1
 
 
+def test_subagents_measure_their_share(conn: sqlite3.Connection, tmp_path: Path) -> None:
+    """A sidechain turn is a second reading of the same thing, and it has a price."""
+    now = datetime.now(UTC)
+    main = assistant("m1", uuid="u1", ts=now - timedelta(minutes=10))
+    side = json.loads(assistant("m2", uuid="u2", ts=now - timedelta(minutes=9)))
+    side["isSidechain"] = True
+    seed(conn, tmp_path, [main, json.dumps(side)])
+    pricing.sync_prices(conn, {"prices": {"claude-opus-5": {"input": 5.0, "output": 25.0}}})
+    pricing.apply_costs(conn)
+
+    section = digest._subagents(conn, now - timedelta(hours=1), None)
+    assert section["turns"] == 1
+    assert section["turns_share"] == pytest.approx(0.5)
+    assert 0 < section["cost_share"] <= 1
+
+
 @pytest.fixture
 def conn(tmp_path: Path) -> sqlite3.Connection:
     return connect(tmp_path / "digest.db")
