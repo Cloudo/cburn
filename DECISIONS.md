@@ -4,6 +4,19 @@ Why things are the way they are: the option taken, the options rejected and the
 reason. Newest first. Things visible from the code and the git history do not
 belong here; neither do the invariants, which live in `CLAUDE.md`.
 
+## 2026-08-21 - installed by the fully qualified name
+
+Homebrew 6.0 stopped loading a non-official tap until it is trusted, and the two lines the
+README had given since the first release - `brew tap cloudo/tap`, then `brew install cburn` -
+now stop with `Refusing to load formula cloudo/tap/cburn from untrusted tap`. Two ways past
+it. Telling the reader to run `brew trust cloudo/tap` was rejected: whole-tap trust covers
+every formula the tap will ever hold, and asking a stranger for it so that one speedometer
+can be installed is a bad trade, besides being a habit worth not teaching.
+
+So the install is one line, `brew install cloudo/tap/cburn`. A fully qualified name trusts
+that single formula, taps the repository on the way, and is shorter than what it replaces.
+The README says why the long name is there, so that nobody shortens it back.
+
 ## 2026-08-20 - the digest counts, the model formulates
 
 Three new detectors raised the question of where a tip is born. A rule in Python can

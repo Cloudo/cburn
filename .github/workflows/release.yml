@@ -94,8 +94,7 @@ jobs:
           ## Install
 
           ```bash
-          brew tap cloudo/tap
-          brew install cburn
+          brew install cloudo/tap/cburn
           ```
 
           The menu-bar application is the zip below. It is not signed: open it from the

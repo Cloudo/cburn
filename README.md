@@ -39,11 +39,16 @@ Everything happens locally: the transcripts are read straight from
 ## Install
 
 ```bash
-brew tap cloudo/tap
-brew install cburn
+brew install cloudo/tap/cburn
 cburn reindex   # read the history in; without it the dashboard starts from now
 cburn serve     # the dashboard on http://127.0.0.1:8799
 ```
+
+The full name is not decoration. Since Homebrew 6.0 a non-official tap is loaded only
+once it is trusted, so `brew tap cloudo/tap && brew install cburn` stops with
+`Refusing to load formula cloudo/tap/cburn from untrusted tap`. Installing by the
+fully qualified name trusts this one formula and nothing else; `brew trust cloudo/tap`
+is the other door, and it trusts everything the tap will ever hold.
 
 `cburn install` puts it into autostart at login through launchd. The menu-bar
 application is a separate download - `cburn-VERSION-macos.zip` from the
