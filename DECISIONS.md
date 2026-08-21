@@ -4,6 +4,17 @@ Why things are the way they are: the option taken, the options rejected and the
 reason. Newest first. Things visible from the code and the git history do not
 belong here; neither do the invariants, which live in `CLAUDE.md`.
 
+## 2026-08-21 - the formula asks for rust rather than carrying wheels
+
+Behind the trust error stood a second one. `orjson` and `pydantic-core` are Rust underneath,
+Homebrew builds every wheel from source, so pip fetches `maturin` and maturin wants cargo -
+which the build PATH does not have, rustup on the machine or no rustup.
+
+Carrying prebuilt wheels as resources was rejected: a macOS wheel is nailed to one
+architecture and one CPython, so the formula would need four of them and a fresh set every
+time Homebrew moves `python@3.13` on. `depends_on "rust" => :build` costs the first install
+a toolchain and a few minutes of compiling, and costs nothing after that.
+
 ## 2026-08-21 - installed by the fully qualified name
 
 Homebrew 6.0 stopped loading a non-official tap until it is trusted, and the two lines the

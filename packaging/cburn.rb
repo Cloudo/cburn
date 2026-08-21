@@ -12,6 +12,10 @@ class Cburn < Formula
   sha256 "18c965c57a61cc2df38760f7202f1c056cc9ca940a23036d2dc188d856ec92fd"
   license "MIT"
 
+  # orjson and pydantic-core are Rust underneath, and Homebrew builds every wheel from
+  # source: pip fetches maturin, maturin needs cargo, and the build PATH has no rustup on it.
+  depends_on "rust" => :build
+
   # The paths, the keychain and the tray are written for macOS and for nothing else.
   depends_on :macos
   depends_on "python@3.13"

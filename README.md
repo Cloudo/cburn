@@ -50,6 +50,10 @@ once it is trusted, so `brew tap cloudo/tap && brew install cburn` stops with
 fully qualified name trusts this one formula and nothing else; `brew trust cloudo/tap`
 is the other door, and it trusts everything the tap will ever hold.
 
+The first install is the slow one. `orjson` and `pydantic-core` are Rust underneath and
+Homebrew builds every wheel from source, so the formula pulls a Rust toolchain as a build
+dependency: seven or eight minutes on an M1, most of it downloading.
+
 `cburn install` puts it into autostart at login through launchd. The menu-bar
 application is a separate download - `cburn-VERSION-macos.zip` from the
 [latest release](https://github.com/cloudo/cburn/releases/latest). It is not signed,
