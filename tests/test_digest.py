@@ -180,6 +180,147 @@ def test_subagents_measure_their_share(conn: sqlite3.Connection, tmp_path: Path)
     assert 0 < section["cost_share"] <= 1
 
 
+def test_memory_notices_a_store_that_is_used(conn: sqlite3.Connection, tmp_path: Path) -> None:
+    """A memory MCP server that was called: nothing to advise, but the fact is the answer."""
+    now = datetime.now(UTC)
+    seed(
+        conn,
+        tmp_path,
+        [
+            assistant(
+                "m1",
+                uuid="u1",
+                ts=now - timedelta(minutes=10),
+                tools=[{"name": "mcp__plugin_openviking-memory_openviking__search"}],
+            )
+        ],
+    )
+    section = digest._memory(conn, now - timedelta(hours=1), now, None)
+    assert section["in_use"] is True
+    assert section["stores"][0]["calls"] == 1
+    assert section["idle_stores"] == []
+
+
+def test_memory_reads_the_verbs_when_the_name_hides(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """A server named after its author gives itself away by its tools."""
+    now = datetime.now(UTC)
+    seed(
+        conn,
+        tmp_path,
+        [
+            assistant(
+                "m1",
+                uuid="u1",
+                ts=now - timedelta(minutes=10),
+                tools=[{"name": "mcp__blackbox__remember"}, {"name": "mcp__other__fetch"}],
+            )
+        ],
+    )
+    section = digest._memory(conn, now - timedelta(hours=1), now, None)
+    assert [store["server"] for store in section["stores"]] == ["blackbox"]
+
+
+def test_reading_counts_the_context_it_pulled_in(conn: sqlite3.Connection, tmp_path: Path) -> None:
+    """What a read-only turn found lands in the next turn: the growth is the size of it."""
+    now = datetime.now(UTC)
+    seed(
+        conn,
+        tmp_path,
+        [
+            assistant(
+                "m1",
+                uuid="u1",
+                ts=now - timedelta(minutes=40),
+                cache_read=10_000,
+                tools=[{"name": "Read"}],
+            ),
+            assistant(
+                "m2",
+                uuid="u2",
+                ts=now - timedelta(minutes=39),
+                cache_read=20_000,
+                tools=[{"name": "Grep"}],
+            ),
+            assistant(
+                "m3",
+                uuid="u3",
+                ts=now - timedelta(minutes=38),
+                cache_read=30_000,
+                tools=[{"name": "Read"}],
+            ),
+            # a turn that changes something is not reading, but the context it grew by
+            # belongs to the reading turn before it
+            assistant(
+                "m4",
+                uuid="u4",
+                ts=now - timedelta(minutes=37),
+                cache_read=40_000,
+                tools=[{"name": "Edit"}],
+            ),
+            assistant(
+                "m5",
+                uuid="u5",
+                ts=now - timedelta(minutes=36),
+                cache_read=50_000,
+                tools=[{"name": "Read"}],
+            ),
+        ],
+    )
+    section = digest._memory(conn, now - timedelta(hours=1), now, None)
+    assert section["in_use"] is False
+    reading = section["reading"]
+    assert reading["sessions"] == 1
+    assert reading["turns"] == 4, "four turns only looked; the Edit is not one of them"
+    assert reading["tokens"] == 30_000, "three growths of ten thousand; the last turn has no next"
+    assert reading["by_project"][0]["sessions"] == 1
+
+
+def test_reading_tells_a_looking_bash_from_a_writing_one(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """`grep` only looks; a heredoc writes a file, and the profile keeps them apart."""
+    now = datetime.now(UTC)
+    seed(
+        conn,
+        tmp_path,
+        [
+            assistant(
+                "m1",
+                uuid="u1",
+                ts=now - timedelta(minutes=30),
+                cache_read=10_000,
+                tools=[{"name": "Bash", "input": {"command": "grep -rn thing ."}}],
+            ),
+            assistant(
+                "m2",
+                uuid="u2",
+                ts=now - timedelta(minutes=29),
+                cache_read=20_000,
+                tools=[{"name": "Bash", "input": {"command": "cat <<'EOF' > file.py"}}],
+            ),
+            assistant(
+                "m3",
+                uuid="u3",
+                ts=now - timedelta(minutes=28),
+                cache_read=30_000,
+                tools=[{"name": "Read"}],
+            ),
+        ],
+    )
+    reading = digest._memory(conn, now - timedelta(hours=1), now, None)["reading"]
+    assert reading["turns"] == 2, "the heredoc is writing, not reading"
+    assert reading["tokens"] == 10_000
+
+
+def test_memory_markers_from_the_config_are_honoured() -> None:
+    """A store named after its author is named in `analyzer.memory_servers`."""
+    extra = digest._extra_markers({"analyzer": {"memory_servers": ["Hoard"]}})
+    assert digest._is_memory("hoard-mcp", (), extra)
+    assert not digest._is_memory("hoard-mcp", (), frozenset())
+
+
 @pytest.fixture
 def conn(tmp_path: Path) -> sqlite3.Connection:
     return connect(tmp_path / "digest.db")

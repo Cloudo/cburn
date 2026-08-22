@@ -32,6 +32,10 @@ DEFAULTS: dict[str, Any] = {
         # In which language the advisor answers. The prompt itself is English; the tips are
         # read by a human, so the language of the answer is their choice.
         "language": "en",
+        # Memory stores the detector would not recognise by name: it knows the usual
+        # ones (openviking, mem0, chroma...), and a server named after its author
+        # is named here instead.
+        "memory_servers": [],
     },
     "telegram": {
         "mode": "bridge",

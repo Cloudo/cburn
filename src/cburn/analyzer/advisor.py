@@ -113,6 +113,23 @@ percent is the tool doing its job; a fifth of the bill is a reason to look at wh
 being delegated and whether the main thread could have done it without the second
 reading.
 
+`memory` answers what no other section can: does anything on this machine remember
+between sessions. A memory store - a vector or knowledge MCP server - sits in `stores`
+when it was actually called, and in `idle_stores` when it connects at every session start
+and was never used. `reading` prices the absence of one: `tokens` is the context that
+read-only work pulled in over the period, `by_project` how many sessions went over the
+same project - each of them starting from an empty head, which is where the repetition
+lives. Read `tokens` as a ceiling and not as a promise: a store saves the second reading
+of a thing and never the first, recalling costs tokens of its own, and the descriptions
+of its tools then ride along in every request. A fair tip names both sides and says which
+part of the number it expects to remove. With `in_use` false and a `share_of_cost` worth
+noticing, the tip is to put a memory store in (openviking, mem0 and the reference `memory`
+server are the usual ones - name them as examples, never as something already installed),
+or the cheaper half of it: write the facts that keep being rediscovered into CLAUDE.md,
+which is paid for on every turn anyway. A store in `idle_stores` turns the tip around -
+use it or switch it off, it pays for a connection at every start and gives nothing back.
+When something is in use and nothing is idle, this section needs no tip at all.
+
 Rules:
 1. Every tip rests on concrete numbers from the digest. `evidence` holds
    those numbers and where they come from. Without support a tip is not needed: fewer is better.

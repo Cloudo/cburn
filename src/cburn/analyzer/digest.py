@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import statistics
+from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -35,6 +37,7 @@ CHARS_PER_TOKEN = 4
 TOP_COMMANDS = 20
 TOP_SESSIONS = 10
 TOP_TOOLS = 12
+TOP_PROJECTS = 5
 
 #: The life of the five-minute cache. A write that no turn reached within it is money
 #: spent on nothing - the same context is written again on the next turn.
@@ -43,6 +46,68 @@ CACHE_TTL_SECONDS = 300
 #: Tools that decide nothing on their own: reading and searching. A turn that held
 #: only those is mechanical work, and Opus is overkill for it (SPEC §6).
 MECHANICAL_TOOLS = {"Read", "Glob", "Grep", "LS", "NotebookRead", "TodoWrite"}
+
+#: What gives a memory store away in the name of an MCP server: it is usually named
+#: after what it keeps or after the engine underneath. A heuristic and nothing more -
+#: a server named after its author is added by hand through `analyzer.memory_servers`.
+MEMORY_SERVER_MARKERS = frozenset(
+    {
+        "openviking",
+        "memory",
+        "mem0",
+        "zep",
+        "letta",
+        "graphiti",
+        "knowledge",
+        "chroma",
+        "qdrant",
+        "pinecone",
+        "weaviate",
+        "milvus",
+        "lancedb",
+        "marqo",
+        "vector",
+        "embedding",
+    }
+)
+
+#: The same for the tool names: a server called after the project gives itself away
+#: by its verbs. These are matched inside the tool name, after the server prefix.
+MEMORY_TOOL_MARKERS = frozenset({"remember", "recall", "memory", "memorize", "forget"})
+
+#: Bash commands that only look. The profile keeps the normalised command, so a heredoc
+#: (`cat <<`) is a different string from a plain `cat` and does not slip in as reading,
+#: and a compound (`rm -rf x && cat y`) is normalised by its first word. `sed` and
+#: `python` are deliberately absent: they write as readily as they read, and of the two
+#: possible errors the one that understates the number is the safer.
+READ_ONLY_BASH = frozenset(
+    {
+        "cat",
+        "head",
+        "tail",
+        "grep",
+        "rg",
+        "ls",
+        "find",
+        "fd",
+        "tree",
+        "wc",
+        "stat",
+        "file",
+        "du",
+        "jq",
+        "awk",
+        "ps",
+        "which",
+        "type",
+        "pwd",
+        "git log",
+        "git status",
+        "git diff",
+        "git show",
+        "git blame",
+    }
+)
 
 
 def build(
@@ -75,6 +140,7 @@ def build(
         "compaction": _compaction(conn, since, project),
         "subagents": _subagents(conn, since, project),
         "mcp": _mcp(conn, since, project),
+        "memory": _memory(conn, since, until, project, _extra_markers(settings)),
         "permissions": _permissions(conn, since, until, project),
         "off_transcript": _off_transcript(conn, since, until, project),
         "instructions": _instructions(),
@@ -385,6 +451,166 @@ def _mcp(conn: sqlite3.Connection, since: datetime, project: str | None) -> dict
     if plugins:
         profile["plugins"] = plugins
     return profile
+
+
+def _extra_markers(settings: dict[str, Any]) -> frozenset[str]:
+    """Memory server names the config adds by hand (`analyzer.memory_servers`)."""
+    extra = (settings.get("analyzer") or {}).get("memory_servers") or []
+    return frozenset(str(name).lower() for name in extra if str(name).strip())
+
+
+def _is_memory(server: str, tools: Iterable[str], extra: frozenset[str]) -> bool:
+    """Does this MCP server look like a store that remembers between sessions."""
+    name = server.lower()
+    if any(marker in name for marker in MEMORY_SERVER_MARKERS | extra):
+        return True
+    return any(marker in tool.lower() for tool in tools for marker in MEMORY_TOOL_MARKERS)
+
+
+def _memory(
+    conn: sqlite3.Connection,
+    since: datetime,
+    until: datetime | None,
+    project: str | None,
+    extra: frozenset[str] = frozenset(),
+) -> dict[str, Any]:
+    """Whether anything remembers between sessions, and the price when nothing does.
+
+    Every session starts from an empty head: the project is found again by reading and
+    searching, and that reading is paid for in full every time. A memory store - a
+    vector or knowledge MCP server - is the usual answer to it, so the first thing to
+    know is whether one is there at all. Two things give it away: the name of the server
+    and the verbs of its tools (`remember`, `recall`).
+
+    `reading` is what the absence costs: the context that read-only work pulled in over
+    the period. That number is a ceiling and not a promise - a store saves the second
+    reading and not the first, recalling costs tokens of its own, and the descriptions of
+    the store's tools then ride along in every request.
+    """
+    clause, params = metrics.project_filter(project, "t.session_id")
+    rows = conn.execute(
+        f"""
+        SELECT c.tool, COUNT(*) AS calls
+          FROM tool_calls AS c JOIN turns AS t ON t.id = c.turn_id
+         WHERE t.ts >= ? AND c.tool LIKE 'mcp\\_\\_%' ESCAPE '\\'{clause}
+         GROUP BY c.tool
+        """,  # noqa: S608
+        (metrics._utc_stamp(since), *params),
+    )
+    called: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        server, _, tool = row["tool"].removeprefix("mcp__").partition("__")
+        entry = called.setdefault(server, {"server": server, "calls": 0, "tools": []})
+        entry["calls"] += row["calls"]
+        entry["tools"].append(tool or server)
+
+    stores = [
+        {"server": entry["server"], "calls": entry["calls"]}
+        for entry in called.values()
+        if _is_memory(entry["server"], entry["tools"], extra)
+    ]
+    stores.sort(key=lambda item: -item["calls"])
+
+    # Connected in every session and never called once. Only the two channels together
+    # show it: telemetry knows the connection, the transcript knows the calls.
+    idle = [
+        {
+            "server": server["server"],
+            "connects": server["connects"],
+            "seconds": round(server["seconds"], 1),
+        }
+        for server in metrics.otel_mcp(conn, since, until, project)["servers"]
+        if server["server"] not in called and _is_memory(server["server"], (), extra)
+    ]
+
+    return {
+        "in_use": bool(stores),
+        "stores": stores,
+        "idle_stores": idle,
+        "reading": _reading(conn, since, project),
+    }
+
+
+def _reading(conn: sqlite3.Connection, since: datetime, project: str | None) -> dict[str, Any]:
+    """What read-only work pulled into the context, and how often the ground was covered again.
+
+    A turn counts as reading when it called tools and every one of them only looks:
+    `Read`, `Grep`, `Glob` and the bash commands that cannot change anything. What such a
+    turn found lands in the context of the next one, so the growth between the two is the
+    size of what was read. Subagent turns are left out - their share is weighed in
+    `subagents`, and counting the same reading in two places would inflate both.
+
+    A store saves the second reading of a thing, never the first, and which files were
+    read is not in the database: the profile keeps normalised commands, not paths (SPEC
+    §7). So the repetition is shown from the side that is visible - `by_project` says how
+    many sessions went over the same project, each of them starting from an empty head.
+    """
+    clause, params = metrics.project_filter(project, "t.session_id")
+    mechanical = sorted(MECHANICAL_TOOLS)
+    read_only = sorted(READ_ONLY_BASH)
+    rows = conn.execute(
+        f"""
+        WITH kinds AS (
+            SELECT t.id            AS id,
+                   t.session_id    AS session_id,
+                   t.ts            AS ts,
+                   t.context_estimate AS context_estimate,
+                   t.cost_usd      AS cost_usd,
+                   COUNT(c.id)     AS calls,
+                   SUM(CASE WHEN c.tool IN ({",".join("?" * len(mechanical))}) THEN 1
+                            WHEN c.tool = 'Bash'
+                             AND LOWER(COALESCE(c.detail, ''))
+                                 IN ({",".join("?" * len(read_only))}) THEN 1
+                            ELSE 0 END) AS reads
+              FROM turns AS t
+              LEFT JOIN tool_calls AS c ON c.turn_id = t.id
+             WHERE t.ts >= ? AND t.is_sidechain = 0{clause}
+             GROUP BY t.id
+        ),
+        grown AS (
+            SELECT session_id, ts, cost_usd, calls, reads, context_estimate,
+                   LEAD(context_estimate) OVER (PARTITION BY session_id ORDER BY ts) AS next_ctx
+              FROM kinds
+        )
+        SELECT g.session_id                        AS session_id,
+               COALESCE(p.display_name, p.slug, '-') AS project,
+               COUNT(*)                            AS turns,
+               COALESCE(SUM(g.cost_usd), 0)        AS cost_usd,
+               COALESCE(SUM(MAX(0, COALESCE(g.next_ctx, g.context_estimate)
+                                   - g.context_estimate)), 0) AS tokens
+          FROM grown AS g
+          JOIN sessions AS s ON s.id = g.session_id
+          LEFT JOIN projects AS p ON p.id = s.project_id
+         WHERE g.calls > 0 AND g.reads = g.calls
+         GROUP BY g.session_id
+        """,  # noqa: S608
+        (*mechanical, *read_only, metrics._utc_stamp(since), *params),
+    ).fetchall()
+
+    per_session = [int(row["tokens"] or 0) for row in rows]
+    cost = sum(float(row["cost_usd"] or 0.0) for row in rows)
+    projects: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        entry = projects.setdefault(
+            row["project"], {"project": row["project"], "sessions": 0, "tokens": 0}
+        )
+        entry["sessions"] += 1
+        entry["tokens"] += int(row["tokens"] or 0)
+
+    total_clause, total_params = metrics.project_filter(project)
+    total = conn.execute(
+        f"SELECT COALESCE(SUM(cost_usd), 0) FROM turns WHERE ts >= ?{total_clause}",  # noqa: S608
+        (metrics._utc_stamp(since), *total_params),
+    ).fetchone()[0]
+    return {
+        "sessions": len(rows),
+        "turns": sum(int(row["turns"] or 0) for row in rows),
+        "tokens": sum(per_session),
+        "median_tokens_per_session": int(statistics.median(per_session)) if per_session else 0,
+        "cost_usd": round(cost, 4),
+        "share_of_cost": round(cost / total, 4) if total else 0.0,
+        "by_project": sorted(projects.values(), key=lambda item: -item["tokens"])[:TOP_PROJECTS],
+    }
 
 
 def _permissions(

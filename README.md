@@ -109,6 +109,9 @@ What it looks for falls into three kinds.
 
 **Something is spent for nothing**
 
+- the same ground read again in every new session: nothing on the machine remembers
+  between them, so the advisor weighs what the read-only work pulls in and offers a
+  memory store - or the cheap half of one, the facts written into `CLAUDE.md`
 - idle turns: the context was paid for and the answer came back shorter than ten tokens
 - an MCP server that takes seconds to connect at every start and was never called
 - hooks that eat the time between turns

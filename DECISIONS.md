@@ -4,6 +4,26 @@ Why things are the way they are: the option taken, the options rejected and the
 reason. Newest first. Things visible from the code and the git history do not
 belong here; neither do the invariants, which live in `CLAUDE.md`.
 
+## 2026-08-22 - the memory detector weighs all reading, not the opening of a session
+
+The first shape of the detector measured the opening: the run of read-only turns from the
+start of a session up to the first one that changed something. It reads well and it
+measures nothing - over a week of real history it found one session and 503 tokens,
+because a session opens with `Bash` about as often as with `Read`, and `Bash` closed the
+run at the first turn.
+
+So the unit is the turn, not the prefix: a turn counts when every tool in it only looks,
+`Bash` included when its normalised command cannot write. What the turn found lands in the
+context of the next one, so the growth between the two is the size of what was read. The
+same week then measures 114 sessions and 4.35M tokens - a fifth of the bill.
+
+What a store saves is the second reading and never the first, and the paths are not in the
+database to tell them apart (SPEC §7 keeps them out). Rather than guess a ratio, the digest
+carries `by_project` - how many sessions went over the same project - and the prompt is
+told to read the total as a ceiling. Detecting an installed-but-unused store from the
+Claude Code configs was rejected for the reason `_mcp` already gives: we do not read those
+files, and telemetry answers the same question when it is switched on.
+
 ## 2026-08-21 - the formula asks for rust rather than carrying wheels
 
 Behind the trust error stood a second one. `orjson` and `pydantic-core` are Rust underneath,
