@@ -4,6 +4,22 @@ Why things are the way they are: the option taken, the options rejected and the
 reason. Newest first. Things visible from the code and the git history do not
 belong here; neither do the invariants, which live in `CLAUDE.md`.
 
+## 2026-08-22 - the application is the way in, the browser is the fallback
+
+The README opened with three commands and a URL, which made the browser the face of cburn
+and left the `.app` as an extra download at the end of a paragraph. Turned around: brew puts
+the engine in, the application is unpacked and opened, and there the setup ends - it raises
+the engine itself when nothing answers on the port (`server::start_if_needed`), so there is
+nothing left to launch by hand and no page to keep open.
+
+Two things fell out of the turn. `cburn reindex` had been documented as the step without
+which "the dashboard starts from now", and that is simply not so: the watcher enqueues the
+whole tree at start (`initial_scan`), and a bare `serve` against an empty database read 1438
+files and 30,645 turns by itself. The claim is gone from both install blocks, and reindex is
+described for what it is - a pass by hand for after a schema change. The browser way did not
+disappear, it moved under a fold: the CLI is the whole instrument too, and wanting the
+dashboard without an unsigned application is a fair thing to want.
+
 ## 2026-08-22 - the memory detector weighs all reading, not the opening of a session
 
 The first shape of the detector measured the opening: the run of read-only turns from the

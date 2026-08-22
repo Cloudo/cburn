@@ -97,8 +97,10 @@ jobs:
           brew install cloudo/tap/cburn
           ```
 
-          The menu-bar application is the zip below. It is not signed: open it from the
-          Finder with a right click and "Open", or lift the quarantine flag with
+          Then unpack the zip below into `/Applications` and open it: the application
+          starts the engine itself and lives in the menu bar - no browser, nothing to
+          launch by hand. It is not signed, so the first time open it from the Finder
+          with a right click and "Open", or lift the quarantine flag with
           `xattr -dr com.apple.quarantine cburn.app`.
 
           <details><summary>for the formula in the tap</summary>

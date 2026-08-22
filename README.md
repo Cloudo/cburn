@@ -38,31 +38,52 @@ Everything happens locally: the transcripts are read straight from
 
 ## Install
 
+Two parts go in: the engine that reads the transcripts and the window that stands over it.
+The engine is a local service; the window is a menu-bar application, and the application is
+how cburn is meant to be used - opened once and left in the menu bar.
+
 ```bash
 brew install cloudo/tap/cburn
-cburn reindex   # read the history in; without it the dashboard starts from now
-cburn serve     # the dashboard on http://127.0.0.1:8799
 ```
 
-The full name is not decoration. Since Homebrew 6.0 a non-official tap is loaded only
-once it is trusted, so `brew tap cloudo/tap && brew install cburn` stops with
-`Refusing to load formula cloudo/tap/cburn from untrusted tap`. Installing by the
-fully qualified name trusts this one formula and nothing else; `brew trust cloudo/tap`
-is the other door, and it trusts everything the tap will ever hold.
+Then take `cburn-VERSION-macos.zip` from the
+[latest release](https://github.com/cloudo/cburn/releases/latest), unpack it into
+`/Applications` and open it. That is the whole setup: the application finds the engine and
+starts it when it is not running, the history is read in by itself on the first start, and
+the needle appears in the menu bar. Nothing has to be launched by hand, and no browser has
+to be kept open for it.
+
+The application is not signed, so macOS holds it at arm's length the first time: open it
+from the Finder with a right click and "Open", or lift the quarantine flag by hand.
+
+```bash
+xattr -dr com.apple.quarantine /Applications/cburn.app
+```
+
+The full name in the brew line is not decoration. Since Homebrew 6.0 a non-official tap is
+loaded only once it is trusted, so `brew tap cloudo/tap && brew install cburn` stops with
+`Refusing to load formula cloudo/tap/cburn from untrusted tap`. Installing by the fully
+qualified name trusts this one formula and nothing else; `brew trust cloudo/tap` is the
+other door, and it trusts everything the tap will ever hold.
 
 The first install is the slow one. `orjson` and `pydantic-core` are Rust underneath and
 Homebrew builds every wheel from source, so the formula pulls a Rust toolchain as a build
 dependency: seven or eight minutes on an M1, most of it downloading.
 
-`cburn install` puts it into autostart at login through launchd. The menu-bar
-application is a separate download - `cburn-VERSION-macos.zip` from the
-[latest release](https://github.com/cloudo/cburn/releases/latest). It is not signed,
-so macOS holds it at arm's length the first time: open it from the Finder with a right
-click and "Open", or lift the quarantine flag by hand.
+<details><summary>Without the application</summary>
+
+The dashboard is a page of the same engine, and the CLI is the whole instrument too:
 
 ```bash
-xattr -dr com.apple.quarantine /Applications/cburn.app
+cburn serve     # the dashboard on http://127.0.0.1:8799, the history read in at start
+cburn install   # the same engine at login, through launchd
+cburn stats     # the summary of a period in the terminal
+cburn sessions  # the session list
 ```
+
+`cburn reindex` reads the transcripts in by hand. `serve` does it by itself at start, so
+this is for after a schema change - `--full` re-reads the files whole rather than the tails.
+</details>
 
 <details><summary>From source</summary>
 
@@ -70,7 +91,6 @@ xattr -dr com.apple.quarantine /Applications/cburn.app
 git clone https://github.com/cloudo/cburn.git && cd cburn
 make install   # .venv, an editable install and the npm dependencies
 make web       # build the frontend into web/dist
-make reindex   # read the transcripts into the database
 make serve     # the dashboard on http://127.0.0.1:8799
 ```
 
