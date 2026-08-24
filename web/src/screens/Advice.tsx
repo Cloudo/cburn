@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { clockTime, sinceLabel, toolLabel, usd, whenLabel } from "../lib/format";
+import { clockTime, sinceLabel, timestamp, toolLabel, usd, whenLabel } from "../lib/format";
 import { useLang } from "../lib/i18n";
 import { statusTitle } from "../components/StatusHelp";
 import {
@@ -30,6 +30,31 @@ type Severity = (typeof SEVERITY_ORDER)[number];
 //: The bucket for a tip that names no session: it belongs to no project.
 const NO_PROJECT = "\u0000none";
 
+//: How long a session may have been quiet for its tips to still be worth reading. A tip
+//: about a session nobody has touched for a week is advice on a finished job. The captions
+//: are the ones the "Sessions" screen uses for its periods - one set of words for one idea.
+const WINDOWS = [
+  { key: "24h", hours: 24 },
+  { key: "7d", hours: 24 * 7 },
+  { key: "30d", hours: 24 * 30 },
+  { key: "all", hours: 0 },
+] as const;
+
+/** Whether a tip still concerns anything alive.
+ *
+ *  A tip that names no session is about the machine as a whole - the size of `CLAUDE.md`,
+ *  the model share of the day - and a window over session activity has nothing to say
+ *  about it, so it stays whatever the window is. A session whose last activity is unknown
+ *  does not qualify: an unknown date is not an argument for showing the tip. */
+function withinWindow(item: AdviceItem, hours: number): boolean {
+  if (!hours || !item.sessions.length) return true;
+  const edge = Date.now() - hours * 3600_000;
+  return item.sessions.some((session) => {
+    const at = timestamp(session.last_at);
+    return at !== null && at >= edge;
+  });
+}
+
 /** Projects a tip touches; a tip about the machine as a whole names none. */
 function projectsOf(item: AdviceItem): string[] {
   return item.projects.length ? item.projects : [NO_PROJECT];
@@ -43,6 +68,7 @@ export function Advice() {
   const [note, setNote] = useState("");
   const [severity, setSeverity] = useState<Severity | "all">("all");
   const [project, setProject] = useState("");
+  const [activity, setActivity] = useState<string>(WINDOWS[0].key);
 
   useEffect(() => {
     const timer = setInterval(reload, 15000);
@@ -66,7 +92,15 @@ export function Advice() {
 
   const runs = data?.runs ?? [];
   const spent = runs.reduce((sum, run) => sum + run.cost_usd, 0);
-  const items = useMemo(() => flatten(data?.runs ?? []), [data]);
+  const everything = useMemo(() => flatten(data?.runs ?? []), [data]);
+
+  // The window is the first facet and the other two count through it: advice on a session
+  // that has been quiet for a week is advice on a job that is over.
+  const hours = WINDOWS.find((option) => option.key === activity)?.hours ?? 0;
+  const items = useMemo(
+    () => everything.filter((item) => withinWindow(item, hours)),
+    [everything, hours],
+  );
 
   // Two facets over one list: the tab picks the importance, the buttons narrow it down to a
   // project. Each facet counts through the other one, so the numbers on the buttons say how
@@ -142,10 +176,32 @@ export function Advice() {
 
       {error && <p className="hint">{t("app.noConnection")}</p>}
       {!runs.length && !error && <p className="hint">{t("advice.empty")}</p>}
-      {runs.length > 0 && !items.length && <p className="hint">{t("advice.noneInRun")}</p>}
+      {runs.length > 0 && !everything.length && <p className="hint">{t("advice.noneInRun")}</p>}
+      {everything.length > 0 && !items.length && (
+        <p className="hint">{t("advice.windowEmpty")}</p>
+      )}
 
-      {items.length > 0 && (
+      {everything.length > 0 && (
         <div className="advice-filters">
+          {/* The window stays on screen even when it hides everything - otherwise the
+              control that emptied the list would go with the list. */}
+          <div className="advice-window">
+            <label htmlFor="advice-window">{t("advice.window")}</label>
+            <select
+              id="advice-window"
+              value={activity}
+              onChange={(event) => setActivity(event.target.value)}
+            >
+              {WINDOWS.map((option) => (
+                <option key={option.key} value={option.key}>
+                  {t(`sessions.period.${option.key}`)} (
+                  {everything.filter((item) => withinWindow(item, option.hours)).length})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {items.length > 0 && (
           <div className="tabs" role="tablist" aria-label={t("advice.tabs")}>
             <button
               role="tab"
@@ -173,6 +229,7 @@ export function Advice() {
               );
             })}
           </div>
+          )}
 
           {/* A project cut makes sense only when there is more than one of them. */}
           {projects.length > 1 && (

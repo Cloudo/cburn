@@ -392,6 +392,11 @@ const DICT: Record<string, [string, string]> = {
   "advice.tabs": ["важность", "severity"],
   "advice.tab.all": ["все", "all"],
   "advice.projects": ["проект", "project"],
+  "advice.window": ["активность сессии", "session activity"],
+  "advice.windowEmpty": [
+    "советов по сессиям, живым за этот срок, нет - в соседних окнах они есть",
+    "no tips about sessions alive within this window - the wider ones have some",
+  ],
   "advice.project.all": ["все проекты", "all projects"],
   "advice.project.none": ["без проекта", "no project"],
   "advice.group.crit": ["горит", "burning"],

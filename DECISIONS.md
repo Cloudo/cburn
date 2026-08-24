@@ -4,6 +4,22 @@ Why things are the way they are: the option taken, the options rejected and the
 reason. Newest first. Things visible from the code and the git history do not
 belong here; neither do the invariants, which live in `CLAUDE.md`.
 
+## 2026-08-25 - the advice window cuts by the session, not by the tip
+
+Advice about a session nobody has touched for a week is advice on a job that is over, and
+half the screen was that. The cut could have been made by the age of the analysis - simpler,
+one field, no sessions to look at - and it would have measured the wrong thing: the hourly
+tick keeps re-issuing a live tip, so a fresh analysis says nothing about whether its subject
+is still alive. So the window is over the last activity of the sessions a tip names, with
+twenty-four hours as the default, and it is the first of the three facets - the severity
+tabs and the project buttons count through it.
+
+Two edges follow from that and are worth writing down. A tip that names no session - the
+size of `CLAUDE.md`, the model share of the day - is about the machine rather than about
+anyone's session, so a window over session activity has nothing to say about it and it
+stays whatever the window is. And a session whose last activity is unknown does not
+qualify: an unknown date is not an argument for showing a tip.
+
 ## 2026-08-24 - one status vocabulary, on the advice card as well
 
 The card of a session named by a tip was asked for a state of three values: alive, closed,
