@@ -511,6 +511,12 @@ const DICT: Record<string, [string, string]> = {
   "session.models": ["модели", "models"],
   "session.tools": ["инструменты", "tools"],
   "session.feed": ["лента ходов", "turn feed"],
+  "session.col.time": ["время", "time"],
+  "session.col.model": ["модель", "model"],
+  "session.col.output": ["выход", "output"],
+  "session.col.context": ["контекст", "context"],
+  "session.col.tools": ["инструменты", "tools"],
+  "session.sortHint": ["сортировать по колонке", "sort by this column"],
   "session.idleHint": [
     "холостой ход: короткий ответ при большом контексте",
     "idle turn: a short reply on a big context",

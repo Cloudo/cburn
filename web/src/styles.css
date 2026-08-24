@@ -2538,12 +2538,54 @@ main.empty {
   overflow-y: auto;
 }
 
+.turns-head,
 .turns-row {
   display: grid;
   grid-template-columns: 70px 90px 70px 90px minmax(0, 1fr);
   gap: 12px;
   padding: 5px 14px;
   font-size: 12px;
+}
+
+/* The header stays in place: the feed scrolls inside its own box. */
+.turns-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: var(--text-faint);
+  background: var(--bg-sunken);
+  text-transform: lowercase;
+  border-bottom: 1px solid var(--line);
+}
+
+.turns-sort {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.turns-sort-right {
+  justify-content: flex-end;
+}
+
+.turns-sort:hover,
+.turns-sort-on {
+  color: var(--text);
+}
+
+.turns-arrow {
+  font-size: 10px;
+}
+
+.turns-row {
   color: var(--text-dim);
   border-bottom: 1px solid var(--line);
 }

@@ -2,7 +2,7 @@
 // moments of auto-compaction and branching, the turn feed, the model breakdown.
 // The screen's main question is where the session bloated and when to run /clear.
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { clockTime, compact, duration, grouped, modelLabel, spent, toolLabel, usd } from "../lib/format";
 import { useLang } from "../lib/i18n";
@@ -125,24 +125,126 @@ export function Session({ id }: { id: string }) {
       </div>
 
       <h3>{t("session.feed")}</h3>
-      <div className="turns">
-        {turns.map((turn) => (
-          <div
-            key={turn.message_id}
-            className={turn.is_idle ? "turns-row turns-row-idle" : "turns-row"}
-            title={turn.is_idle ? t("session.idleHint") : undefined}
+      <TurnFeed turns={turns} />
+    </section>
+  );
+}
+
+/** The feed columns in one place: the caption, the cell, what is shown and what is sorted by.
+ *  `desc` is where the first click on the column takes it. */
+const COLUMNS = [
+  {
+    key: "time",
+    label: "session.col.time",
+    cell: "turns-time",
+    right: false,
+    desc: true,
+    show: (turn: SessionTurn) => clockTime(turn.ts),
+    by: (turn: SessionTurn) => turn.ts,
+  },
+  {
+    key: "model",
+    label: "session.col.model",
+    cell: "turns-model",
+    right: false,
+    desc: false,
+    show: (turn: SessionTurn) => modelLabel(turn.model),
+    by: (turn: SessionTurn) => modelLabel(turn.model),
+  },
+  {
+    key: "output",
+    label: "session.col.output",
+    cell: "turns-number",
+    right: true,
+    desc: true,
+    show: (turn: SessionTurn) => compact(turn.output_tokens),
+    by: (turn: SessionTurn) => turn.output_tokens,
+  },
+  {
+    key: "context",
+    label: "session.col.context",
+    cell: "turns-number",
+    right: true,
+    desc: true,
+    show: (turn: SessionTurn) => compact(turn.context_estimate),
+    by: (turn: SessionTurn) => turn.context_estimate,
+  },
+  {
+    key: "tools",
+    label: "session.col.tools",
+    cell: "turns-tools",
+    right: false,
+    desc: false,
+    show: (turn: SessionTurn) => toolsText(turn),
+    by: (turn: SessionTurn) => toolsText(turn),
+  },
+] as const;
+
+type Column = (typeof COLUMNS)[number];
+
+function toolsText(turn: SessionTurn): string {
+  return (turn.tools ?? "").split(" ").filter(Boolean).map(toolLabel).join(", ");
+}
+
+function compare(a: string | number, b: string | number): number {
+  return typeof a === "number" && typeof b === "number" ? a - b : String(a).localeCompare(String(b));
+}
+
+/** The turn feed with a sortable header. The chart keeps the order the server gave -
+ *  there the turn number is the axis, here it is the reader's choice. */
+function TurnFeed({ turns }: { turns: SessionTurn[] }) {
+  const { t } = useLang();
+  // by default the fresh ones are on top: one comes to the feed for the tail of the session
+  const [sort, setSort] = useState({ key: "time", desc: true });
+
+  const rows = useMemo(() => {
+    const column = COLUMNS.find((item) => item.key === sort.key) ?? COLUMNS[0];
+    const direction = sort.desc ? -1 : 1;
+    return [...turns].sort((a, b) => compare(column.by(a), column.by(b)) * direction);
+  }, [turns, sort]);
+
+  const pick = (column: Column) =>
+    setSort((current) =>
+      current.key === column.key
+        ? { key: column.key, desc: !current.desc }
+        : { key: column.key, desc: column.desc },
+    );
+
+  return (
+    <div className="turns">
+      <div className="turns-head">
+        {COLUMNS.map((column) => (
+          <button
+            key={column.key}
+            className={
+              "turns-sort" +
+              (column.right ? " turns-sort-right" : "") +
+              (sort.key === column.key ? " turns-sort-on" : "")
+            }
+            title={t("session.sortHint")}
+            onClick={() => pick(column)}
           >
-            <span className="turns-time">{clockTime(turn.ts)}</span>
-            <span className="turns-model">{modelLabel(turn.model)}</span>
-            <span className="turns-number">{compact(turn.output_tokens)}</span>
-            <span className="turns-number">{compact(turn.context_estimate)}</span>
-            <span className="turns-tools">
-              {(turn.tools ?? "").split(" ").filter(Boolean).map(toolLabel).join(", ")}
+            {t(column.label)}
+            <span className="turns-arrow" aria-hidden="true">
+              {sort.key === column.key ? (sort.desc ? "\u2193" : "\u2191") : ""}
             </span>
-          </div>
+          </button>
         ))}
       </div>
-    </section>
+      {rows.map((turn) => (
+        <div
+          key={turn.message_id}
+          className={turn.is_idle ? "turns-row turns-row-idle" : "turns-row"}
+          title={turn.is_idle ? t("session.idleHint") : undefined}
+        >
+          {COLUMNS.map((column) => (
+            <span key={column.key} className={column.cell}>
+              {column.show(turn)}
+            </span>
+          ))}
+        </div>
+      ))}
+    </div>
   );
 }
 
