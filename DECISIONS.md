@@ -4,6 +4,21 @@ Why things are the way they are: the option taken, the options rejected and the
 reason. Newest first. Things visible from the code and the git history do not
 belong here; neither do the invariants, which live in `CLAUDE.md`.
 
+## 2026-08-25 - the advice list opens on what has not been decided
+
+An accepted tip was asked to leave the list and live behind a filter. The cut taken is
+wider than that: the tab that opens is "to decide", and it hides the rejected ones too. A
+rejection is a decision as much as an acceptance - it even travels into the next tick's
+prompt marked "do not repeat" - and a list meant for work still to be done has no more use
+for one than for the other. The old device that sank the rejected to the bottom of their
+group stays, but it now only shows in the "all" tab.
+
+The tabs are the fourth cut on the screen and the second of the upper pair, next to the
+activity window: both answer "is this still work", and the severity and project counts run
+through them. The pairwise counting the lower two already had is kept - a state counts
+inside the window and a window inside the state - so every number is still the answer to
+"how much is left after the click".
+
 ## 2026-08-25 - the advice window cuts by the session, not by the tip
 
 Advice about a session nobody has touched for a week is advice on a job that is over, and

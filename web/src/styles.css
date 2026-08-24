@@ -3356,14 +3356,20 @@ main.empty {
   margin-bottom: 14px;
 }
 
-/* The window over session activity: the first cut, above the other two. */
+/* The two upper cuts on one row: what became of a tip, and how long its sessions have
+   been quiet. Both answer "is this still work" - the severity and the project come after. */
 .advice-window {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px 12px;
   margin-bottom: 4px;
   font-size: 12px;
   color: var(--text-faint);
+}
+
+.advice-window label {
+  margin-left: auto;
 }
 
 .advice-filters .tabs {

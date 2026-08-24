@@ -40,6 +40,15 @@ const WINDOWS = [
   { key: "all", hours: 0 },
 ] as const;
 
+//: What became of a tip. The list is for work still to be done, so "to decide" opens: an
+//: accepted tip has been carried out and a rejected one has been answered, and both only
+//: get in the way of the ones nobody has looked at yet.
+const STATES = ["new", "accepted", "rejected", "all"] as const;
+
+function inState(item: AdviceItem, state: string): boolean {
+  return state === "all" || item.status === state;
+}
+
 /** Whether a tip still concerns anything alive.
  *
  *  A tip that names no session is about the machine as a whole - the size of `CLAUDE.md`,
@@ -69,6 +78,7 @@ export function Advice() {
   const [severity, setSeverity] = useState<Severity | "all">("all");
   const [project, setProject] = useState("");
   const [activity, setActivity] = useState<string>(WINDOWS[0].key);
+  const [state, setState] = useState<string>(STATES[0]);
 
   useEffect(() => {
     const timer = setInterval(reload, 15000);
@@ -94,13 +104,19 @@ export function Advice() {
   const spent = runs.reduce((sum, run) => sum + run.cost_usd, 0);
   const everything = useMemo(() => flatten(data?.runs ?? []), [data]);
 
-  // The window is the first facet and the other two count through it: advice on a session
-  // that has been quiet for a week is advice on a job that is over.
+  // Two cuts stand before the other two: what became of a tip and how long its sessions
+  // have been quiet. Both answer "is this still work", and severity and project count
+  // through them. Each of the two counts through the other, the way the lower pair does.
   const hours = WINDOWS.find((option) => option.key === activity)?.hours ?? 0;
-  const items = useMemo(
+  const byWindow = useMemo(
     () => everything.filter((item) => withinWindow(item, hours)),
     [everything, hours],
   );
+  const byState = useMemo(
+    () => everything.filter((item) => inState(item, state)),
+    [everything, state],
+  );
+  const items = useMemo(() => byWindow.filter((item) => inState(item, state)), [byWindow, state]);
 
   // Two facets over one list: the tab picks the importance, the buttons narrow it down to a
   // project. Each facet counts through the other one, so the numbers on the buttons say how
@@ -178,7 +194,7 @@ export function Advice() {
       {!runs.length && !error && <p className="hint">{t("advice.empty")}</p>}
       {runs.length > 0 && !everything.length && <p className="hint">{t("advice.noneInRun")}</p>}
       {everything.length > 0 && !items.length && (
-        <p className="hint">{t("advice.windowEmpty")}</p>
+        <p className="hint">{t("advice.nothingShown")}</p>
       )}
 
       {everything.length > 0 && (
@@ -186,6 +202,25 @@ export function Advice() {
           {/* The window stays on screen even when it hides everything - otherwise the
               control that emptied the list would go with the list. */}
           <div className="advice-window">
+            <div className="filter-tabs" role="tablist" aria-label={t("advice.state")}>
+              {STATES.map((key) => {
+                const count = byWindow.filter((item) => inState(item, key)).length;
+                return (
+                  <button
+                    key={key}
+                    role="tab"
+                    aria-selected={state === key}
+                    disabled={count === 0 && state !== key}
+                    className={state === key ? "filter-tab filter-tab-on" : "filter-tab"}
+                    onClick={() => setState(key)}
+                  >
+                    {t(`advice.state.${key}`)}
+                    <span className="filter-tab-count">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+
             <label htmlFor="advice-window">{t("advice.window")}</label>
             <select
               id="advice-window"
@@ -195,7 +230,7 @@ export function Advice() {
               {WINDOWS.map((option) => (
                 <option key={option.key} value={option.key}>
                   {t(`sessions.period.${option.key}`)} (
-                  {everything.filter((item) => withinWindow(item, option.hours)).length})
+                  {byState.filter((item) => withinWindow(item, option.hours)).length})
                 </option>
               ))}
             </select>
