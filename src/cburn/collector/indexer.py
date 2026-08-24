@@ -349,12 +349,16 @@ def _upsert_sessions(
                 :last_prompt, :last_stop_reason)
         ON CONFLICT(id) DO UPDATE SET
             project_id   = COALESCE(excluded.project_id, sessions.project_id),
+            -- A title or a "last prompt" record carries no time of its own, so a batch of
+            -- them arrives with both ends empty - and NULL in a scalar MIN/MAX would wipe
+            -- the dates of a session that has been running for a week. Hence the second
+            -- COALESCE: the missing end falls back to the one already stored.
             started_at   = MIN(COALESCE(sessions.started_at, excluded.started_at),
-                               excluded.started_at),
-            last_at      = MAX(COALESCE(sessions.last_at, excluded.last_at), excluded.last_at),
+                               COALESCE(excluded.started_at, sessions.started_at)),
+            last_at      = MAX(COALESCE(sessions.last_at, excluded.last_at),
+                               COALESCE(excluded.last_at, sessions.last_at)),
             first_prompt = COALESCE(sessions.first_prompt, excluded.first_prompt),
-            -- A batch of only service records arrives without last_record_at, and NULL
-            -- in a scalar MAX would wipe the column, and the idle countdown with it.
+            -- The same guard for the record that the idle countdown is measured from.
             last_record_kind = CASE
                 WHEN excluded.last_record_at IS NULL THEN sessions.last_record_kind
                 WHEN excluded.last_record_at >= COALESCE(sessions.last_record_at, '')

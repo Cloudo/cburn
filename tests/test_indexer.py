@@ -832,3 +832,26 @@ def test_title_record_does_not_create_pending_state(
     session = rows(conn, "SELECT * FROM sessions")[0]
     assert session["last_record_kind"] == "assistant"
     assert session["last_at"] == "2026-08-13T10:00:00Z"
+
+
+def test_a_late_title_does_not_erase_the_session_dates(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """A title arriving in a batch of its own leaves the ends of the session alone.
+
+    The watcher reads the tail: a title written after the answer comes in on its own, and
+    such a record has no time. A scalar MIN/MAX over NULL used to wipe both ends, and the
+    session lost the date of its last activity.
+    """
+    path = tmp_path / "proj" / "s1.jsonl"
+    write_transcript(path, [assistant("msg_1", ts="2026-08-13T10:00:00Z")])
+    ingest_file(conn, path)
+
+    with path.open("a") as fh:
+        fh.write(title_record("named afterwards") + "\n")
+    ingest_file(conn, path)
+
+    session = rows(conn, "SELECT * FROM sessions")[0]
+    assert session["title"] == "named afterwards"
+    assert session["started_at"] == "2026-08-13T10:00:00Z"
+    assert session["last_at"] == "2026-08-13T10:00:00Z"
