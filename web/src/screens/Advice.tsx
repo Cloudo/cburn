@@ -4,8 +4,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { clockTime, sinceLabel, toolLabel, usd } from "../lib/format";
+import { clockTime, sinceLabel, toolLabel, usd, whenLabel } from "../lib/format";
 import { useLang } from "../lib/i18n";
+import { statusTitle } from "../components/StatusHelp";
 import {
   ActFailed,
   applyAct,
@@ -384,10 +385,21 @@ function Session({ session }: { session: AdviceSession }) {
 
   return (
     <div className="advice-session-card">
-      <a className="advice-session" href={`#/session/${session.id}`}>
-        {session.title ?? session.id.slice(0, 8)}
-        <span className="advice-session-project">{session.project ?? "-"}</span>
-      </a>
+      {/* A tip is read hours after it was written, so the card says where the session
+          stands now: whom it waits for and when it last wrote anything. */}
+      <div className="advice-session-line">
+        <a className="advice-session" href={`#/session/${session.id}`}>
+          {session.title ?? session.id.slice(0, 8)}
+          <span className="advice-session-project">{session.project ?? "-"}</span>
+        </a>
+        <span className="advice-session-state" title={statusTitle(t, session.status)}>
+          <span className={`sessions-dot sessions-dot-${session.status}`} aria-hidden="true" />
+          {t(`status.${session.status}`)}
+        </span>
+        <span className="advice-session-when" title={sinceLabel(session.last_at)}>
+          {whenLabel(session.last_at)}
+        </span>
+      </div>
       {shown.length > 0 && (
         <ol className="prompt-log">
           {shown.map((entry, index) => (

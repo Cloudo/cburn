@@ -499,6 +499,10 @@ export type AdviceSession = {
   id: string;
   title: string | null;
   project: string | null;
+  /** When the session last wrote anything, and whom it waits for now. A tip outlives the
+   *  state it describes, so the card says whether the session is still where it was. */
+  last_at: string | null;
+  status: SessionStatus;
   /** The ends of the prompt log: the first and the last one. The middle is asked for
    *  by a click - twenty tips must not drag every prompt of every session along. */
   prompts: Prompt[];

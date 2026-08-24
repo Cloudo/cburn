@@ -3078,6 +3078,35 @@ main.empty {
   font-size: 12px;
 }
 
+/* The name on the left, where the session stands on the right: a tip is read long after
+   it was written, and the state is what tells whether it still applies. */
+.advice-session-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.advice-session-line .advice-session {
+  flex: 1 1 auto;
+}
+
+.advice-session-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.advice-session-when {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
 .prompt-log {
   margin: 6px 0 0;
   padding: 0;

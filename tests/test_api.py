@@ -1040,6 +1040,54 @@ def test_advice_mentions_are_expanded(transcripts: Path, db_path: Path) -> None:
     assert item["projects"] == ["project"], "the session brings its project along"
 
 
+def test_a_mentioned_session_carries_its_state(transcripts: Path, db_path: Path) -> None:
+    """The card says when the session last wrote and whom it waits for.
+
+    A tip is read long after it was written: without that a card would send one to close
+    a session that finished by itself hours ago.
+    """
+    now = datetime.now(UTC)
+    long_ago = now - timedelta(hours=3)
+    seed(
+        transcripts,
+        db_path,
+        [
+            assistant("msg_1", session="b2ae5a8a-1111-2222-3333-444455556666", ts=now),
+            assistant("msg_2", session="7c31f004-1111-2222-3333-444455556666", ts=long_ago),
+        ],
+    )
+    conn = connect(db_path)
+    with conn:
+        # The process poller has been round and found nothing: the session is finished.
+        conn.execute(
+            "UPDATE sessions SET is_live = 0 WHERE id = ?",
+            ("7c31f004-1111-2222-3333-444455556666",),
+        )
+        cursor = conn.execute(
+            "INSERT INTO advice (ts, kind, digest_json, model, cost_usd) VALUES (?, 'manual',"
+            " '{}', 'haiku', 0.03)",
+            (now.isoformat(),),
+        )
+        conn.execute(
+            """
+            INSERT INTO advice_items (advice_id, key, title, severity, detail, action, evidence)
+            VALUES (?, 'k1', 'Close the work lines', 'warn', '', '',
+                    'sessions: b2ae5a8a, 7c31f004')
+            """,
+            (cursor.lastrowid,),
+        )
+    conn.close()
+
+    with client(db_path, transcripts) as api:
+        item = api.get("/api/advice").json()["runs"][0]["items"][0]
+
+    state = {session["id"][:8]: session for session in item["sessions"]}
+    assert state["b2ae5a8a"]["status"] == "answered", "it has just answered and waits for a human"
+    assert state["7c31f004"]["status"] == "done", "three hours of silence and no process"
+    assert state["b2ae5a8a"]["last_at"].startswith(now.strftime("%Y-%m-%d"))
+    assert "is_live" not in state["7c31f004"], "the way to the status is not the screen's business"
+
+
 def test_a_tip_carries_the_ends_of_the_prompt_log(transcripts: Path, db_path: Path) -> None:
     """The card shows the first and the last prompt; the middle is asked for separately."""
     now = datetime.now(UTC)

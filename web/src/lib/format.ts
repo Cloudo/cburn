@@ -150,6 +150,19 @@ export function sinceLabel(iso: string | null): string {
   return agoLabel(seconds);
 }
 
+/** The moment itself rather than the distance to it: "14 Aug, 23:33". Where a card is
+ *  read long after it was written, "5 min ago" answers the wrong question. */
+export function whenLabel(iso: string | null): string {
+  if (!iso) return "-";
+  const at = new Date(stamp(iso)).getTime();
+  const time = new Date(at).toLocaleTimeString(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  return `${dateLabel(at)}, ${time}`;
+}
+
 /** A day of another week: "14 Aug", and the year only when it is not the current one. */
 function dateLabel(at: number): string {
   const date = new Date(at);

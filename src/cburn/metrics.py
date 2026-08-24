@@ -271,7 +271,9 @@ def session_events(conn: sqlite3.Connection, session_id: str) -> list[dict]:
 ADVICE_STATUSES = ("new", "accepted", "rejected")
 
 
-def advice_history(conn: sqlite3.Connection, limit: int = 20) -> list[dict]:
+def advice_history(
+    conn: sqlite3.Connection, limit: int = 20, now: datetime | None = None
+) -> list[dict]:
     """Analysis history with nested tips (the "Advice" screen, task D6)."""
     runs = [
         dict(row)
@@ -298,7 +300,7 @@ def advice_history(conn: sqlite3.Connection, limit: int = 20) -> list[dict]:
         items[row["advice_id"]].append(dict(row))
     for run in runs:
         run["items"] = items[run["id"]]
-        _attach_mentioned_sessions(conn, run["items"])
+        _attach_mentioned_sessions(conn, run["items"], now)
         _attach_projects(conn, run["items"])
     _attach_acts(conn, [item for run in runs for item in run["items"]])
     return runs
@@ -327,12 +329,32 @@ def _attach_acts(conn: sqlite3.Connection, items: list[dict]) -> None:
 _SESSION_MENTION = re.compile(r"\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b|\b[0-9a-f]{8}\b")
 
 
-def _attach_mentioned_sessions(conn: sqlite3.Connection, items: list[dict]) -> None:
-    """Expand the ids mentioned in a tip into a session name and a project.
+#: What `session_status` reads besides the columns the card shows. They are dropped once
+#: the status is counted: the screen needs the answer, not the way to it.
+_STATUS_COLUMNS = (
+    "last_record_kind",
+    "last_record_at",
+    "last_stop_reason",
+    "is_live",
+    "busy_since",
+    "otel_seen_at",
+    "tool_decided_at",
+)
+
+
+def _attach_mentioned_sessions(
+    conn: sqlite3.Connection, items: list[dict], now: datetime | None = None
+) -> None:
+    """Expand the ids mentioned in a tip into a session name, a project and a status.
 
     The session title never reaches the digest - it is a retelling of the conversation
     (SPEC §7). On screen it is needed though: "b2ae5a8a" tells a human nothing. So we
     expand it here, at display time, and the title never leaves the machine.
+
+    A tip lives longer than the state it describes: by the time it is read the session
+    may have moved on or closed. Hence the last activity and the status alongside the
+    name, counted by the same rule as the two session lists - so that a card does not
+    send one to close a session that finished by itself an hour ago.
     """
     prefixes = {
         mention[:8]
@@ -348,7 +370,10 @@ def _attach_mentioned_sessions(conn: sqlite3.Connection, items: list[dict]) -> N
         row["short"]: dict(row)
         for row in conn.execute(
             f"""
-            SELECT substr(s.id, 1, 8) AS short, s.id, s.title,
+            SELECT substr(s.id, 1, 8) AS short, s.id, s.title, s.last_at,
+                   s.last_record_kind, s.last_record_at, s.last_stop_reason,
+                   s.is_live, s.busy_since,
+                   {OTEL_SESSION_COLUMNS}
                    COALESCE(p.display_name, p.slug) AS project
               FROM sessions AS s
               LEFT JOIN projects AS p ON p.id = s.project_id
@@ -357,6 +382,11 @@ def _attach_mentioned_sessions(conn: sqlite3.Connection, items: list[dict]) -> N
             tuple(prefixes),
         )
     }
+    moment = now or datetime.now(UTC)
+    for row in known.values():
+        row["status"] = session_status(row, moment)
+        for column in _STATUS_COLUMNS:
+            row.pop(column, None)
     # The prompt log of the mentioned sessions: on the card it is the shortest answer to
     # "what was this session about" - shorter than a title and honest (task C7).
     ends = prompt_ends(conn, [session["id"] for session in known.values()])

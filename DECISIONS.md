@@ -4,6 +4,28 @@ Why things are the way they are: the option taken, the options rejected and the
 reason. Newest first. Things visible from the code and the git history do not
 belong here; neither do the invariants, which live in `CLAUDE.md`.
 
+## 2026-08-24 - one status vocabulary, on the advice card as well
+
+The card of a session named by a tip was asked for a state of three values: alive, closed,
+nothing for the last hour. The dashboard already had five - `working`, `permission`,
+`answered`, `idle`, `done` - counted by `session_status` from the last record, the process
+and the telemetry, with a cheat sheet behind the "?" on the "Sessions" screen. The three
+asked for are the same three that those five collapse into, so a second vocabulary was
+rejected: it would have to be counted somewhere, drift from the first one and force a
+reader to hold two meanings of the word "active".
+
+What the card gained instead of a new rule is the last activity as a moment rather than a
+distance - "24 Aug, 23:33" and the relative in the tooltip. A tip is read hours after the
+tick that wrote it, and "5 min ago" then answers about the moment of reading rather than
+the moment described.
+
+The turn also uncovered why the date would have been empty on a twentieth of the cards: a
+title record carries no time of its own, and a batch of only such records went into the
+upsert with both ends NULL, where a scalar `MIN`/`MAX` wiped the dates of a session that
+had been running for a week. The neighbouring `last_record_at` had been guarded against
+exactly this; `started_at` and `last_at` had not. 91 sessions of 1811 had lost their dates
+that way.
+
 ## 2026-08-22 - the application is the way in, the browser is the fallback
 
 The README opened with three commands and a URL, which made the browser the face of cburn
