@@ -8,8 +8,8 @@ class Cburn < Formula
 
   desc "Local speedometer for Claude Code token spend"
   homepage "https://github.com/cloudo/cburn"
-  url "https://github.com/cloudo/cburn/releases/download/v0.1.2/cburn-0.1.2.tar.gz"
-  sha256 "18c965c57a61cc2df38760f7202f1c056cc9ca940a23036d2dc188d856ec92fd"
+  url "https://github.com/cloudo/cburn/releases/download/v0.2.0/cburn-0.2.0.tar.gz"
+  sha256 "f676423356a62c4fe9c614a476c826300b5bdc76e5af7154aadbd28e32b9c7f6"
   license "MIT"
 
   # orjson and pydantic-core are Rust underneath, and Homebrew builds every wheel from
