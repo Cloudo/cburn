@@ -9,6 +9,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/cloudo/cburn/releases/latest"><img alt="latest release" src="https://img.shields.io/github/v/release/cloudo/cburn?color=4c8eda&label=release" /></a>
   <a href="LICENSE"><img alt="license MIT" src="https://img.shields.io/github/license/cloudo/cburn?color=4c8eda" /></a>
   <img alt="macOS 13+" src="https://img.shields.io/badge/macOS-13%2B-1a1a1a?logo=apple&logoColor=white" />
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776ab?logo=python&logoColor=white" />
@@ -97,6 +98,39 @@ make serve     # the dashboard on http://127.0.0.1:8799
 `make desktop-build` puts the application into
 `src-tauri/target/release/bundle/macos`; Rust is needed for that one.
 </details>
+
+## Update
+
+```bash
+brew upgrade cloudo/tap/cburn
+```
+
+The trust given at install is remembered by name in `~/.homebrew/trust.json`, so the
+upgrade does not ask for it a second time.
+
+A new engine on disk is not yet the engine that runs: the copy started earlier holds the
+old code, and the application raises one only when nothing answers on the port. So it has
+to be stopped. With the autostart agent installed, launchd does the restart:
+
+```bash
+launchctl kickstart -k gui/$(id -u)/com.cloudo.cburn
+```
+
+Without it, a `SIGTERM` is enough - the application starts the new one when it is next
+opened, and `cburn serve` does the same from the terminal:
+
+```bash
+pkill -f "cburn serve"
+```
+
+The window comes separately, the same way it came the first time: `cburn-VERSION-macos.zip`
+from the [latest release](https://github.com/cloudo/cburn/releases/latest), unpacked over
+`/Applications/cburn.app`. macOS puts the quarantine flag back on the new copy, so
+`xattr -dr com.apple.quarantine /Applications/cburn.app` comes back with it.
+
+The database survives an update and is not re-read: the schema is applied to the existing
+file at start. `cburn reindex --full` is only for when the release notes ask for it - after
+a change in how the transcripts are parsed.
 
 ## Requirements
 
